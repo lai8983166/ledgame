@@ -14,4 +14,9 @@ contextBridge.exposeInMainWorld('ledGame', {
     ipcRenderer.on('led-frame', listener)
     return () => ipcRenderer.removeListener('led-frame', listener)
   },
+  onEngineState: (callback) => {
+    const listener = (_event, state) => callback(state)
+    ipcRenderer.on('engine-state', listener)
+    return () => ipcRenderer.removeListener('engine-state', listener)
+  },
 })

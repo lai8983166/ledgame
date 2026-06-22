@@ -132,6 +132,18 @@ function publishFrame(payload) {
   }
 }
 
+function publishEngineState(state) {
+  if (!state) {
+    return
+  }
+
+  BrowserWindow.getAllWindows().forEach((window) => {
+    if (!window.isDestroyed()) {
+      window.webContents.send('engine-state', state)
+    }
+  })
+}
+
 async function backendRequest(pathname, options = {}) {
   const response = await fetch(`${backendBaseUrl}${pathname}`, {
     headers: {
@@ -149,15 +161,21 @@ async function backendRequest(pathname, options = {}) {
   return data
 }
 
+async function engineStateRequest(pathname, options = {}) {
+  const result = await backendRequest(pathname, options)
+  publishEngineState(result?.data)
+  return result
+}
+
 ipcMain.handle('open-debug-panel', () => {
   createDebugWindow()
 })
 
 ipcMain.handle('frame:latest', () => latestFrame)
-ipcMain.handle('engine:start-fixed', () => backendRequest('/engine/demo/fixed/start', { method: 'POST' }))
-ipcMain.handle('engine:start-input', () => backendRequest('/engine/demo/input/start', { method: 'POST' }))
-ipcMain.handle('engine:stop', () => backendRequest('/engine/demo/stop', { method: 'POST' }))
-ipcMain.handle('engine:state', () => backendRequest('/engine/demo/state'))
+ipcMain.handle('engine:start-fixed', () => engineStateRequest('/engine/demo/fixed/start', { method: 'POST' }))
+ipcMain.handle('engine:start-input', () => engineStateRequest('/engine/demo/input/start', { method: 'POST' }))
+ipcMain.handle('engine:stop', () => engineStateRequest('/engine/demo/stop', { method: 'POST' }))
+ipcMain.handle('engine:state', () => engineStateRequest('/engine/demo/state'))
 ipcMain.handle('engine:input', (_event, input) =>
   backendRequest('/engine/demo/input', {
     method: 'POST',

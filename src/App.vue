@@ -13,6 +13,8 @@ const lastFrameAt = ref(null);
 const pixels = ref(createBlankPixels());
 const hoverCell = ref(null);
 const activeView = ref("demo");
+let removeLedFrameListener = null;
+let removeEngineStateListener = null;
 
 const frameAge = computed(() => {
   if (!lastFrameAt.value) {
@@ -26,8 +28,12 @@ const frameAge = computed(() => {
 });
 
 onMounted(async () => {
+  removeEngineStateListener = api?.onEngineState?.((state) => {
+    applyState(state);
+  });
+
   if (isDebugWindow) {
-    api?.onLedFrame((frame) => {
+    removeLedFrameListener = api?.onLedFrame?.((frame) => {
       pixels.value = decodeFrame(frame);
       lastFrameAt.value = frame.receivedAt || Date.now();
     });
@@ -42,6 +48,8 @@ onMounted(async () => {
 });
 
 onUnmounted(() => {
+  removeLedFrameListener?.();
+  removeEngineStateListener?.();
   hoverCell.value = null;
 });
 
