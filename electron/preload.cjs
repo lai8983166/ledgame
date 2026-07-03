@@ -5,9 +5,17 @@ contextBridge.exposeInMainWorld('ledGame', {
   openDebugPanel: () => ipcRenderer.invoke('open-debug-panel'),
   startFixed: () => ipcRenderer.invoke('engine:start-fixed'),
   startInput: () => ipcRenderer.invoke('engine:start-input'),
+  startGame: (gameId) => ipcRenderer.invoke('engine:start-game', gameId),
+  stopGame: () => ipcRenderer.invoke('engine:stop-game'),
+  gameState: () => ipcRenderer.invoke('engine:game-state'),
+  sendGameInput: (input) => ipcRenderer.invoke('engine:game-input', input),
   stop: () => ipcRenderer.invoke('engine:stop'),
   state: () => ipcRenderer.invoke('engine:state'),
   sendInput: (input) => ipcRenderer.invoke('engine:input', input),
+  seedSimpleDemo: () => ipcRenderer.invoke('dev:seed-simple-demo'),
+  getGameEditor: (gameId) => ipcRenderer.invoke('game-editor:get', gameId),
+  validateGameEditor: (document) => ipcRenderer.invoke('game-editor:validate', document),
+  saveGameEditor: (gameId, document) => ipcRenderer.invoke('game-editor:save', gameId, document),
   latestFrame: () => ipcRenderer.invoke('frame:latest'),
   onLedFrame: (callback) => {
     const listener = (_event, frame) => callback(frame)

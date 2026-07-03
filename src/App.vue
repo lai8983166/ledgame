@@ -1,7 +1,9 @@
 <script setup>
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import DemoView from "./views/DemoView.vue";
+import GameListView from "./views/GameListView.vue";
 import MediaLibraryView from "./views/MediaLibraryView.vue";
+import SimpleGameEditorView from "./views/SimpleGameEditorView.vue";
 
 const api = window.ledGame;
 const isDebugWindow = api?.windowKind === "debug";
@@ -9,22 +11,58 @@ const engineState = ref("UNKNOWN");
 const demoType = ref(null);
 const busyAction = ref("");
 const errorMessage = ref("");
-const lastFrameAt = ref(null);
-const pixels = ref(createBlankPixels());
+const runtimeSyncError = ref("");
+const frameState = ref(createFrameState());
 const hoverCell = ref(null);
+const gameRuntimeState = ref(null);
 const activeView = ref("demo");
 let removeLedFrameListener = null;
 let removeEngineStateListener = null;
+let gameRuntimeStateTimer = null;
+let gameRuntimeStateInFlight = false;
 
 const frameAge = computed(() => {
-  if (!lastFrameAt.value) {
+  if (!frameState.value.receivedAt) {
     return "No frame";
   }
   const seconds = Math.max(
     0,
-    Math.round((Date.now() - lastFrameAt.value) / 1000),
+    Math.round((Date.now() - frameState.value.receivedAt) / 1000),
   );
   return `${seconds}s ago`;
+});
+const frameSizeLabel = computed(() => `${frameState.value.width} x ${frameState.value.height}`);
+const gameplaySummary = computed(() => {
+  const gameplay = gameRuntimeState.value?.gameplay;
+  if (!gameplay) {
+    return "";
+  }
+  const parts = [
+    `score ${gameplay.score ?? 0}`,
+    `life ${gameplay.life ?? 0}`,
+    `phase ${gameplay.phase || "-"}`,
+  ];
+  if (gameplay.lastInput?.outcome) {
+    parts.push(`last ${gameplay.lastInput.outcome}`);
+  }
+  return parts.join(" / ");
+});
+const debugErrorMessage = computed(() =>
+  [errorMessage.value, runtimeSyncError.value].filter(Boolean).join(" / "),
+);
+const runtimeStatusItems = computed(() => {
+  const state = gameRuntimeState.value || {};
+  const gameplay = state.gameplay || {};
+  const lastInput = gameplay.lastInput || {};
+  return [
+    { label: "运行", value: state.running ? "运行中" : "未运行" },
+    { label: "Game ID", value: formatRuntimeValue(state.gameId) },
+    { label: "Game", value: formatRuntimeValue(state.gameName || state.gameType) },
+    { label: "阶段", value: formatRuntimeValue(gameplay.phase) },
+    { label: "分数", value: formatRuntimeValue(gameplay.score, "0") },
+    { label: "生命", value: formatRuntimeValue(gameplay.life, "0") },
+    { label: "最近点击", value: formatRuntimeValue(lastInput.outcome) },
+  ];
 });
 
 onMounted(async () => {
@@ -34,14 +72,13 @@ onMounted(async () => {
 
   if (isDebugWindow) {
     removeLedFrameListener = api?.onLedFrame?.((frame) => {
-      pixels.value = decodeFrame(frame);
-      lastFrameAt.value = frame.receivedAt || Date.now();
+      frameState.value = decodeFrame(frame);
     });
     const latestFrame = await api?.latestFrame?.();
     if (latestFrame) {
-      pixels.value = decodeFrame(latestFrame);
-      lastFrameAt.value = latestFrame.receivedAt || Date.now();
+      frameState.value = decodeFrame(latestFrame);
     }
+    startGameRuntimeStateSync();
   }
 
   await refreshState();
@@ -50,6 +87,7 @@ onMounted(async () => {
 onUnmounted(() => {
   removeLedFrameListener?.();
   removeEngineStateListener?.();
+  stopGameRuntimeStateSync();
   hoverCell.value = null;
 });
 
@@ -67,10 +105,14 @@ async function runAction(name, action) {
 }
 
 async function refreshState() {
-  if (!api?.state) {
-    return;
+  const requests = [];
+  if (api?.state) {
+    requests.push(runAction("state", () => api.state()));
   }
-  await runAction("state", () => api.state());
+  if (isDebugWindow && api?.gameState) {
+    requests.push(refreshGameRuntimeState());
+  }
+  await Promise.all(requests);
 }
 
 function applyState(state) {
@@ -78,7 +120,48 @@ function applyState(state) {
     return;
   }
   engineState.value = state.engineState || engineState.value;
-  demoType.value = state.demoType || null;
+  if ("demoType" in state) {
+    demoType.value = state.demoType || null;
+  }
+  if ("gameId" in state || "gameplay" in state || state.gameType || state.gameName) {
+    gameRuntimeState.value = state;
+  }
+}
+
+function applyGameRuntimeResult(result) {
+  applyState(result?.data || result);
+  runtimeSyncError.value = "";
+}
+
+function startGameRuntimeStateSync() {
+  if (!api?.gameState || gameRuntimeStateTimer) {
+    return;
+  }
+  refreshGameRuntimeState();
+  gameRuntimeStateTimer = window.setInterval(refreshGameRuntimeState, 1500);
+}
+
+function stopGameRuntimeStateSync() {
+  if (!gameRuntimeStateTimer) {
+    return;
+  }
+  window.clearInterval(gameRuntimeStateTimer);
+  gameRuntimeStateTimer = null;
+}
+
+async function refreshGameRuntimeState() {
+  if (!api?.gameState || gameRuntimeStateInFlight) {
+    return;
+  }
+  gameRuntimeStateInFlight = true;
+  try {
+    const result = await api.gameState();
+    applyGameRuntimeResult(result);
+  } catch (error) {
+    runtimeSyncError.value = `状态同步失败：${error.message || String(error)}`;
+  } finally {
+    gameRuntimeStateInFlight = false;
+  }
 }
 
 function startFixed() {
@@ -97,20 +180,38 @@ function openDebugPanel() {
   return runAction("debug", () => api.openDebugPanel());
 }
 
-function createBlankPixels() {
-  return Array.from({ length: 16 }, () =>
-    Array.from({ length: 16 }, () => ({ r: 0, g: 0, b: 0 })),
+function openSimpleEditor() {
+  activeView.value = "simple-editor";
+}
+
+function backToGameList() {
+  activeView.value = "games";
+}
+
+function createFrameState(width = 16, height = 16, receivedAt = null) {
+  return {
+    width,
+    height,
+    receivedAt,
+    pixels: createBlankPixels(width, height),
+  };
+}
+
+function createBlankPixels(width, height) {
+  return Array.from({ length: height }, () =>
+    Array.from({ length: width }, () => ({ r: 0, g: 0, b: 0 })),
   );
 }
 
 function decodeFrame(frame) {
   const rgb = frame?.rgb || [];
-  const width = frame?.width || 16;
-  const height = frame?.height || 16;
-  const decoded = createBlankPixels();
+  const fallbackSize = inferFrameSize(rgb.length);
+  const width = clampFrameDimension(frame?.width || fallbackSize.width);
+  const height = clampFrameDimension(frame?.height || fallbackSize.height);
+  const decoded = createBlankPixels(width, height);
 
-  for (let y = 0; y < height && y < 16; y += 1) {
-    for (let x = 0; x < width && x < 16; x += 1) {
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
       const index = (y * width + x) * 3;
       decoded[y][x] = {
         r: rgb[index] || 0,
@@ -120,7 +221,29 @@ function decodeFrame(frame) {
     }
   }
 
-  return decoded;
+  return {
+    width,
+    height,
+    receivedAt: frame?.receivedAt || Date.now(),
+    pixels: decoded,
+  };
+}
+
+function inferFrameSize(byteLength) {
+  const pixelCount = Math.floor((Number(byteLength) || 0) / 3);
+  const squareSize = Math.sqrt(pixelCount);
+  if (Number.isInteger(squareSize) && squareSize > 0) {
+    return { width: squareSize, height: squareSize };
+  }
+  return { width: 16, height: 16 };
+}
+
+function clampFrameDimension(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) {
+    return 16;
+  }
+  return Math.min(128, Math.max(1, Math.floor(number)));
 }
 
 function setHoverCell(x, y) {
@@ -145,6 +268,26 @@ function lightCell(x, y, color) {
   sendCellInput("set", x, y, color);
 }
 
+function sendRuntimeGameInput(x, y) {
+  setHoverCell(x, y);
+  if (!api?.sendGameInput) {
+    errorMessage.value = "Game runtime input API is unavailable";
+    return;
+  }
+  api
+    .sendGameInput({
+      type: "click",
+      x,
+      y,
+    })
+    .then((result) => {
+      applyGameRuntimeResult(result);
+    })
+    .catch((error) => {
+      errorMessage.value = error.message || String(error);
+    });
+}
+
 function sendCellInput(type, x, y, color = { r: 255, g: 255, b: 255 }) {
   if (!api?.sendInput) {
     return;
@@ -162,6 +305,13 @@ function sendCellInput(type, x, y, color = { r: 255, g: 255, b: 255 }) {
       errorMessage.value = error.message || String(error);
     });
 }
+
+function formatRuntimeValue(value, fallback = "-") {
+  if (value === null || value === undefined || value === "") {
+    return fallback;
+  }
+  return String(value);
+}
 </script>
 
 <template>
@@ -169,12 +319,16 @@ function sendCellInput(type, x, y, color = { r: 255, g: 255, b: 255 }) {
     v-if="isDebugWindow"
     :demo-type="demoType"
     :engine-state="engineState"
-    :error-message="errorMessage"
+    :error-message="debugErrorMessage"
     :frame-age="frameAge"
+    :frame-size-label="frameSizeLabel"
+    :gameplay-summary="gameplaySummary"
     :hover-cell="hoverCell"
     :is-debug-window="isDebugWindow"
-    :pixels="pixels"
+    :pixels="frameState.pixels"
+    :runtime-status-items="runtimeStatusItems"
     @clear-hover-cell="clearHoverCell"
+    @game-input="sendRuntimeGameInput"
     @light-cell="lightCell"
     @press-cell="pressCell"
     @refresh-state="refreshState"
@@ -193,6 +347,14 @@ function sendCellInput(type, x, y, color = { r: 255, g: 255, b: 255 }) {
           @click="activeView = 'demo'"
         >
           Demo
+        </button>
+        <button
+          class="nav-tab"
+          :class="{ active: activeView === 'games' || activeView === 'simple-editor' }"
+          type="button"
+          @click="activeView = 'games'"
+        >
+          游戏列表
         </button>
         <button
           class="nav-tab"
@@ -216,6 +378,13 @@ function sendCellInput(type, x, y, color = { r: 255, g: 255, b: 255 }) {
       @start-fixed="startFixed"
       @start-input="startInput"
       @stop-engine="stopEngine"
+    />
+
+    <GameListView v-else-if="activeView === 'games'" @open-simple="openSimpleEditor" />
+
+    <SimpleGameEditorView
+      v-else-if="activeView === 'simple-editor'"
+      @back="backToGameList"
     />
 
     <MediaLibraryView v-else />

@@ -1,5 +1,6 @@
 <script setup>
 import { computed, ref } from "vue";
+import ButtonMastery2_SelfMadeSystem from "../components/ButtonMastery2_SelfMadeSystem.vue";
 
 const props = defineProps({
   busyAction: {
@@ -22,6 +23,14 @@ const props = defineProps({
     type: String,
     default: "No frame",
   },
+  frameSizeLabel: {
+    type: String,
+    default: "16 x 16",
+  },
+  gameplaySummary: {
+    type: String,
+    default: "",
+  },
   hoverCell: {
     type: Object,
     default: null,
@@ -34,10 +43,15 @@ const props = defineProps({
     type: Array,
     default: () => [],
   },
+  runtimeStatusItems: {
+    type: Array,
+    default: () => [],
+  },
 });
 
 const emit = defineEmits([
   "clear-hover-cell",
+  "game-input",
   "light-cell",
   "open-debug-panel",
   "press-cell",
@@ -58,13 +72,22 @@ const isInputMode = computed(() =>
     .toLowerCase()
     .includes("input"),
 );
+const matrixWidth = computed(() => props.pixels[0]?.length || 16);
+const matrixHeight = computed(() => props.pixels.length || 16);
+const previewModeLabel = computed(() => (isInputMode.value ? "Input Demo" : "Runtime Preview"));
+const canClickMatrix = computed(() => props.isDebugWindow);
+const boardStyle = computed(() => ({
+  gridTemplateColumns: `repeat(${matrixWidth.value}, minmax(0, 1fr))`,
+  gridTemplateRows: `repeat(${matrixHeight.value}, minmax(0, 1fr))`,
+  aspectRatio: `${matrixWidth.value} / ${matrixHeight.value}`,
+}));
 
 function clampChannel(value) {
   return Math.min(255, Math.max(0, Number(value) || 0));
 }
 
-function clampCoordinate(value) {
-  return Math.min(15, Math.max(0, Number(value) || 0));
+function clampCoordinate(value, max = 15) {
+  return Math.min(max, Math.max(0, Number(value) || 0));
 }
 
 function hexToRgb(hex) {
@@ -93,10 +116,13 @@ function setColorChannel(channel, value) {
 }
 
 function emitLightCell(x, y) {
-  if (!isInputMode.value) {
+  const clampedX = clampCoordinate(x, matrixWidth.value - 1);
+  const clampedY = clampCoordinate(y, matrixHeight.value - 1);
+  if (isInputMode.value) {
+    emit("light-cell", clampedX, clampedY, selectedRgb.value);
     return;
   }
-  emit("light-cell", clampCoordinate(x), clampCoordinate(y), selectedRgb.value);
+  emit("game-input", clampedX, clampedY);
 }
 
 function colorStyle(color) {
@@ -110,19 +136,23 @@ function colorStyle(color) {
   <main v-if="isDebugWindow" class="debug-shell">
     <header class="debug-topbar">
       <div>
-        <h1>LED Debug</h1>
+        <h1>LED Preview</h1>
         <p>
-          {{ engineState }}<span v-if="demoType"> / {{ demoType }}</span>
+          {{ engineState }}<span> / {{ previewModeLabel }}</span>
         </p>
       </div>
-      <div class="frame-meta">{{ frameAge }}</div>
+      <div class="frame-meta">
+        <span>{{ frameSizeLabel }}</span>
+        <span>{{ frameAge }}</span>
+      </div>
     </header>
 
     <section class="debug-workspace">
       <section class="panel-area">
         <div
           class="led-board"
-          :class="{ disabled: !isInputMode }"
+          :class="{ disabled: !canClickMatrix }"
+          :style="boardStyle"
           @mouseleave="$emit('clear-hover-cell')"
         >
           <template v-for="(row, y) in pixels" :key="y">
@@ -131,7 +161,7 @@ function colorStyle(color) {
               :key="`${x}-${y}`"
               class="led-cell"
               :class="{ active: hoverCell?.x === x && hoverCell?.y === y }"
-              :disabled="!isInputMode"
+              :disabled="!canClickMatrix"
               :style="colorStyle(color)"
               type="button"
               @click="emitLightCell(x, y)"
@@ -141,109 +171,130 @@ function colorStyle(color) {
         </div>
       </section>
 
-      <aside class="debug-controls" :class="{ disabled: !isInputMode }">
-        <div class="debug-card">
+      <aside class="debug-side">
+        <section class="debug-card runtime-state-card">
           <div class="debug-card-head">
             <div>
-              <p v-if="isInputMode">调色后直接点击面板</p>
-              <p v-else>Start Input Demo to enable controls.</p>
+              <h2>运行状态</h2>
             </div>
+          </div>
+          <dl class="runtime-state-list">
             <div
-              class="color-preview"
-              :style="{ backgroundColor: selectedColor }"
-              aria-hidden="true"
-            ></div>
-          </div>
+              v-for="item in runtimeStatusItems"
+              :key="item.label"
+              class="runtime-state-row"
+            >
+              <dt>{{ item.label }}</dt>
+              <dd>{{ item.value }}</dd>
+            </div>
+          </dl>
+        </section>
 
-          <label class="color-picker">
-            <span>Color</span>
-            <input
-              v-model="selectedColor"
-              :disabled="!isInputMode"
-              type="color"
-            />
-          </label>
+        <section class="debug-controls" :class="{ disabled: !isInputMode }">
+          <div class="debug-card">
+            <div class="debug-card-head">
+              <div>
+                <p v-if="isInputMode">调色后直接点击面板</p>
+                <p v-else>点击面板模拟玩法输入</p>
+              </div>
+              <div
+                class="color-preview"
+                :style="{ backgroundColor: selectedColor }"
+                aria-hidden="true"
+              ></div>
+            </div>
 
-          <div class="rgb-sliders">
-            <label>
-              <span>R {{ selectedRgb.r }}</span>
+            <label class="color-picker">
+              <span>Color</span>
               <input
+                v-model="selectedColor"
                 :disabled="!isInputMode"
-                :value="selectedRgb.r"
-                max="255"
-                min="0"
-                type="range"
-                @input="setColorChannel('r', $event.target.value)"
+                type="color"
               />
             </label>
-            <label>
-              <span>G {{ selectedRgb.g }}</span>
-              <input
-                :disabled="!isInputMode"
-                :value="selectedRgb.g"
-                max="255"
-                min="0"
-                type="range"
-                @input="setColorChannel('g', $event.target.value)"
-              />
-            </label>
-            <label>
-              <span>B {{ selectedRgb.b }}</span>
-              <input
-                :disabled="!isInputMode"
-                :value="selectedRgb.b"
-                max="255"
-                min="0"
-                type="range"
-                @input="setColorChannel('b', $event.target.value)"
-              />
-            </label>
-          </div>
-        </div>
 
-        <form
-          class="debug-card coordinate-card"
-          @submit.prevent="emitLightCell(coordinateX, coordinateY)"
-        >
-          <div class="debug-card-head">
-            <div>
-              <h2>坐标</h2>
+            <div class="rgb-sliders">
+              <label>
+                <span>R {{ selectedRgb.r }}</span>
+                <input
+                  :disabled="!isInputMode"
+                  :value="selectedRgb.r"
+                  max="255"
+                  min="0"
+                  type="range"
+                  @input="setColorChannel('r', $event.target.value)"
+                />
+              </label>
+              <label>
+                <span>G {{ selectedRgb.g }}</span>
+                <input
+                  :disabled="!isInputMode"
+                  :value="selectedRgb.g"
+                  max="255"
+                  min="0"
+                  type="range"
+                  @input="setColorChannel('g', $event.target.value)"
+                />
+              </label>
+              <label>
+                <span>B {{ selectedRgb.b }}</span>
+                <input
+                  :disabled="!isInputMode"
+                  :value="selectedRgb.b"
+                  max="255"
+                  min="0"
+                  type="range"
+                  @input="setColorChannel('b', $event.target.value)"
+                />
+              </label>
             </div>
           </div>
 
-          <div class="coordinate-fields">
-            <label>
-              <span>X</span>
-              <input
-                v-model.number="coordinateX"
-                :disabled="!isInputMode"
-                max="15"
-                min="0"
-                type="number"
-              />
-            </label>
-            <label>
-              <span>Y</span>
-              <input
-                v-model.number="coordinateY"
-                :disabled="!isInputMode"
-                max="15"
-                min="0"
-                type="number"
-              />
-            </label>
-          </div>
+          <form
+            class="debug-card coordinate-card"
+            @submit.prevent="emitLightCell(coordinateX, coordinateY)"
+          >
+            <div class="debug-card-head">
+              <div>
+                <h2>坐标</h2>
+              </div>
+            </div>
 
-          <button class="debug-action" :disabled="!isInputMode" type="submit">
-            点亮
-          </button>
-        </form>
+            <div class="coordinate-fields">
+              <label>
+                <span>X</span>
+                <input
+                  v-model.number="coordinateX"
+                  :disabled="!isInputMode"
+                  max="15"
+                  min="0"
+                  type="number"
+                />
+              </label>
+              <label>
+                <span>Y</span>
+                <input
+                  v-model.number="coordinateY"
+                  :disabled="!isInputMode"
+                  max="15"
+                  min="0"
+                  type="number"
+                />
+              </label>
+            </div>
+
+            <button class="debug-action" :disabled="!isInputMode" type="submit">
+              点亮
+            </button>
+          </form>
+        </section>
       </aside>
     </section>
 
     <footer class="debug-footer">
       <span v-if="hoverCell">x {{ hoverCell.x }} / y {{ hoverCell.y }}</span>
-      <span v-else>16 x 16</span>
+      <span v-else-if="gameplaySummary">{{ gameplaySummary }}</span>
+      <span v-else>{{ frameSizeLabel }}</span>
       <button
         class="ghost-button small"
         type="button"
@@ -275,38 +326,35 @@ function colorStyle(color) {
     </div>
 
     <section class="control-grid" aria-label="Demo controls">
-      <button
-        class="action-button primary"
+      <ButtonMastery2_SelfMadeSystem
         type="button"
         :disabled="Boolean(busyAction)"
         @click="$emit('start-fixed')"
       >
         Fixed Demo
-      </button>
-      <button
-        class="action-button"
+      </ButtonMastery2_SelfMadeSystem>
+      <ButtonMastery2_SelfMadeSystem
         type="button"
         :disabled="Boolean(busyAction)"
         @click="$emit('start-input')"
       >
         Input Demo
-      </button>
-      <button
-        class="action-button danger"
+      </ButtonMastery2_SelfMadeSystem>
+      <ButtonMastery2_SelfMadeSystem
+        class="danger"
         type="button"
         :disabled="Boolean(busyAction)"
         @click="$emit('stop-engine')"
       >
         Stop
-      </button>
-      <button
-        class="action-button"
+      </ButtonMastery2_SelfMadeSystem>
+      <ButtonMastery2_SelfMadeSystem
         type="button"
         :disabled="Boolean(busyAction)"
         @click="$emit('refresh-state')"
       >
         Refresh
-      </button>
+      </ButtonMastery2_SelfMadeSystem>
     </section>
 
     <p v-if="errorMessage" class="error-line">{{ errorMessage }}</p>

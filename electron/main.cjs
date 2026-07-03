@@ -40,8 +40,8 @@ function createDebugWindow() {
   }
 
   debugWindow = new BrowserWindow({
-    width: 760,
-    height: 820,
+    width: 1520,
+    height: 1640,
     minWidth: 560,
     minHeight: 640,
     title: 'LED Debug Panel',
@@ -120,9 +120,10 @@ function parseFrames(buffer) {
 
 function publishFrame(payload) {
   const rgb = Array.from(payload)
+  const frameSize = inferFrameSize(rgb.length)
   latestFrame = {
-    width: 16,
-    height: 16,
+    width: frameSize.width,
+    height: frameSize.height,
     rgb,
     receivedAt: Date.now(),
   }
@@ -130,6 +131,15 @@ function publishFrame(payload) {
   if (debugWindow && !debugWindow.isDestroyed()) {
     debugWindow.webContents.send('led-frame', latestFrame)
   }
+}
+
+function inferFrameSize(byteLength) {
+  const pixelCount = Math.floor((Number(byteLength) || 0) / 3)
+  const squareSize = Math.sqrt(pixelCount)
+  if (Number.isInteger(squareSize) && squareSize > 0) {
+    return { width: squareSize, height: squareSize }
+  }
+  return { width: 16, height: 16 }
 }
 
 function publishEngineState(state) {
@@ -174,12 +184,46 @@ ipcMain.handle('open-debug-panel', () => {
 ipcMain.handle('frame:latest', () => latestFrame)
 ipcMain.handle('engine:start-fixed', () => engineStateRequest('/engine/demo/fixed/start', { method: 'POST' }))
 ipcMain.handle('engine:start-input', () => engineStateRequest('/engine/demo/input/start', { method: 'POST' }))
+ipcMain.handle('engine:start-game', (_event, gameId) =>
+  engineStateRequest(`/engine/game/${gameId}/start`, { method: 'POST' }),
+)
+ipcMain.handle('engine:stop-game', () => engineStateRequest('/engine/game/stop', { method: 'POST' }))
+ipcMain.handle('engine:game-state', () =>
+  engineStateRequest('/engine/game/input', {
+    method: 'POST',
+    body: JSON.stringify({ type: 'state' }),
+  }),
+)
+ipcMain.handle('engine:game-input', (_event, input) =>
+  engineStateRequest('/engine/game/input', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  }),
+)
 ipcMain.handle('engine:stop', () => engineStateRequest('/engine/demo/stop', { method: 'POST' }))
 ipcMain.handle('engine:state', () => engineStateRequest('/engine/demo/state'))
 ipcMain.handle('engine:input', (_event, input) =>
   backendRequest('/engine/demo/input', {
     method: 'POST',
     body: JSON.stringify(input),
+  }),
+)
+ipcMain.handle('dev:seed-simple-demo', () =>
+  backendRequest('/dev/seed/simple-demo', { method: 'POST' }),
+)
+ipcMain.handle('game-editor:get', (_event, gameId) =>
+  backendRequest(`/game-editor/${gameId}`),
+)
+ipcMain.handle('game-editor:validate', (_event, document) =>
+  backendRequest('/game-editor/validate', {
+    method: 'POST',
+    body: JSON.stringify(document),
+  }),
+)
+ipcMain.handle('game-editor:save', (_event, gameId, document) =>
+  backendRequest(`/game-editor/${gameId}`, {
+    method: 'PUT',
+    body: JSON.stringify(document),
   }),
 )
 
