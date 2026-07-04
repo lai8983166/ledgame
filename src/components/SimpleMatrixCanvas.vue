@@ -118,6 +118,7 @@ function drawCell(context, cell, index) {
   const selectedCell = Boolean(classes["selected-object-cell"]);
   const mergeSelectedCell = Boolean(classes["merge-selected-cell"]);
   const anchorCell = Boolean(classes["anchor-cell"]);
+  const overlapCell = Boolean(classes["overlap-cell"]);
   const hoveredCell = cell.key === hoverCellKey.value;
 
   context.globalAlpha = virtualCell && !classes["object-cell"] ? 0.78 : 1;
@@ -140,6 +141,10 @@ function drawCell(context, cell, index) {
     context.strokeRect(left - 0.5, top - 0.5, size + 1, size + 1);
   }
 
+  if (overlapCell) {
+    drawOverlapIndicator(context, left, top, size, cell.overlapCount);
+  }
+
   if (hoveredCell) {
     drawOutline(context, left, top, size, "rgba(219, 228, 241, 0.46)", 2, 1);
   }
@@ -155,6 +160,27 @@ function drawCell(context, cell, index) {
     context.lineWidth = 2;
     context.strokeRect(left + 3, top + 3, Math.max(1, size - 6), Math.max(1, size - 6));
   }
+}
+
+function drawOverlapIndicator(context, left, top, size, overlapCount) {
+  const markerSize = Math.max(4, Math.min(9, Math.round(size * 0.32)));
+  const markerLeft = left + size - markerSize - 2;
+  const markerTop = top + 2;
+  context.save();
+  context.fillStyle = "rgba(11, 18, 28, 0.72)";
+  context.strokeStyle = "rgba(255, 255, 255, 0.58)";
+  context.lineWidth = 1;
+  drawRoundedRect(context, markerLeft, markerTop, markerSize, markerSize, Math.min(3, markerSize / 2));
+  context.fill();
+  context.stroke();
+  if (size >= 18 && overlapCount > 1) {
+    context.fillStyle = "#f6d66f";
+    context.font = `${Math.max(8, Math.round(size * 0.32))}px system-ui, sans-serif`;
+    context.textAlign = "center";
+    context.textBaseline = "middle";
+    context.fillText(String(Math.min(overlapCount, 9)), markerLeft + markerSize / 2, markerTop + markerSize / 2);
+  }
+  context.restore();
 }
 
 function drawOutline(context, left, top, size, color, lineWidth, offset) {

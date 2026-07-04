@@ -71,32 +71,36 @@ const matrixCells = computed(() => {
   for (const row of matrixRows.value) {
     for (const column of matrixColumns.value) {
       const cell = expandedCellMap.value.get(createPointKey(column, row));
+      const occupants = cell?.occupants || [];
       const objectId = cell?.object?.id || "";
       const realCell = isRealCell(column, row);
-      const selected = Boolean(objectId && objectId === selectedObjectId.value);
-      const mergeSelected = Boolean(objectId && mergeSelectionIdSet.value.has(objectId));
-      const anchorHighlighted = isAnchorHighlighted(column, row, cell?.object);
+      const selected = occupants.some((entry) => entry.object?.id === selectedObjectId.value);
+      const mergeSelected = occupants.some((entry) => mergeSelectionIdSet.value.has(entry.object?.id));
+      const anchorHighlighted = isAnchorHighlighted(column, row, occupants);
       const colorIndex = clampColorIndex(cell?.object?.color);
       const color = cell?.object
         ? colorOptions.value[colorIndex]?.value || "#26313d"
         : realCell
           ? "#303b49"
           : "#101821";
+      const overlapCount = occupants.length;
       cells.push({
         key: `${column}:${row}`,
         x: column,
         y: row,
         color,
-        title: objectId ? `x ${column}, y ${row}, ${objectId}` : `x ${column}, y ${row}`,
+        title: createCellTitle(column, row, occupants),
+        overlapCount,
         classes: {
           "real-cell": realCell,
           "virtual-cell": !realCell,
           "object-cell": Boolean(cell),
+          "overlap-cell": overlapCount > 1,
           "selected-object-cell": selected,
           "merge-selected-cell": mergeSelected,
           "anchor-cell": anchorHighlighted,
         },
-        memo: `${objectId}:${color}:${realCell ? 1 : 0}:${selected ? 1 : 0}:${mergeSelected ? 1 : 0}:${anchorHighlighted ? 1 : 0}`,
+        memo: `${objectId}:${color}:${realCell ? 1 : 0}:${overlapCount}:${selected ? 1 : 0}:${mergeSelected ? 1 : 0}:${anchorHighlighted ? 1 : 0}`,
       });
     }
   }
@@ -109,14 +113,20 @@ const frameObjects = computed(() =>
 const selectedObject = computed(() =>
   (activeFrame.value?.matrix || []).find((object) => object.id === selectedObjectId.value) || null,
 );
+const selectedObjectIndex = computed(() =>
+  (activeFrame.value?.matrix || []).findIndex((object) => object.id === selectedObjectId.value),
+);
+const selectedObjectCanMoveUp = computed(
+  () => selectedObjectIndex.value >= 0 && selectedObjectIndex.value < (activeFrame.value?.matrix || []).length - 1,
+);
+const selectedObjectCanMoveDown = computed(() => selectedObjectIndex.value > 0);
+const occupancyIndex = computed(() => createOccupancyIndex(activeFrame.value?.matrix || []));
 const expandedCellMap = computed(() => {
   const map = new Map();
-  for (const object of activeFrame.value?.matrix || []) {
-    for (const cell of getObjectCells(object)) {
-      const key = createPointKey(cell.x, cell.y);
-      if (!map.has(key)) {
-        map.set(key, { ...cell, object });
-      }
+  for (const [key, occupants] of occupancyIndex.value.entries()) {
+    const topEntry = getTopOccupancyEntry(occupants);
+    if (topEntry) {
+      map.set(key, { ...topEntry, occupants });
     }
   }
   return map;
@@ -191,13 +201,17 @@ async function startGame() {
     return;
   }
   busyAction.value = "start";
-  runtimeStatusMessage.value = "启动中...";
+  runtimeStatusMessage.value = "保存并启动中...";
   runtimeErrorMessage.value = "";
   runtimeResult.value = null;
   try {
     if (!api) {
       throw new Error("Electron API is unavailable");
     }
+    const payload = createEditorPayload();
+    await api.saveGameEditor(payload.id, payload);
+    statusMessage.value = "已保存当前编辑器内容";
+    validationErrors.value = [];
     const result = await api.startGame(gameId);
     runtimeResult.value = result?.data || result;
     runtimeStatusMessage.value = "启动成功";
@@ -366,12 +380,10 @@ function handleCellClick(x, y) {
     toggleMergeSelection(existing);
     return;
   }
-  if (existing) {
-    return;
-  }
   const object = createMatrixObject(x, y, selectedColor.value, frame);
   frame.matrix.push(object);
   selectedObjectId.value = object.id;
+  statusMessage.value = existing ? "已创建重叠单格对象" : "已创建单格对象";
 }
 
 function handleCellRangeCreate(payload) {
@@ -383,11 +395,7 @@ function handleCellRangeCreate(payload) {
   if (!cells.length) {
     return;
   }
-  const occupiedCell = cells.find((cell) => expandedCellMap.value.has(createPointKey(cell.x, cell.y)));
-  if (occupiedCell) {
-    statusMessage.value = "框选区域包含已有对象，未创建新对象";
-    return;
-  }
+  const hasOverlap = cells.some((cell) => expandedCellMap.value.has(createPointKey(cell.x, cell.y)));
   const anchorX = toInteger(payload?.anchorX, cells[0].x);
   const anchorY = toInteger(payload?.anchorY, cells[0].y);
   const object = {
@@ -399,6 +407,7 @@ function handleCellRangeCreate(payload) {
   };
   frame.matrix.push(object);
   selectedObjectId.value = object.id;
+  statusMessage.value = hasOverlap ? "已创建重叠多格对象" : "已创建多格对象";
 }
 
 function zoomMatrix(event) {
@@ -440,6 +449,37 @@ function deleteSelectedObject() {
   selectedObjectId.value = "";
   stopSelectionMode();
   stopAnchorEdit();
+}
+
+function moveSelectedObjectLayerUp() {
+  reorderSelectedObject(selectedObjectIndex.value + 1);
+}
+
+function moveSelectedObjectLayerDown() {
+  reorderSelectedObject(selectedObjectIndex.value - 1);
+}
+
+function moveSelectedObjectToTop() {
+  reorderSelectedObject((activeFrame.value?.matrix || []).length - 1);
+}
+
+function moveSelectedObjectToBottom() {
+  reorderSelectedObject(0);
+}
+
+function reorderSelectedObject(targetIndex) {
+  const frame = ensureActiveFrame();
+  const currentIndex = frame.matrix.findIndex((object) => object.id === selectedObjectId.value);
+  if (currentIndex < 0) {
+    return;
+  }
+  const boundedIndex = Math.min(frame.matrix.length - 1, Math.max(0, targetIndex));
+  if (boundedIndex === currentIndex) {
+    return;
+  }
+  const [object] = frame.matrix.splice(currentIndex, 1);
+  frame.matrix.splice(boundedIndex, 0, object);
+  statusMessage.value = "对象层级已调整";
 }
 
 function copySelectedObjectToPreviousFrame() {
@@ -543,11 +583,12 @@ function startAnchorEdit() {
 }
 
 function selectAnchorCandidate(cell) {
-  if (!cell?.object || cell.object.id !== selectedObjectId.value) {
+  const selectedEntry = cell?.occupants?.find((entry) => entry.object?.id === selectedObjectId.value);
+  if (!selectedEntry) {
     return;
   }
   anchorCandidate.value = {
-    objectId: cell.object.id,
+    objectId: selectedEntry.object.id,
     x: cell.x,
     y: cell.y,
   };
@@ -636,14 +677,15 @@ function stopSelectionMode() {
 }
 
 function toggleMergeSelection(cell) {
-  if (!cell?.object) {
+  const object = getTopOccupancyEntry(cell?.occupants)?.object;
+  if (!object) {
     return;
   }
-  if (!isSingleCellObject(cell.object)) {
+  if (!isSingleCellObject(object)) {
     statusMessage.value = "只能合并单格对象";
     return;
   }
-  const id = cell.object.id;
+  const id = object.id;
   if (mergeSelectionIds.value.includes(id)) {
     mergeSelectionIds.value = mergeSelectionIds.value.filter((item) => item !== id);
     return;
@@ -759,6 +801,40 @@ function createEditorPayload() {
     });
   });
   return payload;
+}
+
+function createOccupancyIndex(objects) {
+  const index = new Map();
+  objects.forEach((object, objectIndex) => {
+    getObjectCells(object).forEach((cell, pointIndex) => {
+      const key = createPointKey(cell.x, cell.y);
+      const occupants = index.get(key) || [];
+      occupants.push({
+        ...cell,
+        object,
+        objectIndex,
+        pointIndex,
+      });
+      index.set(key, occupants);
+    });
+  });
+  return index;
+}
+
+function getTopOccupancyEntry(occupants) {
+  if (!Array.isArray(occupants) || !occupants.length) {
+    return null;
+  }
+  return occupants[occupants.length - 1];
+}
+
+function createCellTitle(x, y, occupants) {
+  if (!occupants?.length) {
+    return `x ${x}, y ${y}`;
+  }
+  const topObjectId = getTopOccupancyEntry(occupants)?.object?.id || "";
+  const overlapText = occupants.length > 1 ? `, 重叠 ${occupants.length} 层` : "";
+  return `x ${x}, y ${y}, ${topObjectId}${overlapText}`;
 }
 
 function createPointKey(x, y) {
@@ -888,16 +964,21 @@ function isObjectInsideRealMatrix(object) {
   return getObjectCells(object).every((cell) => isRealCell(cell.x, cell.y));
 }
 
-function isAnchorHighlighted(x, y, object) {
-  if (anchorEditMode.value && object?.id === selectedObjectId.value) {
-    const anchor = anchorCandidate.value || object;
+function isAnchorHighlighted(x, y, occupants) {
+  const selectedEntry = occupants.find((entry) => entry.object?.id === selectedObjectId.value);
+  if (anchorEditMode.value && selectedEntry) {
+    const anchor = anchorCandidate.value || selectedEntry.object;
     return x === toInteger(anchor.x, 0) && y === toInteger(anchor.y, 0);
   }
   const mergeAnchorId = mergeSelectionIds.value[0];
-  if (!mergeAnchorId || object?.id !== mergeAnchorId) {
+  if (!mergeAnchorId) {
     return false;
   }
-  const anchorCell = getObjectCells(object)[0];
+  const anchorObject = occupants.find((entry) => entry.object?.id === mergeAnchorId)?.object;
+  if (!anchorObject) {
+    return false;
+  }
+  const anchorCell = getObjectCells(anchorObject)[0];
   return x === anchorCell?.x && y === anchorCell?.y;
 }
 
@@ -1361,6 +1442,42 @@ function formatRuntimeSummary(value) {
               </button>
               <button
                 class="soft-button compact-button"
+                :disabled="!selectedObjectCanMoveUp"
+                type="button"
+                title="上移一层"
+                @click="moveSelectedObjectLayerUp"
+              >
+                上移
+              </button>
+              <button
+                class="soft-button compact-button"
+                :disabled="!selectedObjectCanMoveDown"
+                type="button"
+                title="下移一层"
+                @click="moveSelectedObjectLayerDown"
+              >
+                下移
+              </button>
+              <button
+                class="soft-button compact-button"
+                :disabled="!selectedObjectCanMoveUp"
+                type="button"
+                title="移到最上层"
+                @click="moveSelectedObjectToTop"
+              >
+                置顶
+              </button>
+              <button
+                class="soft-button compact-button"
+                :disabled="!selectedObjectCanMoveDown"
+                type="button"
+                title="移到最下层"
+                @click="moveSelectedObjectToBottom"
+              >
+                置底
+              </button>
+              <button
+                class="soft-button compact-button"
                 :disabled="!selectedObject"
                 type="button"
                 @click="applyBrushColorToSelectedObject"
@@ -1413,7 +1530,7 @@ function formatRuntimeSummary(value) {
               <span class="object-color" :style="{ backgroundColor: colorOptions[object.color]?.value }"></span>
               <span class="object-main">
                 <strong>{{ object.id }}</strong>
-                <small>基准 {{ object.x }},{{ object.y }} · Color {{ object.color }} · {{ object.occupiedCount }} 格</small>
+                <small>层 {{ object.index + 1 }}/{{ frameObjects.length }} · 基准 {{ object.x }},{{ object.y }} · Color {{ object.color }} · {{ object.occupiedCount }} 格</small>
               </span>
             </button>
           </div>
