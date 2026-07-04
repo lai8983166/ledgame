@@ -164,6 +164,12 @@ p {
   font-size: 13px;
 }
 
+.compact-button {
+  min-height: 34px;
+  padding: 0 12px;
+  border-radius: 12px;
+}
+
 .action-button:hover:not(:disabled),
 .soft-button:hover:not(:disabled) {
   color: #334050;
@@ -304,7 +310,7 @@ button:disabled {
 
 .simple-editor-layout {
   display: grid;
-  grid-template-columns: minmax(230px, 280px) minmax(560px, 1fr) minmax(210px, 250px);
+  grid-template-columns: minmax(230px, 280px) minmax(560px, 1fr) minmax(250px, 310px);
   gap: 18px;
   align-items: start;
   min-height: 0;
@@ -441,12 +447,57 @@ button:disabled {
     inset -6px -6px 12px rgba(255, 255, 255, 0.88);
 }
 
+.icon-danger-button {
+  color: #8f5f68;
+}
+
 .frame-progress-row {
   display: grid;
   grid-template-columns: minmax(0, 620px) auto;
   align-items: start;
   gap: 12px;
   min-width: 0;
+}
+
+.frame-icon-actions {
+  display: grid;
+  grid-auto-flow: column;
+  grid-template-rows: repeat(2, 36px);
+  grid-auto-columns: 36px;
+  gap: 8px;
+}
+
+.frame-icon-actions .icon-add-button {
+  position: relative;
+}
+
+.frame-icon-actions .icon-add-button::after {
+  position: absolute;
+  right: 50%;
+  bottom: calc(100% + 8px);
+  z-index: 30;
+  width: max-content;
+  max-width: 180px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  color: #edf3f8;
+  background: #242d38;
+  box-shadow: 0 10px 22px rgba(12, 16, 22, 0.28);
+  content: attr(data-tip);
+  font-size: 12px;
+  line-height: 1.2;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(50%) translateY(3px);
+  transition:
+    opacity 80ms ease,
+    transform 80ms ease;
+}
+
+.frame-icon-actions .icon-add-button:hover::after,
+.frame-icon-actions .icon-add-button:focus-visible::after {
+  opacity: 1;
+  transform: translateX(50%) translateY(0);
 }
 
 .frame-progress-shell {
@@ -546,11 +597,52 @@ button:disabled {
   gap: 14px;
 }
 
+.matrix-status-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 50px;
+  padding: 10px 12px;
+  border-radius: 16px;
+  color: #637081;
+  background: rgba(255, 255, 255, 0.38);
+}
+
+.matrix-status-bar.active {
+  background: rgba(220, 230, 241, 0.68);
+}
+
+.matrix-status-bar strong {
+  display: block;
+  color: #343d4a;
+  font-size: 13px;
+}
+
+.matrix-status-bar span {
+  color: #758190;
+  font-size: 12px;
+}
+
+.matrix-status-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.selection-count {
+  min-width: max-content;
+  font-weight: 700;
+}
+
 .matrix-scroll {
   width: 100%;
   height: min(70vh, 780px);
   min-height: 520px;
   overflow: auto;
+  overscroll-behavior: contain;
   display: grid;
   place-items: center;
   padding: 18px;
@@ -569,6 +661,17 @@ button:disabled {
   display: grid;
   width: max-content;
   place-content: start;
+  contain: layout paint;
+}
+
+.matrix-canvas-wrapper {
+  display: block;
+  overflow: visible;
+}
+
+.matrix-canvas-surface {
+  display: block;
+  cursor: crosshair;
 }
 
 .matrix-cell {
@@ -583,9 +686,85 @@ button:disabled {
   cursor: crosshair;
 }
 
+.matrix-cell.real-cell {
+  border-color: rgba(210, 225, 244, 0.24);
+  box-shadow:
+    inset 1px 1px 2px rgba(255, 255, 255, 0.14),
+    inset -1px -1px 2px rgba(0, 0, 0, 0.3),
+    0 0 0 1px rgba(93, 121, 151, 0.12);
+}
+
+.matrix-cell.virtual-cell {
+  opacity: 0.78;
+  border-color: rgba(143, 158, 176, 0.2);
+  border-style: dashed;
+  box-shadow:
+    inset 1px 1px 1px rgba(255, 255, 255, 0.03),
+    inset -1px -1px 1px rgba(0, 0, 0, 0.34);
+}
+
+.matrix-cell.object-cell {
+  opacity: 1;
+}
+
+.matrix-cell.selected-object-cell {
+  outline: 2px solid #f7d56f;
+  outline-offset: 1px;
+  box-shadow:
+    inset 1px 1px 2px rgba(255, 255, 255, 0.16),
+    inset -1px -1px 2px rgba(0, 0, 0, 0.3),
+    0 0 0 2px rgba(247, 213, 111, 0.18);
+}
+
+.matrix-cell.merge-selected-cell {
+  outline: 2px solid #70d6b3;
+  outline-offset: 1px;
+}
+
+.matrix-cell.anchor-cell {
+  outline: 3px solid #ff8a5c;
+  outline-offset: 2px;
+  box-shadow:
+    inset 0 0 0 2px rgba(255, 255, 255, 0.28),
+    0 0 0 3px rgba(255, 138, 92, 0.22),
+    0 0 18px rgba(255, 138, 92, 0.34);
+}
+
 .matrix-cell:hover {
   outline: 2px solid rgba(219, 228, 241, 0.46);
   outline-offset: 1px;
+}
+
+.matrix-cell.anchor-cell:hover {
+  outline: 3px solid #ff8a5c;
+  outline-offset: 2px;
+}
+
+.matrix-context-menu {
+  position: fixed;
+  z-index: 20;
+  display: grid;
+  gap: 4px;
+  min-width: 112px;
+  padding: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 12px;
+  background: #242d38;
+  box-shadow: 0 14px 28px rgba(12, 16, 22, 0.34);
+}
+
+.matrix-context-menu button {
+  min-height: 34px;
+  border: 0;
+  border-radius: 9px;
+  color: #edf3f8;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+}
+
+.matrix-context-menu button:hover {
+  background: rgba(255, 255, 255, 0.09);
 }
 
 .palette-options {
@@ -638,6 +817,105 @@ button:disabled {
 
 .editor-meta p {
   margin: 0;
+}
+
+.object-panel {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  padding: 12px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.42);
+  box-shadow:
+    inset 7px 7px 14px rgba(178, 187, 201, 0.24),
+    inset -7px -7px 14px rgba(255, 255, 255, 0.74);
+}
+
+.object-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.object-panel-head p {
+  margin: 0;
+}
+
+.object-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.object-actions .soft-button {
+  padding-inline: 8px;
+}
+
+.object-list {
+  display: grid;
+  gap: 8px;
+  max-height: 320px;
+  overflow: auto;
+  padding-right: 2px;
+}
+
+.object-row {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 58px;
+  padding: 8px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.66);
+  border-radius: 14px;
+  color: #596371;
+  background: #eef1f5;
+  box-shadow:
+    6px 6px 12px rgba(178, 187, 201, 0.3),
+    -6px -6px 12px rgba(255, 255, 255, 0.82);
+  cursor: pointer;
+  text-align: left;
+}
+
+.object-row.active {
+  color: #2f3845;
+  box-shadow:
+    inset 6px 6px 12px rgba(178, 187, 201, 0.4),
+    inset -6px -6px 12px rgba(255, 255, 255, 0.88);
+}
+
+.object-color {
+  width: 28px;
+  height: 28px;
+  border-radius: 9px;
+  box-shadow:
+    inset 2px 2px 4px rgba(255, 255, 255, 0.32),
+    inset -2px -2px 4px rgba(51, 59, 70, 0.24);
+}
+
+.object-main {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.object-main strong,
+.object-main small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.object-main strong {
+  font-size: 12px;
+}
+
+.object-main small {
+  color: #788391;
+  font-size: 11px;
 }
 
 .runtime-panel {
