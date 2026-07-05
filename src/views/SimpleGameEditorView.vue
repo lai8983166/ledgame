@@ -212,7 +212,11 @@ async function startGame() {
     await api.saveGameEditor(payload.id, payload);
     statusMessage.value = "已保存当前编辑器内容";
     validationErrors.value = [];
-    const result = await api.startGame(gameId);
+    const result = await api.startGame({
+      id: gameId,
+      startLevelIndex: 0,
+      launchMethod: "editor",
+    });
     runtimeResult.value = result?.data || result;
     runtimeStatusMessage.value = "启动成功";
     previewStatusMessage.value = "可打开预览窗口观察运行帧";
@@ -365,6 +369,20 @@ function deleteAllFrames() {
   syncSelectedObject();
 }
 
+function applyCurrentRepeatTimesToAllFrames() {
+  const level = activeLevel.value;
+  const frame = activeFrame.value;
+  if (!level?.frameList?.length || !frame) {
+    return;
+  }
+  const repeatTimes = Math.max(1, toInteger(frame.repeatTimes, 1));
+  level.frameList.forEach((item) => {
+    item.repeatTimes = repeatTimes;
+  });
+  frame.repeatTimes = repeatTimes;
+  statusMessage.value = `当前关卡所有帧重复次数已设为 ${repeatTimes}`;
+}
+
 function selectColor(index) {
   selectedColor.value = index;
 }
@@ -380,10 +398,16 @@ function handleCellClick(x, y) {
     toggleMergeSelection(existing);
     return;
   }
+  const topObject = getTopOccupancyEntry(existing?.occupants)?.object;
+  if (topObject?.id) {
+    selectObject(topObject.id);
+    statusMessage.value = "已选中对象";
+    return;
+  }
   const object = createMatrixObject(x, y, selectedColor.value, frame);
   frame.matrix.push(object);
   selectedObjectId.value = object.id;
-  statusMessage.value = existing ? "已创建重叠单格对象" : "已创建单格对象";
+  statusMessage.value = isRealCell(x, y) ? "已创建单格对象" : "已创建虚拟单格对象";
 }
 
 function handleCellRangeCreate(payload) {
@@ -459,14 +483,6 @@ function moveSelectedObjectLayerDown() {
   reorderSelectedObject(selectedObjectIndex.value - 1);
 }
 
-function moveSelectedObjectToTop() {
-  reorderSelectedObject((activeFrame.value?.matrix || []).length - 1);
-}
-
-function moveSelectedObjectToBottom() {
-  reorderSelectedObject(0);
-}
-
 function reorderSelectedObject(targetIndex) {
   const frame = ensureActiveFrame();
   const currentIndex = frame.matrix.findIndex((object) => object.id === selectedObjectId.value);
@@ -480,6 +496,33 @@ function reorderSelectedObject(targetIndex) {
   const [object] = frame.matrix.splice(currentIndex, 1);
   frame.matrix.splice(boundedIndex, 0, object);
   statusMessage.value = "对象层级已调整";
+}
+
+function applySelectedObjectLayerToAllFrames() {
+  const level = activeLevel.value;
+  const objectId = selectedObjectId.value;
+  const targetIndex = selectedObjectIndex.value;
+  if (!level || !objectId || targetIndex < 0) {
+    return;
+  }
+
+  let appliedCount = 0;
+  let skippedCount = 0;
+  for (const frame of level.frameList || []) {
+    frame.matrix ||= [];
+    const currentIndex = frame.matrix.findIndex((object) => object.id === objectId);
+    if (currentIndex < 0) {
+      skippedCount++;
+      continue;
+    }
+
+    const [object] = frame.matrix.splice(currentIndex, 1);
+    const boundedIndex = Math.min(targetIndex, frame.matrix.length);
+    frame.matrix.splice(boundedIndex, 0, object);
+    appliedCount++;
+  }
+
+  statusMessage.value = `对象层级已应用到 ${appliedCount} 帧，跳过 ${skippedCount} 帧`;
 }
 
 function copySelectedObjectToPreviousFrame() {
@@ -1094,6 +1137,8 @@ function formatRuntimeSummary(value) {
     ["状态", value.engineState || value.state],
     ["玩法", value.gameName || value.name],
     ["ID", value.gameId || value.id],
+    ["起始关卡", value.startLevelIndex],
+    ["启动方式", value.launchMethod],
     ["尺寸", value.width && value.height ? `${value.width} x ${value.height}` : ""],
   ];
   for (const [label, fieldValue] of fields) {
@@ -1305,7 +1350,18 @@ function formatRuntimeSummary(value) {
           </label>
           <label>
             <span>当前帧重复次数</span>
-            <input v-model.number="activeFrame.repeatTimes" min="1" type="number" />
+            <div class="repeat-times-control">
+              <input v-model.number="activeFrame.repeatTimes" min="1" type="number" />
+              <button
+                class="inline-symbol-button"
+                type="button"
+                title="应用当前重复次数到当前关卡所有帧"
+                aria-label="应用当前重复次数到当前关卡所有帧"
+                @click="applyCurrentRepeatTimesToAllFrames"
+              >
+                *
+              </button>
+            </div>
           </label>
         </div>
 
@@ -1441,40 +1497,34 @@ function formatRuntimeSummary(value) {
                 修改基准
               </button>
               <button
-                class="soft-button compact-button"
+                class="soft-button compact-button layer-symbol-button"
                 :disabled="!selectedObjectCanMoveUp"
                 type="button"
-                title="上移一层"
+                title="层级 +1"
+                aria-label="层级加一"
                 @click="moveSelectedObjectLayerUp"
               >
-                上移
+                +
               </button>
               <button
-                class="soft-button compact-button"
+                class="soft-button compact-button layer-symbol-button"
                 :disabled="!selectedObjectCanMoveDown"
                 type="button"
-                title="下移一层"
+                title="层级 -1"
+                aria-label="层级减一"
                 @click="moveSelectedObjectLayerDown"
               >
-                下移
+                -
               </button>
               <button
-                class="soft-button compact-button"
-                :disabled="!selectedObjectCanMoveUp"
+                class="soft-button compact-button layer-symbol-button"
+                :disabled="!selectedObject"
                 type="button"
-                title="移到最上层"
-                @click="moveSelectedObjectToTop"
+                title="应用当前层级到当前关卡所有帧"
+                aria-label="应用当前层级到当前关卡所有帧"
+                @click="applySelectedObjectLayerToAllFrames"
               >
-                置顶
-              </button>
-              <button
-                class="soft-button compact-button"
-                :disabled="!selectedObjectCanMoveDown"
-                type="button"
-                title="移到最下层"
-                @click="moveSelectedObjectToBottom"
-              >
-                置底
+                ⇅
               </button>
               <button
                 class="soft-button compact-button"

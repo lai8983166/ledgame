@@ -13,7 +13,8 @@
     "start": "electron ."
   },
   "dependencies": {
-    "vue": "^3.5.13"
+    "vue": "^3.5.13",
+    "ws": "^8.21.0"
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^5.2.1",

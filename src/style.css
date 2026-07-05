@@ -597,6 +597,45 @@ button:disabled {
   gap: 14px;
 }
 
+.repeat-times-control {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 36px;
+  gap: 8px;
+  align-items: center;
+}
+
+.repeat-times-control input {
+  min-width: 0;
+}
+
+.inline-symbol-button {
+  width: 36px;
+  min-width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  border-radius: 12px;
+  color: #445063;
+  background: #eef1f5;
+  box-shadow:
+    6px 6px 12px rgba(178, 187, 201, 0.36),
+    -6px -6px 12px rgba(255, 255, 255, 0.9);
+  cursor: pointer;
+  font-size: 18px;
+  font-weight: 760;
+  line-height: 1;
+}
+
+.inline-symbol-button:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.inline-symbol-button:active:not(:disabled) {
+  box-shadow:
+    inset 5px 5px 10px rgba(178, 187, 201, 0.42),
+    inset -5px -5px 10px rgba(255, 255, 255, 0.88);
+}
+
 .matrix-status-bar {
   display: flex;
   align-items: center;
@@ -850,6 +889,13 @@ button:disabled {
 
 .object-actions .soft-button {
   padding-inline: 8px;
+}
+
+.object-actions .layer-symbol-button {
+  min-width: 0;
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1;
 }
 
 .object-list {

@@ -11,15 +11,12 @@ const engineState = ref("UNKNOWN");
 const demoType = ref(null);
 const busyAction = ref("");
 const errorMessage = ref("");
-const runtimeSyncError = ref("");
 const frameState = ref(createFrameState());
 const hoverCell = ref(null);
 const gameRuntimeState = ref(null);
 const activeView = ref("demo");
 let removeLedFrameListener = null;
 let removeEngineStateListener = null;
-let gameRuntimeStateTimer = null;
-let gameRuntimeStateInFlight = false;
 
 const frameAge = computed(() => {
   if (!frameState.value.receivedAt) {
@@ -47,9 +44,7 @@ const gameplaySummary = computed(() => {
   }
   return parts.join(" / ");
 });
-const debugErrorMessage = computed(() =>
-  [errorMessage.value, runtimeSyncError.value].filter(Boolean).join(" / "),
-);
+const debugErrorMessage = computed(() => errorMessage.value);
 const runtimeStatusItems = computed(() => {
   const state = gameRuntimeState.value || {};
   const gameplay = state.gameplay || {};
@@ -58,6 +53,8 @@ const runtimeStatusItems = computed(() => {
     { label: "运行", value: state.running ? "运行中" : "未运行" },
     { label: "Game ID", value: formatRuntimeValue(state.gameId) },
     { label: "Game", value: formatRuntimeValue(state.gameName || state.gameType) },
+    { label: "起始关卡", value: formatRuntimeValue(state.startLevelIndex) },
+    { label: "启动方式", value: formatRuntimeValue(state.launchMethod) },
     { label: "阶段", value: formatRuntimeValue(gameplay.phase) },
     { label: "分数", value: formatRuntimeValue(gameplay.score, "0") },
     { label: "生命", value: formatRuntimeValue(gameplay.life, "0") },
@@ -78,7 +75,6 @@ onMounted(async () => {
     if (latestFrame) {
       frameState.value = decodeFrame(latestFrame);
     }
-    startGameRuntimeStateSync();
   }
 
   await refreshState();
@@ -87,7 +83,6 @@ onMounted(async () => {
 onUnmounted(() => {
   removeLedFrameListener?.();
   removeEngineStateListener?.();
-  stopGameRuntimeStateSync();
   hoverCell.value = null;
 });
 
@@ -109,9 +104,6 @@ async function refreshState() {
   if (api?.state) {
     requests.push(runAction("state", () => api.state()));
   }
-  if (isDebugWindow && api?.gameState) {
-    requests.push(refreshGameRuntimeState());
-  }
   await Promise.all(requests);
 }
 
@@ -125,42 +117,6 @@ function applyState(state) {
   }
   if ("gameId" in state || "gameplay" in state || state.gameType || state.gameName) {
     gameRuntimeState.value = state;
-  }
-}
-
-function applyGameRuntimeResult(result) {
-  applyState(result?.data || result);
-  runtimeSyncError.value = "";
-}
-
-function startGameRuntimeStateSync() {
-  if (!api?.gameState || gameRuntimeStateTimer) {
-    return;
-  }
-  refreshGameRuntimeState();
-  gameRuntimeStateTimer = window.setInterval(refreshGameRuntimeState, 1500);
-}
-
-function stopGameRuntimeStateSync() {
-  if (!gameRuntimeStateTimer) {
-    return;
-  }
-  window.clearInterval(gameRuntimeStateTimer);
-  gameRuntimeStateTimer = null;
-}
-
-async function refreshGameRuntimeState() {
-  if (!api?.gameState || gameRuntimeStateInFlight) {
-    return;
-  }
-  gameRuntimeStateInFlight = true;
-  try {
-    const result = await api.gameState();
-    applyGameRuntimeResult(result);
-  } catch (error) {
-    runtimeSyncError.value = `状态同步失败：${error.message || String(error)}`;
-  } finally {
-    gameRuntimeStateInFlight = false;
   }
 }
 

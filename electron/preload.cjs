@@ -5,7 +5,7 @@ contextBridge.exposeInMainWorld('ledGame', {
   openDebugPanel: () => ipcRenderer.invoke('open-debug-panel'),
   startFixed: () => ipcRenderer.invoke('engine:start-fixed'),
   startInput: () => ipcRenderer.invoke('engine:start-input'),
-  startGame: (gameId) => ipcRenderer.invoke('engine:start-game', gameId),
+  startGame: (request) => ipcRenderer.invoke('engine:start-game', request),
   stopGame: () => ipcRenderer.invoke('engine:stop-game'),
   gameState: () => ipcRenderer.invoke('engine:game-state'),
   sendGameInput: (input) => ipcRenderer.invoke('engine:game-input', input),
