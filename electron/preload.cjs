@@ -28,3 +28,12 @@ contextBridge.exposeInMainWorld('ledGame', {
     return () => ipcRenderer.removeListener('engine-state', listener)
   },
 })
+
+contextBridge.exposeInMainWorld('mediaLibrary', {
+  list: () => ipcRenderer.invoke('media:list'),
+  getPreviewUrl: (relativePath) => ipcRenderer.invoke('media:get-preview-url', relativePath),
+})
+
+contextBridge.exposeInMainWorld('spiritLibrary', {
+  list: () => ipcRenderer.invoke('spirit:list'),
+})

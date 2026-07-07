@@ -1,6 +1,9 @@
 const path = require('node:path')
-const net = require('node:net')
-const { app, BrowserWindow, ipcMain } = require('electron')
+const nodeNet = require('node:net')
+const nodeFs = require('node:fs')
+const fs = require('node:fs/promises')
+const { pathToFileURL } = require('node:url')
+const { app, BrowserWindow, ipcMain, protocol, net: electronNet } = require('electron')
 const NodeWebSocket = require('ws')
 
 const isDev = Boolean(process.env.VITE_DEV_SERVER_URL)
@@ -8,6 +11,22 @@ const backendBaseUrl = process.env.LED_BACKEND_URL || 'http://127.0.0.1:8080'
 const framePort = Number(process.env.LED_DEBUG_TCP_PORT || 3002)
 const runtimeStateStreamUrl = process.env.LED_RUNTIME_STATE_URL || defaultRuntimeStateStreamUrl(backendBaseUrl)
 const runtimeStateThrottleMs = Number(process.env.LED_RUNTIME_STATE_THROTTLE_MS || 100)
+const mediaProtocol = 'led-media'
+const mediaRootName = 'media'
+const imageExtensions = new Set(['.apng', '.avif', '.bmp', '.gif', '.jpeg', '.jpg', '.png', '.svg', '.webp'])
+const videoExtensions = new Set(['.m4v', '.mov', '.mp4', '.ogg', '.ogv', '.webm'])
+
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: mediaProtocol,
+    privileges: {
+      standard: true,
+      secure: true,
+      supportFetchAPI: true,
+      stream: true,
+    },
+  },
+])
 
 let mainWindow
 let debugWindow
@@ -95,7 +114,7 @@ function startFrameServer() {
     return
   }
 
-  tcpServer = net.createServer((socket) => {
+  tcpServer = nodeNet.createServer((socket) => {
     let buffer = Buffer.alloc(0)
 
     socket.on('data', (chunk) => {
@@ -348,6 +367,171 @@ function normalizeGameStartRequest(request) {
   }
 }
 
+function getMediaRoot() {
+  return path.resolve(process.env.LED_MEDIA_DIR || getDefaultMediaRoot())
+}
+
+function getDefaultMediaRoot() {
+  const frontendRoot = app.getAppPath()
+  const backendMediaRoot = path.resolve(frontendRoot, '../ledGame-backend', mediaRootName)
+  if (nodeFs.existsSync(backendMediaRoot)) {
+    return backendMediaRoot
+  }
+  return path.join(frontendRoot, mediaRootName)
+}
+
+function toMediaRelativePath(value) {
+  if (typeof value !== 'string') {
+    throw new Error('Media path is required')
+  }
+  const normalized = value.replace(/\\/g, '/').replace(/^\/+/, '')
+  if (!normalized || normalized.includes('\0')) {
+    throw new Error('Media path is required')
+  }
+  return normalized
+}
+
+function resolveMediaPath(relativePath) {
+  const mediaRoot = getMediaRoot()
+  const normalizedRelativePath = toMediaRelativePath(relativePath)
+  const resolvedPath = path.resolve(mediaRoot, normalizedRelativePath)
+  const relativeFromRoot = path.relative(mediaRoot, resolvedPath)
+  if (
+    relativeFromRoot === '' ||
+    relativeFromRoot.startsWith('..') ||
+    path.isAbsolute(relativeFromRoot)
+  ) {
+    throw new Error('Media path is outside the media directory')
+  }
+  return resolvedPath
+}
+
+function toPortableRelativePath(value) {
+  return value.split(path.sep).join('/')
+}
+
+function getMediaKind(fileName) {
+  const extension = path.extname(fileName).toLowerCase()
+  if (imageExtensions.has(extension)) {
+    return 'image'
+  }
+  if (videoExtensions.has(extension)) {
+    return 'video'
+  }
+  return 'file'
+}
+
+function isPreviewableMediaKind(mediaType) {
+  return mediaType === 'image' || mediaType === 'video'
+}
+
+async function readMediaDirectory(directoryPath, relativeBase = '') {
+  const entries = await fs.readdir(directoryPath, { withFileTypes: true })
+  const nodes = []
+
+  for (const entry of entries) {
+    if (entry.name.startsWith('.')) {
+      continue
+    }
+    const childRelativePath = relativeBase
+      ? `${relativeBase}/${entry.name}`
+      : entry.name
+    const childPath = path.join(directoryPath, entry.name)
+
+    if (entry.isDirectory()) {
+      nodes.push({
+        name: entry.name,
+        kind: 'directory',
+        relativePath: childRelativePath,
+        mediaType: 'directory',
+        previewable: false,
+        children: await readMediaDirectory(childPath, childRelativePath),
+      })
+      continue
+    }
+
+    if (entry.isFile()) {
+      const mediaType = getMediaKind(entry.name)
+      nodes.push({
+        name: entry.name,
+        kind: 'file',
+        relativePath: childRelativePath,
+        mediaType,
+        previewable: isPreviewableMediaKind(mediaType),
+        children: [],
+      })
+    }
+  }
+
+  nodes.sort((left, right) => {
+    if (left.kind !== right.kind) {
+      return left.kind === 'directory' ? -1 : 1
+    }
+    return left.name.localeCompare(right.name, undefined, { sensitivity: 'base' })
+  })
+
+  return nodes
+}
+
+async function listMediaLibrary() {
+  const mediaRoot = getMediaRoot()
+  try {
+    const stat = await fs.stat(mediaRoot)
+    if (!stat.isDirectory()) {
+      return {
+        rootName: mediaRootName,
+        exists: false,
+        items: [],
+      }
+    }
+    return {
+      rootName: mediaRootName,
+      exists: true,
+      items: await readMediaDirectory(mediaRoot),
+    }
+  } catch (error) {
+    if (error && error.code === 'ENOENT') {
+      return {
+        rootName: mediaRootName,
+        exists: false,
+        items: [],
+      }
+    }
+    throw new Error(`Unable to read media directory: ${error.message || String(error)}`)
+  }
+}
+
+async function getMediaPreviewUrl(relativePath) {
+  const resolvedPath = resolveMediaPath(relativePath)
+  const stat = await fs.stat(resolvedPath)
+  if (!stat.isFile()) {
+    throw new Error('Media preview target is not a file')
+  }
+  const mediaType = getMediaKind(resolvedPath)
+  if (!isPreviewableMediaKind(mediaType)) {
+    throw new Error('Media file is not previewable')
+  }
+  const portablePath = toPortableRelativePath(path.relative(getMediaRoot(), resolvedPath))
+  const encodedPath = portablePath.split('/').map(encodeURIComponent).join('/')
+  return {
+    url: `${mediaProtocol}://preview/${encodedPath}`,
+    mediaType,
+  }
+}
+
+function registerMediaProtocol() {
+  protocol.handle(mediaProtocol, async (request) => {
+    const requestUrl = new URL(request.url)
+    const relativePath = decodeURIComponent(requestUrl.pathname.replace(/^\/+/, ''))
+    const resolvedPath = resolveMediaPath(relativePath)
+    const stat = await fs.stat(resolvedPath)
+    if (!stat.isFile() || !isPreviewableMediaKind(getMediaKind(resolvedPath))) {
+      return new Response('Media file is not previewable', { status: 404 })
+    }
+    return electronNet.fetch(pathToFileURL(resolvedPath).toString())
+  })
+}
+
 ipcMain.handle('open-debug-panel', () => {
   createDebugWindow()
 })
@@ -400,8 +584,12 @@ ipcMain.handle('game-editor:save', (_event, gameId, document) =>
     body: JSON.stringify(document),
   }),
 )
+ipcMain.handle('spirit:list', () => backendRequest('/spirit/simpleListSpirits'))
+ipcMain.handle('media:list', () => listMediaLibrary())
+ipcMain.handle('media:get-preview-url', (_event, relativePath) => getMediaPreviewUrl(relativePath))
 
 app.whenReady().then(() => {
+  registerMediaProtocol()
   startFrameServer()
   startRuntimeStateStream()
   createWindow()

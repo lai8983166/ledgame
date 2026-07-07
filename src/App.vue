@@ -4,6 +4,7 @@ import DemoView from "./views/DemoView.vue";
 import GameListView from "./views/GameListView.vue";
 import MediaLibraryView from "./views/MediaLibraryView.vue";
 import SimpleGameEditorView from "./views/SimpleGameEditorView.vue";
+import SpiritLibraryView from "./views/SpiritLibraryView.vue";
 
 const api = window.ledGame;
 const isDebugWindow = api?.windowKind === "debug";
@@ -320,6 +321,14 @@ function formatRuntimeValue(value, fallback = "-") {
         >
           媒体库
         </button>
+        <button
+          class="nav-tab"
+          :class="{ active: activeView === 'spirits' }"
+          type="button"
+          @click="activeView = 'spirits'"
+        >
+          精灵库
+        </button>
       </nav>
     </header>
 
@@ -343,6 +352,8 @@ function formatRuntimeValue(value, fallback = "-") {
       @back="backToGameList"
     />
 
-    <MediaLibraryView v-else />
+    <MediaLibraryView v-else-if="activeView === 'media'" />
+
+    <SpiritLibraryView v-else />
   </main>
 </template>

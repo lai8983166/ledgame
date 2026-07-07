@@ -1429,198 +1429,208 @@ function formatRuntimeSummary(value) {
       </main>
 
       <aside class="editor-panel editor-right">
-        <h2>编辑选项</h2>
-        <div class="palette-options">
-          <button
-            v-for="color in colorOptions"
-            :key="color.index"
-            class="palette-option"
-            :class="{ active: selectedColor === color.index }"
-            type="button"
-            @click="selectColor(color.index)"
-          >
-            <span class="palette-swatch" :style="{ backgroundColor: color.value }"></span>
-            <span>{{ color.label }}</span>
-          </button>
+        <div class="side-panel-heading">
+          <h2>对象编辑</h2>
+          <p>{{ selectedObject ? selectedObject.id : "未选中对象" }}</p>
         </div>
-        <div class="editor-meta">
-          <p>当前画笔：Color {{ selectedColor }}</p>
-          <p>矩阵：{{ matrixWidth }} x {{ matrixHeight }}</p>
-          <p>缩放：{{ Math.round(matrixZoom * 100) }}%</p>
-          <p>对象：{{ frameObjects.length }}</p>
-        </div>
-        <div class="object-panel">
-          <div class="object-panel-head">
-            <h2>对象</h2>
-            <p>{{ frameObjects.length }} items</p>
+        <div class="editor-right-main">
+          <div class="object-panel">
+            <div class="object-panel-head">
+              <h2>对象</h2>
+              <p>{{ frameObjects.length }} items</p>
+            </div>
+            <div class="object-actions">
+              <template v-if="anchorEditMode">
+                <button
+                  class="soft-button compact-button"
+                  type="button"
+                  @click="confirmAnchorEdit"
+                >
+                  确认
+                </button>
+                <button
+                  class="soft-button compact-button"
+                  type="button"
+                  @click="stopAnchorEdit"
+                >
+                  取消
+                </button>
+              </template>
+              <template v-else>
+                <button
+                  class="soft-button compact-button"
+                  :disabled="!selectedObject"
+                  type="button"
+                  @click="rotateSelectedObjectCounterClockwise"
+                >
+                  左转90
+                </button>
+                <button
+                  class="soft-button compact-button"
+                  :disabled="!selectedObject"
+                  type="button"
+                  @click="rotateSelectedObjectClockwise"
+                >
+                  右转90
+                </button>
+                <button
+                  class="soft-button compact-button"
+                  :disabled="!selectedObject || !panoramaMode"
+                  type="button"
+                  @click="startAnchorEdit"
+                >
+                  修改基准
+                </button>
+                <button
+                  class="soft-button compact-button layer-symbol-button"
+                  :disabled="!selectedObjectCanMoveUp"
+                  type="button"
+                  title="层级 +1"
+                  aria-label="层级加一"
+                  @click="moveSelectedObjectLayerUp"
+                >
+                  +
+                </button>
+                <button
+                  class="soft-button compact-button layer-symbol-button"
+                  :disabled="!selectedObjectCanMoveDown"
+                  type="button"
+                  title="层级 -1"
+                  aria-label="层级减一"
+                  @click="moveSelectedObjectLayerDown"
+                >
+                  -
+                </button>
+                <button
+                  class="soft-button compact-button layer-symbol-button"
+                  :disabled="!selectedObject"
+                  type="button"
+                  title="应用当前层级到当前关卡所有帧"
+                  aria-label="应用当前层级到当前关卡所有帧"
+                  @click="applySelectedObjectLayerToAllFrames"
+                >
+                  ⇅
+                </button>
+                <button
+                  class="soft-button compact-button"
+                  :disabled="!selectedObject"
+                  type="button"
+                  @click="applyBrushColorToSelectedObject"
+                >
+                  改色
+                </button>
+                <button
+                  class="soft-button compact-button"
+                  :disabled="!selectedObject || activeFrameIndex <= 0"
+                  type="button"
+                  @click="copySelectedObjectToPreviousFrame"
+                >
+                  复制前帧
+                </button>
+                <button
+                  class="soft-button compact-button"
+                  :disabled="!selectedObject || activeFrameIndex >= frames.length - 1"
+                  type="button"
+                  @click="copySelectedObjectToNextFrame"
+                >
+                  复制后帧
+                </button>
+                <button
+                  class="soft-button compact-button"
+                  :disabled="!selectedObject || frames.length <= 1"
+                  type="button"
+                  @click="copySelectedObjectToAllFrames"
+                >
+                  复制全帧
+                </button>
+                <button
+                  class="soft-button compact-button"
+                  :disabled="!selectedObject"
+                  type="button"
+                  @click="deleteSelectedObject"
+                >
+                  删除
+                </button>
+              </template>
+            </div>
+            <div class="object-list">
+              <button
+                v-for="object in frameObjects"
+                :key="object.id"
+                class="object-row"
+                :class="{ active: selectedObjectId === object.id }"
+                type="button"
+                @click="selectObject(object.id)"
+              >
+                <span class="object-color" :style="{ backgroundColor: colorOptions[object.color]?.value }"></span>
+                <span class="object-main">
+                  <strong>{{ object.id }}</strong>
+                  <small>层 {{ object.index + 1 }}/{{ frameObjects.length }} · 基准 {{ object.x }},{{ object.y }} · Color {{ object.color }} · {{ object.occupiedCount }} 格</small>
+                </span>
+              </button>
+            </div>
           </div>
-          <div class="object-actions">
-            <template v-if="anchorEditMode">
+          <div class="editor-side-rail">
+            <div class="editor-side-section">
+              <h2>画笔</h2>
+              <div class="palette-options">
+                <button
+                  v-for="color in colorOptions"
+                  :key="color.index"
+                  class="palette-option"
+                  :class="{ active: selectedColor === color.index }"
+                  type="button"
+                  @click="selectColor(color.index)"
+                >
+                  <span class="palette-swatch" :style="{ backgroundColor: color.value }"></span>
+                  <span>{{ color.label }}</span>
+                </button>
+              </div>
+              <div class="editor-meta">
+                <p>当前画笔：Color {{ selectedColor }}</p>
+                <p>矩阵：{{ matrixWidth }} x {{ matrixHeight }}</p>
+                <p>缩放：{{ Math.round(matrixZoom * 100) }}%</p>
+                <p>对象：{{ frameObjects.length }}</p>
+              </div>
+            </div>
+            <div class="runtime-panel">
               <button
-                class="soft-button compact-button"
+                class="soft-button runtime-start-button"
+                :disabled="Boolean(busyAction) || !document?.id"
                 type="button"
-                @click="confirmAnchorEdit"
+                @click="startGame"
               >
-                确认
+                {{ busyAction === "start" ? "启动中" : "启动游戏" }}
               </button>
               <button
-                class="soft-button compact-button"
+                class="soft-button runtime-start-button"
+                :disabled="Boolean(busyAction)"
                 type="button"
-                @click="stopAnchorEdit"
+                @click="stopGame"
               >
-                取消
-              </button>
-            </template>
-            <template v-else>
-              <button
-                class="soft-button compact-button"
-                :disabled="!selectedObject"
-                type="button"
-                @click="rotateSelectedObjectCounterClockwise"
-              >
-                左转90
+                {{ busyAction === "stop" ? "停止中" : "停止游戏" }}
               </button>
               <button
-                class="soft-button compact-button"
-                :disabled="!selectedObject"
+                class="soft-button runtime-start-button"
+                :disabled="Boolean(busyAction) || !runtimeResult"
                 type="button"
-                @click="rotateSelectedObjectClockwise"
+                @click="openPreview"
               >
-                右转90
+                打开预览
               </button>
-              <button
-                class="soft-button compact-button"
-                :disabled="!selectedObject || !panoramaMode"
-                type="button"
-                @click="startAnchorEdit"
-              >
-                修改基准
-              </button>
-              <button
-                class="soft-button compact-button layer-symbol-button"
-                :disabled="!selectedObjectCanMoveUp"
-                type="button"
-                title="层级 +1"
-                aria-label="层级加一"
-                @click="moveSelectedObjectLayerUp"
-              >
-                +
-              </button>
-              <button
-                class="soft-button compact-button layer-symbol-button"
-                :disabled="!selectedObjectCanMoveDown"
-                type="button"
-                title="层级 -1"
-                aria-label="层级减一"
-                @click="moveSelectedObjectLayerDown"
-              >
-                -
-              </button>
-              <button
-                class="soft-button compact-button layer-symbol-button"
-                :disabled="!selectedObject"
-                type="button"
-                title="应用当前层级到当前关卡所有帧"
-                aria-label="应用当前层级到当前关卡所有帧"
-                @click="applySelectedObjectLayerToAllFrames"
-              >
-                ⇅
-              </button>
-              <button
-                class="soft-button compact-button"
-                :disabled="!selectedObject"
-                type="button"
-                @click="applyBrushColorToSelectedObject"
-              >
-                改色
-              </button>
-              <button
-                class="soft-button compact-button"
-                :disabled="!selectedObject || activeFrameIndex <= 0"
-                type="button"
-                @click="copySelectedObjectToPreviousFrame"
-              >
-                复制前帧
-              </button>
-              <button
-                class="soft-button compact-button"
-                :disabled="!selectedObject || activeFrameIndex >= frames.length - 1"
-                type="button"
-                @click="copySelectedObjectToNextFrame"
-              >
-                复制后帧
-              </button>
-              <button
-                class="soft-button compact-button"
-                :disabled="!selectedObject || frames.length <= 1"
-                type="button"
-                @click="copySelectedObjectToAllFrames"
-              >
-                复制全帧
-              </button>
-              <button
-                class="soft-button compact-button"
-                :disabled="!selectedObject"
-                type="button"
-                @click="deleteSelectedObject"
-              >
-                删除
-              </button>
-            </template>
+              <p v-if="runtimeStatusMessage" class="status-line">{{ runtimeStatusMessage }}</p>
+              <p v-if="previewStatusMessage" class="status-line">{{ previewStatusMessage }}</p>
+              <p v-if="runtimeErrorMessage" class="error-line">{{ runtimeErrorMessage }}</p>
+              <div v-if="runtimeSummary.length" class="runtime-summary">
+                <p v-for="line in runtimeSummary" :key="line">{{ line }}</p>
+              </div>
+            </div>
+            <div v-if="validationErrors.length" class="validation-list">
+              <p v-for="error in validationErrors" :key="`${error.path}-${error.message}`">
+                {{ error.path }}: {{ error.message }}
+              </p>
+            </div>
           </div>
-          <div class="object-list">
-            <button
-              v-for="object in frameObjects"
-              :key="object.id"
-              class="object-row"
-              :class="{ active: selectedObjectId === object.id }"
-              type="button"
-              @click="selectObject(object.id)"
-            >
-              <span class="object-color" :style="{ backgroundColor: colorOptions[object.color]?.value }"></span>
-              <span class="object-main">
-                <strong>{{ object.id }}</strong>
-                <small>层 {{ object.index + 1 }}/{{ frameObjects.length }} · 基准 {{ object.x }},{{ object.y }} · Color {{ object.color }} · {{ object.occupiedCount }} 格</small>
-              </span>
-            </button>
-          </div>
-        </div>
-        <div class="runtime-panel">
-          <button
-            class="soft-button runtime-start-button"
-            :disabled="Boolean(busyAction) || !document?.id"
-            type="button"
-            @click="startGame"
-          >
-            {{ busyAction === "start" ? "启动中" : "启动游戏" }}
-          </button>
-          <button
-            class="soft-button runtime-start-button"
-            :disabled="Boolean(busyAction)"
-            type="button"
-            @click="stopGame"
-          >
-            {{ busyAction === "stop" ? "停止中" : "停止游戏" }}
-          </button>
-          <button
-            class="soft-button runtime-start-button"
-            :disabled="Boolean(busyAction) || !runtimeResult"
-            type="button"
-            @click="openPreview"
-          >
-            打开预览
-          </button>
-          <p v-if="runtimeStatusMessage" class="status-line">{{ runtimeStatusMessage }}</p>
-          <p v-if="previewStatusMessage" class="status-line">{{ previewStatusMessage }}</p>
-          <p v-if="runtimeErrorMessage" class="error-line">{{ runtimeErrorMessage }}</p>
-          <div v-if="runtimeSummary.length" class="runtime-summary">
-            <p v-for="line in runtimeSummary" :key="line">{{ line }}</p>
-          </div>
-        </div>
-        <div v-if="validationErrors.length" class="validation-list">
-          <p v-for="error in validationErrors" :key="`${error.path}-${error.message}`">
-            {{ error.path }}: {{ error.message }}
-          </p>
         </div>
       </aside>
     </div>
