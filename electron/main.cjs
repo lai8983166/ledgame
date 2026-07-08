@@ -1,15 +1,15 @@
 const path = require('node:path')
+const childProcess = require('node:child_process')
 const nodeNet = require('node:net')
 const nodeFs = require('node:fs')
 const fs = require('node:fs/promises')
 const { pathToFileURL } = require('node:url')
-const { app, BrowserWindow, ipcMain, protocol, net: electronNet } = require('electron')
-const NodeWebSocket = require('ws')
+const { app, BrowserWindow, dialog, ipcMain, protocol, net: electronNet, screen } = require('electron')
 
 const isDev = Boolean(process.env.VITE_DEV_SERVER_URL)
-const backendBaseUrl = process.env.LED_BACKEND_URL || 'http://127.0.0.1:8080'
+const shouldUseEmbeddedBackend = !isDev && !process.env.LED_BACKEND_URL
+const preferredBackendPort = Number(process.env.LED_PORTABLE_BACKEND_PORT || 37680)
 const framePort = Number(process.env.LED_DEBUG_TCP_PORT || 3002)
-const runtimeStateStreamUrl = process.env.LED_RUNTIME_STATE_URL || defaultRuntimeStateStreamUrl(backendBaseUrl)
 const runtimeStateThrottleMs = Number(process.env.LED_RUNTIME_STATE_THROTTLE_MS || 100)
 const mediaProtocol = 'led-media'
 const mediaRootName = 'media'
@@ -28,8 +28,22 @@ protocol.registerSchemesAsPrivileged([
   },
 ])
 
+if (process.env.LED_USER_DATA_DIR) {
+  app.setPath('userData', path.resolve(process.env.LED_USER_DATA_DIR))
+}
+
+try {
+  const earlyLogDir = path.join(app.getPath('userData'), 'logs')
+  nodeFs.mkdirSync(earlyLogDir, { recursive: true })
+  nodeFs.appendFileSync(path.join(earlyLogDir, 'startup.log'), `[${new Date().toISOString()}] Electron main loaded\n`, 'utf8')
+} catch (_error) {
+  // Best-effort startup marker only.
+}
+
 let mainWindow
 let debugWindow
+let backendBaseUrl = process.env.LED_BACKEND_URL || 'http://127.0.0.1:8080'
+let runtimeStateStreamUrl = process.env.LED_RUNTIME_STATE_URL || defaultRuntimeStateStreamUrl(backendBaseUrl)
 let latestFrame = null
 let tcpServer = null
 let runtimeStateSocket = null
@@ -37,6 +51,23 @@ let runtimeStateReconnectTimer = null
 let runtimeStateStreamStopped = false
 let pendingRuntimeState = null
 let runtimeStatePublishTimer = null
+let embeddedBackendProcess = null
+let embeddedBackendLogFd = null
+let NodeWebSocket = null
+
+function appendStartupLog(message) {
+  try {
+    const logsDir = path.join(app.getPath('userData'), 'logs')
+    nodeFs.mkdirSync(logsDir, { recursive: true })
+    nodeFs.appendFileSync(
+      path.join(logsDir, 'startup.log'),
+      `[${new Date().toISOString()}] ${message}\n`,
+      'utf8',
+    )
+  } catch (_error) {
+    // Logging must never make startup fail.
+  }
+}
 
 function defaultRuntimeStateStreamUrl(baseUrl) {
   try {
@@ -48,18 +79,71 @@ function defaultRuntimeStateStreamUrl(baseUrl) {
   }
 }
 
+function setBackendBaseUrl(baseUrl) {
+  backendBaseUrl = baseUrl
+  if (!process.env.LED_RUNTIME_STATE_URL) {
+    runtimeStateStreamUrl = defaultRuntimeStateStreamUrl(baseUrl)
+  }
+}
+
+function resolveWindowBounds({ targetWidth, targetHeight, minWidth, minHeight }) {
+  // workArea is in DIPs, which equals the CSS pixels the renderer sees, so the
+  // renderer's clientWidth/clientHeight measurements line up with these numbers.
+  const work = screen.getPrimaryDisplay().workArea
+  const availWidth = Math.max(0, work.width)
+  const availHeight = Math.max(0, work.height)
+
+  const width = Math.max(minWidth, Math.min(targetWidth, availWidth))
+  const height = Math.max(minHeight, Math.min(targetHeight, availHeight))
+  const x = work.x + Math.max(0, Math.floor((availWidth - width) / 2))
+  const y = work.y + Math.max(0, Math.floor((availHeight - height) / 2))
+
+  return {
+    width,
+    height,
+    x,
+    y,
+    minWidth: Math.min(minWidth, availWidth || minWidth),
+    minHeight: Math.min(minHeight, availHeight || minHeight),
+  }
+}
+
 function createWindow() {
+  const bounds = resolveWindowBounds({
+    targetWidth: 1480,
+    targetHeight: 900,
+    minWidth: 1100,
+    minHeight: 720,
+  })
+
   mainWindow = new BrowserWindow({
-    width: 1024,
-    height: 768,
-    minWidth: 800,
-    minHeight: 600,
+    width: bounds.width,
+    height: bounds.height,
+    minWidth: bounds.minWidth,
+    minHeight: bounds.minHeight,
+    x: bounds.x,
+    y: bounds.y,
+    // width/height then describe the page area (what fit-viewport measures),
+    // removing the ~30px Windows frame gap that previously clipped the right edge.
+    useContentSize: true,
+    center: true,
+    // Start hidden, maximize, then show on ready-to-show so the app opens maximized
+    // without a small-then-maximized flicker. The bounds above become the restore size.
+    show: false,
     backgroundColor: '#0f1115',
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
       nodeIntegration: false,
+      // Keep the renderer at 1:1 CSS px so it matches workArea DIPs; prevents
+      // OS display scaling from being read as zoom and re-introducing clipping.
+      zoomFactor: 1.0,
     },
+  })
+  mainWindow.setAutoHideMenuBar(true)
+  mainWindow.maximize()
+  mainWindow.once('ready-to-show', () => {
+    mainWindow.show()
   })
 
   if (isDev) {
@@ -76,19 +160,32 @@ function createDebugWindow() {
     return
   }
 
-  debugWindow = new BrowserWindow({
-    width: 1520,
-    height: 1640,
-    minWidth: 560,
+  const bounds = resolveWindowBounds({
+    targetWidth: 1380,
+    targetHeight: 920,
+    minWidth: 720,
     minHeight: 640,
+  })
+
+  debugWindow = new BrowserWindow({
+    width: bounds.width,
+    height: bounds.height,
+    minWidth: bounds.minWidth,
+    minHeight: bounds.minHeight,
+    x: bounds.x,
+    y: bounds.y,
+    useContentSize: true,
+    center: true,
     title: 'LED Debug Panel',
     backgroundColor: '#0f1115',
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
       nodeIntegration: false,
+      zoomFactor: 1.0,
     },
   })
+  debugWindow.setAutoHideMenuBar(true)
 
   debugWindow.on('closed', () => {
     debugWindow = null
@@ -226,7 +323,7 @@ function connectRuntimeStateStream() {
   if (runtimeStateStreamStopped || !runtimeStateStreamUrl || runtimeStateSocket) {
     return
   }
-  const WebSocketClient = typeof globalThis.WebSocket === 'function' ? globalThis.WebSocket : NodeWebSocket
+  const WebSocketClient = typeof globalThis.WebSocket === 'function' ? globalThis.WebSocket : getNodeWebSocket()
   if (typeof WebSocketClient !== 'function') {
     console.warn('Runtime state stream unavailable: WebSocket is not supported in Electron main')
     return
@@ -253,6 +350,19 @@ function connectRuntimeStateStream() {
       runtimeStateSocket.close()
     }
   })
+}
+
+function getNodeWebSocket() {
+  if (NodeWebSocket) {
+    return NodeWebSocket
+  }
+  try {
+    NodeWebSocket = require('ws')
+    return NodeWebSocket
+  } catch (error) {
+    appendStartupLog(`Runtime state stream unavailable: ${error.message || String(error)}`)
+    return null
+  }
 }
 
 function addRuntimeSocketListener(socket, eventName, listener) {
@@ -343,6 +453,179 @@ async function backendRequest(pathname, options = {}) {
   return data
 }
 
+function getResourcesPath() {
+  return app.isPackaged ? process.resourcesPath : path.resolve(__dirname, '..', 'build-resources')
+}
+
+function getEmbeddedBackendJarPath() {
+  return path.join(getResourcesPath(), 'backend', 'ledGame-backend.jar')
+}
+
+function getEmbeddedJavaPath() {
+  return path.join(getResourcesPath(), 'jre', 'bin', process.platform === 'win32' ? 'java.exe' : 'java')
+}
+
+function getSeedDatabaseRuntimeDir() {
+  return path.join(getResourcesPath(), 'seed-database', 'runtime')
+}
+
+function getUserDatabaseRuntimeDir() {
+  return path.join(app.getPath('userData'), 'database', 'runtime')
+}
+
+function getUserDatabaseBasePath() {
+  return path.join(getUserDatabaseRuntimeDir(), 'ledgame')
+}
+
+function getUserDatabaseFilePath() {
+  return `${getUserDatabaseBasePath()}.mv.db`
+}
+
+function getPackagedMediaRoot() {
+  return path.join(getResourcesPath(), mediaRootName)
+}
+
+async function prepareUserDatabase() {
+  const userDatabaseFile = getUserDatabaseFilePath()
+  await fs.mkdir(getUserDatabaseRuntimeDir(), { recursive: true })
+  if (nodeFs.existsSync(userDatabaseFile)) {
+    return
+  }
+
+  const seedRuntimeDir = getSeedDatabaseRuntimeDir()
+  if (!nodeFs.existsSync(seedRuntimeDir)) {
+    console.warn(`Seed database directory not found: ${seedRuntimeDir}`)
+    return
+  }
+
+  const entries = await fs.readdir(seedRuntimeDir, { withFileTypes: true })
+  for (const entry of entries) {
+    if (!entry.isFile() || !entry.name.endsWith('.mv.db')) {
+      continue
+    }
+    await fs.copyFile(
+      path.join(seedRuntimeDir, entry.name),
+      path.join(getUserDatabaseRuntimeDir(), entry.name),
+    )
+  }
+}
+
+function isPortAvailable(port) {
+  return new Promise((resolve) => {
+    const server = nodeNet.createServer()
+    server.once('error', () => resolve(false))
+    server.once('listening', () => {
+      server.close(() => resolve(true))
+    })
+    server.listen(port, '127.0.0.1')
+  })
+}
+
+async function findAvailablePort(startPort, attempts = 40) {
+  const normalizedStartPort = Number.isFinite(startPort) && startPort > 0 ? startPort : 37680
+  for (let offset = 0; offset < attempts; offset += 1) {
+    const port = normalizedStartPort + offset
+    if (await isPortAvailable(port)) {
+      return port
+    }
+  }
+  throw new Error(`No available backend port found from ${normalizedStartPort} to ${normalizedStartPort + attempts - 1}`)
+}
+
+async function waitForBackend(baseUrl, timeoutMs = 30000) {
+  const startedAt = Date.now()
+  let lastError = null
+  while (Date.now() - startedAt < timeoutMs) {
+    try {
+      const response = await fetch(baseUrl)
+      if (response) {
+        return
+      }
+    } catch (error) {
+      lastError = error
+    }
+    await new Promise((resolve) => setTimeout(resolve, 350))
+  }
+  throw new Error(`Embedded backend did not become ready: ${lastError?.message || 'timeout'}`)
+}
+
+async function startEmbeddedBackend() {
+  if (!shouldUseEmbeddedBackend || embeddedBackendProcess) {
+    appendStartupLog('Embedded backend skipped')
+    return
+  }
+
+  const backendJarPath = getEmbeddedBackendJarPath()
+  const javaPath = getEmbeddedJavaPath()
+  appendStartupLog(`Starting embedded backend with jar=${backendJarPath} java=${javaPath}`)
+  if (!nodeFs.existsSync(backendJarPath)) {
+    throw new Error(`Embedded backend jar not found: ${backendJarPath}`)
+  }
+  if (!nodeFs.existsSync(javaPath)) {
+    throw new Error(`Embedded Java runtime not found: ${javaPath}`)
+  }
+
+  await prepareUserDatabase()
+
+  const backendPort = await findAvailablePort(preferredBackendPort)
+  const selectedBackendBaseUrl = `http://127.0.0.1:${backendPort}`
+  const mediaRoot = getPackagedMediaRoot()
+  setBackendBaseUrl(selectedBackendBaseUrl)
+  appendStartupLog(`Embedded backend selected port ${backendPort}`)
+
+  const logsDir = path.join(app.getPath('userData'), 'logs')
+  await fs.mkdir(logsDir, { recursive: true })
+  embeddedBackendLogFd = nodeFs.openSync(path.join(logsDir, 'backend.log'), 'a')
+
+  embeddedBackendProcess = childProcess.spawn(javaPath, ['-jar', backendJarPath], {
+    cwd: app.getPath('userData'),
+    windowsHide: true,
+    stdio: ['ignore', embeddedBackendLogFd, embeddedBackendLogFd],
+    env: {
+      ...process.env,
+      SERVER_PORT: String(backendPort),
+      SPRING_DATASOURCE_URL: `jdbc:h2:file:${getUserDatabaseBasePath()};MODE=MySQL;DATABASE_TO_LOWER=TRUE`,
+      LED_MEDIA_ROOT: mediaRoot,
+      LED_BRIDGE_ENABLED: process.env.LED_BRIDGE_ENABLED || 'false',
+    },
+  })
+
+  embeddedBackendProcess.once('exit', (code, signal) => {
+    const message = `Embedded backend exited: code=${code ?? 'null'} signal=${signal ?? 'null'}`
+    console.warn(message)
+    appendStartupLog(message)
+    embeddedBackendProcess = null
+    if (embeddedBackendLogFd !== null) {
+      nodeFs.closeSync(embeddedBackendLogFd)
+      embeddedBackendLogFd = null
+    }
+  })
+
+  await waitForBackend(selectedBackendBaseUrl)
+  appendStartupLog('Embedded backend is ready')
+}
+
+function stopEmbeddedBackend() {
+  if (!embeddedBackendProcess) {
+    return
+  }
+  const processToStop = embeddedBackendProcess
+  embeddedBackendProcess = null
+  processToStop.kill()
+  if (embeddedBackendLogFd !== null) {
+    nodeFs.closeSync(embeddedBackendLogFd)
+    embeddedBackendLogFd = null
+  }
+}
+
+function handleStartupFailure(error) {
+  const message = error?.message || String(error)
+  console.error(`Application startup failed: ${message}`)
+  appendStartupLog(`Application startup failed: ${message}`)
+  dialog.showErrorBox('LED Game 启动失败', message)
+  app.quit()
+}
+
 async function engineStateRequest(pathname, options = {}) {
   const result = await backendRequest(pathname, options)
   publishEngineState(result?.data)
@@ -372,6 +655,9 @@ function getMediaRoot() {
 }
 
 function getDefaultMediaRoot() {
+  if (app.isPackaged) {
+    return getPackagedMediaRoot()
+  }
   const frontendRoot = app.getAppPath()
   const backendMediaRoot = path.resolve(frontendRoot, '../ledGame-backend', mediaRootName)
   if (nodeFs.existsSync(backendMediaRoot)) {
@@ -588,18 +874,21 @@ ipcMain.handle('spirit:list', () => backendRequest('/spirit/simpleListSpirits'))
 ipcMain.handle('media:list', () => listMediaLibrary())
 ipcMain.handle('media:get-preview-url', (_event, relativePath) => getMediaPreviewUrl(relativePath))
 
-app.whenReady().then(() => {
-  registerMediaProtocol()
-  startFrameServer()
-  startRuntimeStateStream()
-  createWindow()
+app.whenReady()
+  .then(async () => {
+    registerMediaProtocol()
+    await startEmbeddedBackend()
+    startFrameServer()
+    startRuntimeStateStream()
+    createWindow()
 
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
-      createWindow()
-    }
+    app.on('activate', () => {
+      if (BrowserWindow.getAllWindows().length === 0) {
+        createWindow()
+      }
+    })
   })
-})
+  .catch(handleStartupFailure)
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
@@ -612,4 +901,5 @@ app.on('before-quit', () => {
   if (tcpServer) {
     tcpServer.close()
   }
+  stopEmbeddedBackend()
 })

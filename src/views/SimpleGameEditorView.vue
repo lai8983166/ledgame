@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref, toRaw } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, toRaw, watch } from "vue";
 import SimpleMatrixCanvas from "../components/SimpleMatrixCanvas.vue";
 
 defineEmits(["back"]);
@@ -19,6 +19,7 @@ const activeFrameIndex = ref(0);
 const selectedColor = ref(0);
 const matrixZoom = ref(1);
 const draggingFrameProgress = ref(false);
+const previewFrameIndex = ref(null);
 const selectedObjectId = ref("");
 const panoramaMode = ref(false);
 const selectionMode = ref(false);
@@ -27,25 +28,70 @@ const anchorEditMode = ref(false);
 const anchorCandidate = ref(null);
 const objectIdCounter = ref(0);
 const contextMenu = ref({ visible: false, x: 0, y: 0 });
+const fitViewportRef = ref(null);
+const fitContentRef = ref(null);
+const editorFitScale = ref(1);
+const editorFitBaseWidth = ref(0);
+const editorFitBaseHeight = ref(0);
 let pendingZoomDirection = 0;
 let zoomAnimationFrame = 0;
+let fitResizeObserver = null;
+let fitMeasureFrame = 0;
 
 const PANORAMA_PADDING = 8;
+const MIN_EDITOR_FIT_WIDTH = 1500;
+const MIN_EDITOR_FIT_HEIGHT = 860;
+
+// Matrix auto-fit: the matrix canvas is sized from these container measurements so it
+// fills the .matrix-scroll column instead of using a fixed 18px cell. matrixZoom remains
+// a user multiplier (wheel) on top of the auto-fit base.
+const matrixScrollRef = ref(null);
+const matrixContainerWidth = ref(0);
+const matrixContainerHeight = ref(0);
+let matrixResizeObserver = null;
+const matrixBasePatchVersion = ref(0);
+const matrixBasePatchCells = ref([]);
+let matrixFrameCache = new WeakMap();
+let frameOccupancyCache = new WeakMap();
+let matrixCacheWarmupHandle = 0;
+let matrixCacheWarmupHandleType = "";
+let matrixCacheWarmupQueue = [];
+const matrixCacheRevision = ref(0);
+const MIN_MATRIX_CELL = 8;
+const MAX_MATRIX_CELL = 64;
+const MATRIX_GAP_RATIO = 0.12;
+const MATRIX_SCROLL_PADDING = 18;
+const MATRIX_CACHE_WARMUP_BATCH_SIZE = 2;
 
 const levels = computed(() => document.value?.levels || []);
 const activeLevel = computed(() => levels.value[activeLevelIndex.value] || null);
 const frames = computed(() => activeLevel.value?.frameList || []);
 const activeFrame = computed(() => frames.value[activeFrameIndex.value] || null);
+const displayedFrameIndex = computed(() =>
+  draggingFrameProgress.value && previewFrameIndex.value !== null
+    ? previewFrameIndex.value
+    : activeFrameIndex.value,
+);
+const previewFrame = computed(() => frames.value[displayedFrameIndex.value] || activeFrame.value || null);
 const activeFramePercent = computed(() => {
   if (frames.value.length <= 1) {
     return 0;
   }
-  return (activeFrameIndex.value / (frames.value.length - 1)) * 100;
+  return (displayedFrameIndex.value / (frames.value.length - 1)) * 100;
 });
 const matrixWidth = computed(() => clampDimension(document.value?.siteSizeWidth));
 const matrixHeight = computed(() => clampDimension(document.value?.siteSizeHeight));
-const matrixCellSizeValue = computed(() => Math.round(18 * matrixZoom.value));
-const matrixGapSizeValue = computed(() => Math.max(1, Math.round(2 * matrixZoom.value)));
+const matrixCellSizeValue = computed(() => {
+  // Base is the auto-fit cell (fills the .matrix-scroll column); matrixZoom is a user
+  // multiplier on top. autoFitMatrixCell is defined further down — the forward reference
+  // is fine because computed callbacks evaluate lazily.
+  const base = autoFitMatrixCell.value || 18;
+  const cell = Math.round(base * matrixZoom.value);
+  return Math.min(MAX_MATRIX_CELL, Math.max(MIN_MATRIX_CELL, cell));
+});
+const matrixGapSizeValue = computed(() =>
+  Math.max(1, Math.round(matrixCellSizeValue.value * MATRIX_GAP_RATIO)),
+);
 const matrixRange = computed(() => {
   const padding = panoramaMode.value ? PANORAMA_PADDING : 0;
   return {
@@ -59,7 +105,21 @@ const matrixRows = computed(() => createRange(matrixRange.value.minY, matrixRang
 const matrixColumns = computed(() => createRange(matrixRange.value.minX, matrixRange.value.maxX));
 const matrixRowCount = computed(() => matrixRows.value.length);
 const matrixColumnCount = computed(() => matrixColumns.value.length);
-const mergeSelectionIdSet = computed(() => new Set(mergeSelectionIds.value));
+const autoFitMatrixCell = computed(() => {
+  // Pick the largest square cell that fits the measured .matrix-scroll content area in
+  // BOTH dimensions. total = n*cell + (n-1)*gap, gap≈cell*MATRIX_GAP_RATIO
+  //   => cell*(n + MATRIX_GAP_RATIO*(n-1)) ≤ avail  =>  cell ≤ avail / (n + MATRIX_GAP_RATIO*(n-1))
+  const cols = Math.max(1, matrixColumnCount.value);
+  const rows = Math.max(1, matrixRowCount.value);
+  const availW = Math.max(0, matrixContainerWidth.value - 2 * MATRIX_SCROLL_PADDING);
+  const availH = Math.max(0, matrixContainerHeight.value - 2 * MATRIX_SCROLL_PADDING);
+  if (!availW && !availH) {
+    return 0; // container not measured yet; matrixCellSizeValue falls back to 18px base
+  }
+  const cellByW = availW ? availW / (cols + MATRIX_GAP_RATIO * Math.max(0, cols - 1)) : Infinity;
+  const cellByH = availH ? availH / (rows + MATRIX_GAP_RATIO * Math.max(0, rows - 1)) : Infinity;
+  return Math.floor(Math.min(cellByW, cellByH));
+});
 const colorOptions = computed(() => [
   { index: 0, label: "Color 0", value: normalizeColor(document.value?.color0, "#00ff00") },
   { index: 1, label: "Color 1", value: normalizeColor(document.value?.color1, "#0000ff") },
@@ -67,44 +127,40 @@ const colorOptions = computed(() => [
   { index: 3, label: "Color 3", value: normalizeColor(document.value?.color3, "#ffffff") },
 ]);
 const matrixCells = computed(() => {
-  const cells = [];
-  for (const row of matrixRows.value) {
-    for (const column of matrixColumns.value) {
-      const cell = expandedCellMap.value.get(createPointKey(column, row));
-      const occupants = cell?.occupants || [];
-      const objectId = cell?.object?.id || "";
-      const realCell = isRealCell(column, row);
-      const selected = occupants.some((entry) => entry.object?.id === selectedObjectId.value);
-      const mergeSelected = occupants.some((entry) => mergeSelectionIdSet.value.has(entry.object?.id));
-      const anchorHighlighted = isAnchorHighlighted(column, row, occupants);
-      const colorIndex = clampColorIndex(cell?.object?.color);
-      const color = cell?.object
-        ? colorOptions.value[colorIndex]?.value || "#26313d"
-        : realCell
-          ? "#303b49"
-          : "#101821";
-      const overlapCount = occupants.length;
-      cells.push({
-        key: `${column}:${row}`,
-        x: column,
-        y: row,
-        color,
-        title: createCellTitle(column, row, occupants),
-        overlapCount,
-        classes: {
-          "real-cell": realCell,
-          "virtual-cell": !realCell,
-          "object-cell": Boolean(cell),
-          "overlap-cell": overlapCount > 1,
-          "selected-object-cell": selected,
-          "merge-selected-cell": mergeSelected,
-          "anchor-cell": anchorHighlighted,
-        },
-        memo: `${objectId}:${color}:${realCell ? 1 : 0}:${overlapCount}:${selected ? 1 : 0}:${mergeSelected ? 1 : 0}:${anchorHighlighted ? 1 : 0}`,
-      });
-    }
+  matrixCacheRevision.value;
+  const frame = previewFrame.value;
+  return frame ? getOrCreateMatrixCells(frame) : [];
+});
+const matrixOverlayHighlights = computed(() => {
+  const frame = previewFrame.value;
+  if (!frame) {
+    return [];
   }
-  return cells;
+  const highlights = [];
+  const selected = (frame.matrix || []).find((object) => object.id === selectedObjectId.value);
+  if (selected) {
+    getObjectCells(selected).forEach((cell) => {
+      if (isCellInMatrixRange(cell.x, cell.y)) {
+        highlights.push({ x: cell.x, y: cell.y, type: "selected" });
+      }
+    });
+  }
+  const mergeIds = mergeSelectionIds.value;
+  for (const object of frame.matrix || []) {
+    if (!mergeIds.includes(object.id)) {
+      continue;
+    }
+    getObjectCells(object).forEach((cell) => {
+      if (isCellInMatrixRange(cell.x, cell.y)) {
+        highlights.push({ x: cell.x, y: cell.y, type: "merge" });
+      }
+    });
+  }
+  const anchorHighlight = createAnchorHighlight(frame);
+  if (anchorHighlight && isCellInMatrixRange(anchorHighlight.x, anchorHighlight.y)) {
+    highlights.push(anchorHighlight);
+  }
+  return highlights;
 });
 const runtimeSummary = computed(() => formatRuntimeSummary(runtimeResult.value));
 const frameObjects = computed(() =>
@@ -120,32 +176,112 @@ const selectedObjectCanMoveUp = computed(
   () => selectedObjectIndex.value >= 0 && selectedObjectIndex.value < (activeFrame.value?.matrix || []).length - 1,
 );
 const selectedObjectCanMoveDown = computed(() => selectedObjectIndex.value > 0);
-const occupancyIndex = computed(() => createOccupancyIndex(activeFrame.value?.matrix || []));
-const expandedCellMap = computed(() => {
+const occupancyIndex = computed(() =>
+  activeFrame.value ? getOrCreateFrameOccupancyIndex(activeFrame.value) : new Map(),
+);
+const expandedCellMap = computed(() =>
+  activeFrame.value ? createExpandedCellMap(activeFrame.value) : new Map(),
+);
+
+function createExpandedCellMap(frame) {
+  const occupancy = getOrCreateFrameOccupancyIndex(frame);
   const map = new Map();
-  for (const [key, occupants] of occupancyIndex.value.entries()) {
+  for (const [key, occupants] of occupancy.entries()) {
     const topEntry = getTopOccupancyEntry(occupants);
     if (topEntry) {
       map.set(key, { ...topEntry, occupants });
     }
   }
   return map;
-});
+}
 const panoramaStatusText = computed(
   () =>
     `x ${matrixRange.value.minX}..${matrixRange.value.maxX}, y ${matrixRange.value.minY}..${matrixRange.value.maxY}`,
 );
+const editorFitShellStyle = computed(() => ({
+  width: `${Math.ceil(editorFitBaseWidth.value * editorFitScale.value)}px`,
+  height: `${Math.ceil(editorFitBaseHeight.value * editorFitScale.value)}px`,
+}));
+const editorFitContentStyle = computed(() => ({
+  width: `${editorFitBaseWidth.value || MIN_EDITOR_FIT_WIDTH}px`,
+  height: `${editorFitBaseHeight.value || MIN_EDITOR_FIT_HEIGHT}px`,
+  transform: `scale(${editorFitScale.value})`,
+}));
+
+watch(
+  [document, matrixWidth, matrixHeight],
+  () => {
+    // These change the editor's natural size but not the pinned content box,
+    // so the ResizeObserver can't catch them; re-fit after the DOM update.
+    // Do not include matrixZoom, panoramaMode, activeLevelIndex, or
+    // activeFrameIndex here: those are inner editor operations. Re-fitting
+    // the whole editor from inner scrollWidth makes the centered fit shell
+    // drift horizontally while the user zooms, enters panorama mode, or drags
+    // the frame sequence.
+    scheduleEditorFitMeasurement();
+    scheduleEditorFitMeasurementAfterFrames(1);
+    scheduleMatrixCacheWarmup();
+  },
+  { flush: "post" },
+);
+
+watch(
+  [matrixRange, colorOptions],
+  () => {
+    scheduleMatrixCacheWarmup();
+  },
+  { flush: "post" },
+);
+
+watch(
+  document,
+  () => {
+    // .matrix-scroll is behind v-if="document", so it only exists after the editor data
+    // loads. Measure it once and start observing once it appears.
+    nextTick(() => {
+      measureMatrixContainer();
+      if (matrixScrollRef.value && matrixResizeObserver) {
+        matrixResizeObserver.observe(matrixScrollRef.value);
+      }
+    });
+  },
+  { flush: "post" },
+);
 
 onMounted(() => {
+  applyInitialEditorFit();
+  setupEditorFitMeasurement();
+  setupMatrixContainerObserver();
   loadEditor();
   window.addEventListener("keydown", handleGlobalKeydown);
   window.addEventListener("click", closeContextMenu);
+  window.addEventListener("resize", scheduleEditorFitMeasurement);
+
+  // Font loads (system fallback in packaged builds) can shift layout metrics
+  // after the first measure; re-fit once fonts settle, then a couple of frames
+  // later for the cascade. (window.document, not the local `document` ref.)
+  const fonts = window.document?.fonts;
+  if (fonts && typeof fonts.ready?.then === "function") {
+    fonts.ready
+      .then(() => {
+        scheduleEditorFitMeasurement();
+        scheduleEditorFitMeasurementAfterFrames(2);
+      })
+      .catch(() => {});
+  }
 });
 
 onBeforeUnmount(() => {
   window.removeEventListener("keydown", handleGlobalKeydown);
   window.removeEventListener("click", closeContextMenu);
+  window.removeEventListener("resize", scheduleEditorFitMeasurement);
+  fitResizeObserver?.disconnect();
+  fitResizeObserver = null;
+  matrixResizeObserver?.disconnect();
+  matrixResizeObserver = null;
+  cancelEditorFitMeasurement();
   cancelZoomFrame();
+  cancelMatrixCacheWarmup();
 });
 
 async function loadEditor() {
@@ -157,6 +293,7 @@ async function loadEditor() {
     }
     const detail = await api.getGameEditor(gameId);
     document.value = ensureEditableShape(detail?.data);
+    resetMatrixFrameCache();
     activeLevelIndex.value = 0;
     activeFrameIndex.value = 0;
     selectedColor.value = 0;
@@ -169,7 +306,127 @@ async function loadEditor() {
     runtimeResult.value = null;
     previewStatusMessage.value = "";
     validationErrors.value = [];
+    scheduleMatrixCacheWarmup(0);
+    scheduleEditorFitMeasurement();
+    nextTick(() => {
+      // Let the v-if="document" three-column grid lay out before re-measuring;
+      // the ResizeObserver can't catch this growth (content box is pinned).
+      scheduleEditorFitMeasurement();
+      scheduleEditorFitMeasurementAfterFrames(3);
+    });
   });
+}
+
+function setupEditorFitMeasurement() {
+  if (typeof ResizeObserver === "function") {
+    fitResizeObserver = new ResizeObserver(scheduleEditorFitMeasurement);
+    nextTick(() => {
+      // Only observe the viewport: its border-box changes when the window
+      // resizes. The content element is pinned by inline width/height, so
+      // observing it never fires on inner growth (the old bug); inner size
+      // changes are covered by the watchers instead.
+      if (fitViewportRef.value) {
+        fitResizeObserver.observe(fitViewportRef.value);
+      }
+    });
+  }
+  scheduleEditorFitMeasurement();
+}
+
+function scheduleEditorFitMeasurement() {
+  if (fitMeasureFrame) {
+    return;
+  }
+  fitMeasureFrame = window.requestAnimationFrame(() => {
+    fitMeasureFrame = 0;
+    measureEditorFit();
+  });
+}
+
+function scheduleEditorFitMeasurementAfterFrames(frames = 1) {
+  let remaining = Math.max(1, frames);
+  const tick = () => {
+    remaining -= 1;
+    scheduleEditorFitMeasurement();
+    if (remaining > 0) {
+      window.requestAnimationFrame(tick);
+    }
+  };
+  window.requestAnimationFrame(tick);
+}
+
+function measureEditorFit() {
+  const viewport = fitViewportRef.value;
+  const content = fitContentRef.value;
+  if (!viewport || !content) {
+    // Still mounting / swapping views; retry on the next frame instead of
+    // leaving editorFitScale stuck at its initial value of 1.
+    scheduleEditorFitMeasurement();
+    return;
+  }
+  const viewportWidth = Math.floor(viewport.clientWidth);
+  const viewportHeight = Math.floor(viewport.clientHeight);
+  if (!viewportWidth || !viewportHeight) {
+    scheduleEditorFitMeasurement();
+    return;
+  }
+  const baseWidth = Math.max(viewportWidth, content.scrollWidth, MIN_EDITOR_FIT_WIDTH);
+  const baseHeight = Math.max(viewportHeight, content.scrollHeight, MIN_EDITOR_FIT_HEIGHT);
+  editorFitBaseWidth.value = baseWidth;
+  editorFitBaseHeight.value = baseHeight;
+  editorFitScale.value = Number(Math.min(viewportWidth / baseWidth, viewportHeight / baseHeight, 1).toFixed(4));
+}
+
+function applyInitialEditorFit() {
+  // Synchronous pre-paint fit from window dimensions so the very first frame
+  // is already scaled instead of 1500x860 at scale 1 (which gets clipped by
+  // the viewport's overflow:hidden). Seed baseWidth/Height with the design
+  // size too, so the fit-shell sizes correctly and centers the content
+  // (leaving them at 0 would collapse the shell to 0x0 and mis-anchor it).
+  // measureEditorFit() will refine these from the real DOM on the next frame.
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  if (!vw || !vh) {
+    return false;
+  }
+  const approxViewportWidth = Math.max(0, vw - 84);
+  const approxViewportHeight = Math.max(0, vh - 120);
+  editorFitBaseWidth.value = MIN_EDITOR_FIT_WIDTH;
+  editorFitBaseHeight.value = MIN_EDITOR_FIT_HEIGHT;
+  editorFitScale.value = Number(
+    Math.min(
+      approxViewportWidth / MIN_EDITOR_FIT_WIDTH,
+      approxViewportHeight / MIN_EDITOR_FIT_HEIGHT,
+      1,
+    ).toFixed(4),
+  );
+  return true;
+}
+
+function cancelEditorFitMeasurement() {
+  if (!fitMeasureFrame) {
+    return;
+  }
+  window.cancelAnimationFrame(fitMeasureFrame);
+  fitMeasureFrame = 0;
+}
+
+function measureMatrixContainer() {
+  const el = matrixScrollRef.value;
+  if (!el) {
+    return;
+  }
+  // clientWidth/Height are layout pixels, unaffected by the workspace's transform:scale,
+  // so this reports the real ~650px column / 1fr-row height the matrix should fill.
+  matrixContainerWidth.value = el.clientWidth;
+  matrixContainerHeight.value = el.clientHeight;
+}
+
+function setupMatrixContainerObserver() {
+  if (typeof ResizeObserver !== "function") {
+    return;
+  }
+  matrixResizeObserver = new ResizeObserver(measureMatrixContainer);
 }
 
 async function validateEditor() {
@@ -282,45 +539,260 @@ async function runEditorAction(name, action) {
   }
 }
 
+function getCachedMatrixCells(frame) {
+  const cacheKey = createMatrixFrameCacheKey(frame);
+  const cached = matrixFrameCache.get(frame);
+  return cached?.key === cacheKey ? cached.cells : null;
+}
+
+function getOrCreateMatrixCells(frame) {
+  const cached = getCachedMatrixCells(frame);
+  if (cached) {
+    return cached;
+  }
+  const cells = buildMatrixCellsForFrame(frame);
+  setCachedMatrixCells(frame, cells);
+  return cells;
+}
+
+function getOrCreateFrameOccupancyIndex(frame) {
+  const cacheKey = getMatrixFrameVersion(frame);
+  const cached = frameOccupancyCache.get(frame);
+  if (cached?.key === cacheKey) {
+    return cached.index;
+  }
+  const index = createOccupancyIndex(frame.matrix || []);
+  frameOccupancyCache.set(frame, {
+    key: cacheKey,
+    index,
+  });
+  return index;
+}
+
+function buildMatrixCellsForFrame(frame) {
+  const cells = [];
+  const expandedMap = createExpandedCellMap(frame);
+  for (const row of matrixRows.value) {
+    for (const column of matrixColumns.value) {
+      const cell = expandedMap.get(createPointKey(column, row));
+      const occupants = cell?.occupants || [];
+      const objectId = cell?.object?.id || "";
+      const realCell = isRealCell(column, row);
+      const colorIndex = clampColorIndex(cell?.object?.color);
+      const color = cell?.object
+        ? colorOptions.value[colorIndex]?.value || "#26313d"
+        : realCell
+          ? "#303b49"
+          : "#101821";
+      const overlapCount = occupants.length;
+      cells.push({
+        key: `${column}:${row}`,
+        x: column,
+        y: row,
+        color,
+        title: createCellTitle(column, row, occupants),
+        overlapCount,
+        classes: {
+          "real-cell": realCell,
+          "virtual-cell": !realCell,
+          "object-cell": Boolean(cell),
+          "overlap-cell": overlapCount > 1,
+        },
+        memo: `${objectId}:${color}:${realCell ? 1 : 0}:${overlapCount}`,
+      });
+    }
+  }
+  return cells;
+}
+
+function setCachedMatrixCells(frame, cells) {
+  matrixFrameCache.set(frame, {
+    key: createMatrixFrameCacheKey(frame),
+    cells,
+  });
+}
+
+function createMatrixFrameCacheKey(frame) {
+  const range = matrixRange.value;
+  return [
+    getMatrixFrameVersion(frame),
+    range.minX,
+    range.maxX,
+    range.minY,
+    range.maxY,
+    matrixWidth.value,
+    matrixHeight.value,
+    colorOptions.value.map((color) => color.value).join("|"),
+  ].join(";");
+}
+
+function invalidateMatrixFrame(frame = activeFrame.value) {
+  if (!frame) {
+    return;
+  }
+  setMatrixFrameVersion(frame, getMatrixFrameVersion(frame) + 1);
+  matrixFrameCache.delete(frame);
+  frameOccupancyCache.delete(frame);
+  matrixCacheRevision.value += 1;
+  scheduleMatrixCacheWarmup();
+}
+
+function resetMatrixFrameCache() {
+  matrixFrameCache = new WeakMap();
+  frameOccupancyCache = new WeakMap();
+  matrixCacheRevision.value += 1;
+  scheduleMatrixCacheWarmup();
+}
+
+function scheduleMatrixCacheWarmup(centerIndex = displayedFrameIndex.value) {
+  matrixCacheWarmupQueue = createMatrixCacheWarmupQueue(centerIndex);
+  if (matrixCacheWarmupHandle || !matrixCacheWarmupQueue.length) {
+    return;
+  }
+  requestMatrixCacheWarmup();
+}
+
+function createMatrixCacheWarmupQueue(centerIndex) {
+  const frameList = frames.value;
+  if (!frameList.length) {
+    return [];
+  }
+  const boundedCenter = Math.min(frameList.length - 1, Math.max(0, toInteger(centerIndex, activeFrameIndex.value)));
+  const ordered = [frameList[boundedCenter]];
+  for (let distance = 1; ordered.length < frameList.length; distance += 1) {
+    const nextIndex = boundedCenter + distance;
+    const previousIndex = boundedCenter - distance;
+    if (nextIndex < frameList.length) {
+      ordered.push(frameList[nextIndex]);
+    }
+    if (previousIndex >= 0) {
+      ordered.push(frameList[previousIndex]);
+    }
+  }
+  return ordered.filter(Boolean);
+}
+
+function requestMatrixCacheWarmup() {
+  if (typeof window.requestIdleCallback === "function") {
+    matrixCacheWarmupHandleType = "idle";
+    matrixCacheWarmupHandle = window.requestIdleCallback(runMatrixCacheWarmup, { timeout: 350 });
+    return;
+  }
+  matrixCacheWarmupHandleType = "frame";
+  matrixCacheWarmupHandle = window.requestAnimationFrame(() => {
+    runMatrixCacheWarmup({
+      didTimeout: true,
+      timeRemaining: () => 4,
+    });
+  });
+}
+
+function runMatrixCacheWarmup(deadline) {
+  matrixCacheWarmupHandle = 0;
+  matrixCacheWarmupHandleType = "";
+  let warmedCount = 0;
+  while (matrixCacheWarmupQueue.length) {
+    const hasTime =
+      deadline?.didTimeout ||
+      typeof deadline?.timeRemaining !== "function" ||
+      deadline.timeRemaining() > 2 ||
+      warmedCount === 0;
+    if (!hasTime || warmedCount >= MATRIX_CACHE_WARMUP_BATCH_SIZE) {
+      break;
+    }
+    const frame = matrixCacheWarmupQueue.shift();
+    if (!frame || getCachedMatrixCells(frame)) {
+      continue;
+    }
+    getOrCreateMatrixCells(frame);
+    warmedCount += 1;
+  }
+  if (matrixCacheWarmupQueue.length) {
+    requestMatrixCacheWarmup();
+  }
+}
+
+function cancelMatrixCacheWarmup() {
+  if (!matrixCacheWarmupHandle) {
+    return;
+  }
+  if (matrixCacheWarmupHandleType === "idle" && typeof window.cancelIdleCallback === "function") {
+    window.cancelIdleCallback(matrixCacheWarmupHandle);
+  } else {
+    window.cancelAnimationFrame(matrixCacheWarmupHandle);
+  }
+  matrixCacheWarmupHandle = 0;
+  matrixCacheWarmupHandleType = "";
+  matrixCacheWarmupQueue = [];
+}
+
+function getMatrixFrameVersion(frame) {
+  return Number(frame?.__matrixVersion) || 0;
+}
+
+function setMatrixFrameVersion(frame, version) {
+  Object.defineProperty(frame, "__matrixVersion", {
+    value: version,
+    writable: true,
+    configurable: true,
+    enumerable: false,
+  });
+}
+
 function selectLevel(index) {
   activeLevelIndex.value = index;
   activeFrameIndex.value = 0;
   ensureActiveFrame();
   syncSelectedObject();
+  scheduleMatrixCacheWarmup(0);
 }
 
 function selectFrame(index) {
+  previewFrameIndex.value = null;
+  draggingFrameProgress.value = false;
   activeFrameIndex.value = index;
   ensureActiveFrame();
   syncSelectedObject();
+  scheduleMatrixCacheWarmup(index);
 }
 
-function selectFrameFromPointer(event) {
+function getFrameIndexFromPointer(event) {
   if (!frames.value.length) {
-    return;
+    return activeFrameIndex.value;
   }
   const rect = event.currentTarget.getBoundingClientRect();
   const ratio = Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width));
-  const nextIndex = Math.round(ratio * (frames.value.length - 1));
-  selectFrame(nextIndex);
+  return Math.round(ratio * (frames.value.length - 1));
+}
+
+function previewFrameFromPointer(event) {
+  previewFrameIndex.value = getFrameIndexFromPointer(event);
 }
 
 function startFrameDrag(event) {
   draggingFrameProgress.value = true;
   event.currentTarget.setPointerCapture?.(event.pointerId);
-  selectFrameFromPointer(event);
+  previewFrameFromPointer(event);
 }
 
 function dragFrameProgress(event) {
   if (!draggingFrameProgress.value) {
     return;
   }
-  selectFrameFromPointer(event);
+  previewFrameFromPointer(event);
 }
 
 function stopFrameDrag(event) {
+  if (!draggingFrameProgress.value) {
+    return;
+  }
+  const nextIndex = previewFrameIndex.value;
   draggingFrameProgress.value = false;
+  previewFrameIndex.value = null;
   event.currentTarget.releasePointerCapture?.(event.pointerId);
+  if (event.type !== "pointercancel" && Number.isInteger(nextIndex)) {
+    selectFrame(nextIndex);
+  }
 }
 
 function addLevel() {
@@ -333,6 +805,7 @@ function addLevel() {
   activeLevelIndex.value = nextIndex;
   activeFrameIndex.value = 0;
   syncSelectedObject();
+  scheduleMatrixCacheWarmup(0);
 }
 
 function addFrame() {
@@ -342,8 +815,10 @@ function addFrame() {
   }
   level.frameList ||= [];
   level.frameList.push(createBlankFrame());
+  invalidateMatrixFrame(level.frameList[level.frameList.length - 1]);
   activeFrameIndex.value = level.frameList.length - 1;
   syncSelectedObject();
+  scheduleMatrixCacheWarmup(activeFrameIndex.value);
 }
 
 function deleteCurrentFrame() {
@@ -352,11 +827,13 @@ function deleteCurrentFrame() {
     return;
   }
   level.frameList.splice(activeFrameIndex.value, 1);
+  resetMatrixFrameCache();
   if (!level.frameList.length) {
     level.frameList.push(createBlankFrame());
   }
   activeFrameIndex.value = Math.min(activeFrameIndex.value, level.frameList.length - 1);
   syncSelectedObject();
+  scheduleMatrixCacheWarmup(activeFrameIndex.value);
 }
 
 function deleteAllFrames() {
@@ -365,8 +842,10 @@ function deleteAllFrames() {
     return;
   }
   level.frameList = [createBlankFrame()];
+  resetMatrixFrameCache();
   activeFrameIndex.value = 0;
   syncSelectedObject();
+  scheduleMatrixCacheWarmup(0);
 }
 
 function applyCurrentRepeatTimesToAllFrames() {
@@ -406,7 +885,9 @@ function handleCellClick(x, y) {
   }
   const object = createMatrixObject(x, y, selectedColor.value, frame);
   frame.matrix.push(object);
+  invalidateMatrixFrame(frame);
   selectedObjectId.value = object.id;
+  queueMatrixBasePatch(getObjectCells(object));
   statusMessage.value = isRealCell(x, y) ? "已创建单格对象" : "已创建虚拟单格对象";
 }
 
@@ -430,8 +911,27 @@ function handleCellRangeCreate(payload) {
     points: cells.map((cell) => [cell.x - anchorX, cell.y - anchorY]),
   };
   frame.matrix.push(object);
+  invalidateMatrixFrame(frame);
   selectedObjectId.value = object.id;
+  queueMatrixBasePatch(getObjectCells(object));
   statusMessage.value = hasOverlap ? "已创建重叠多格对象" : "已创建多格对象";
+}
+
+function queueMatrixBasePatch(cells) {
+  matrixBasePatchCells.value = expandPatchCells(cells);
+  matrixBasePatchVersion.value += 1;
+}
+
+function expandPatchCells(cells) {
+  const expanded = [];
+  for (const cell of dedupeCells(cells)) {
+    for (let dy = -1; dy <= 1; dy += 1) {
+      for (let dx = -1; dx <= 1; dx += 1) {
+        expanded.push({ x: cell.x + dx, y: cell.y + dy });
+      }
+    }
+  }
+  return dedupeCells(expanded);
 }
 
 function zoomMatrix(event) {
@@ -461,6 +961,7 @@ function applyBrushColorToSelectedObject() {
     return;
   }
   selectedObject.value.color = selectedColor.value;
+  invalidateMatrixFrame();
 }
 
 function deleteSelectedObject() {
@@ -470,6 +971,7 @@ function deleteSelectedObject() {
     return;
   }
   frame.matrix.splice(index, 1);
+  invalidateMatrixFrame(frame);
   selectedObjectId.value = "";
   stopSelectionMode();
   stopAnchorEdit();
@@ -495,6 +997,7 @@ function reorderSelectedObject(targetIndex) {
   }
   const [object] = frame.matrix.splice(currentIndex, 1);
   frame.matrix.splice(boundedIndex, 0, object);
+  invalidateMatrixFrame(frame);
   statusMessage.value = "对象层级已调整";
 }
 
@@ -519,6 +1022,7 @@ function applySelectedObjectLayerToAllFrames() {
     const [object] = frame.matrix.splice(currentIndex, 1);
     const boundedIndex = Math.min(targetIndex, frame.matrix.length);
     frame.matrix.splice(boundedIndex, 0, object);
+    invalidateMatrixFrame(frame);
     appliedCount++;
   }
 
@@ -543,6 +1047,7 @@ function copySelectedObjectToAllFrames() {
       return;
     }
     upsertObjectInFrame(selectedObject.value, frame);
+    invalidateMatrixFrame(frame);
     copied += 1;
   });
   statusMessage.value = copied ? `已更新 ${copied} 帧` : "没有可复制的目标帧";
@@ -553,6 +1058,7 @@ function copySelectedObjectToFrame(frameIndex) {
     return;
   }
   upsertObjectInFrame(selectedObject.value, frames.value[frameIndex]);
+  invalidateMatrixFrame(frames.value[frameIndex]);
   statusMessage.value = `已更新第 ${frameIndex + 1} 帧`;
 }
 
@@ -589,6 +1095,7 @@ function copyCurrentFrameToAllFrames() {
       return;
     }
     replaceFrameObjects(sourceFrame, frame);
+    invalidateMatrixFrame(frame);
     copied += 1;
   });
   statusMessage.value = copied ? `当前帧已复制到 ${copied} 帧` : "没有可复制的目标帧";
@@ -599,6 +1106,7 @@ function copyCurrentFrameToFrame(frameIndex) {
     return;
   }
   replaceFrameObjects(ensureActiveFrame(), frames.value[frameIndex]);
+  invalidateMatrixFrame(frames.value[frameIndex]);
   statusMessage.value = `当前帧已复制到第 ${frameIndex + 1} 帧`;
 }
 
@@ -650,6 +1158,7 @@ function confirmAnchorEdit() {
   selectedObject.value.points = prioritizeAnchorPoint(
     cells.map((cell) => [cell.x - nextX, cell.y - nextY]),
   );
+  invalidateMatrixFrame();
   stopAnchorEdit();
 }
 
@@ -674,6 +1183,7 @@ function rotateSelectedObject(direction) {
     getObjectPoints(selectedObject.value),
     direction,
   );
+  invalidateMatrixFrame();
 }
 
 function moveSelectedObject(deltaX, deltaY) {
@@ -685,6 +1195,7 @@ function moveSelectedObject(deltaX, deltaY) {
   selectedObject.value.x = Number(selectedObject.value.x || 0) + deltaX;
   selectedObject.value.y = Number(selectedObject.value.y || 0) + deltaY;
   wrapSelectedObjectInPanorama();
+  invalidateMatrixFrame();
   if (anchorCandidate.value?.objectId === selectedObject.value.id) {
     anchorCandidate.value = {
       ...anchorCandidate.value,
@@ -763,6 +1274,7 @@ function mergeSelectedObjects() {
   const removeIds = new Set(mergeableObjects.map((object) => object.id));
   frame.matrix = frame.matrix.filter((object) => !removeIds.has(object.id));
   frame.matrix.push(nextObject);
+  invalidateMatrixFrame(frame);
   selectedObjectId.value = nextObject.id;
   stopSelectionMode();
   statusMessage.value = "合并完成";
@@ -801,6 +1313,7 @@ function ensureEditableShape(value) {
       frame.repeatTimes ||= 1;
       frame.matrix ||= [];
       frame.matrix = frame.matrix.map((object) => normalizeMatrixObject(object, frame, frameIndex));
+      setMatrixFrameVersion(frame, getMatrixFrameVersion(frame));
     });
   });
   return next;
@@ -841,6 +1354,7 @@ function createEditorPayload() {
           color: clampColorIndex(object.color),
           points: getObjectPoints(object),
         }));
+      delete frame.__matrixVersion;
     });
   });
   return payload;
@@ -1007,22 +1521,31 @@ function isObjectInsideRealMatrix(object) {
   return getObjectCells(object).every((cell) => isRealCell(cell.x, cell.y));
 }
 
-function isAnchorHighlighted(x, y, occupants) {
-  const selectedEntry = occupants.find((entry) => entry.object?.id === selectedObjectId.value);
-  if (anchorEditMode.value && selectedEntry) {
-    const anchor = anchorCandidate.value || selectedEntry.object;
-    return x === toInteger(anchor.x, 0) && y === toInteger(anchor.y, 0);
+function isCellInMatrixRange(x, y) {
+  const range = matrixRange.value;
+  return x >= range.minX && x <= range.maxX && y >= range.minY && y <= range.maxY;
+}
+
+function createAnchorHighlight(frame) {
+  const selected = (frame.matrix || []).find((object) => object.id === selectedObjectId.value);
+  if (anchorEditMode.value && selected) {
+    const anchor = anchorCandidate.value || selected;
+    return {
+      x: toInteger(anchor.x, 0),
+      y: toInteger(anchor.y, 0),
+      type: "anchor",
+    };
   }
   const mergeAnchorId = mergeSelectionIds.value[0];
   if (!mergeAnchorId) {
-    return false;
+    return null;
   }
-  const anchorObject = occupants.find((entry) => entry.object?.id === mergeAnchorId)?.object;
+  const anchorObject = (frame.matrix || []).find((object) => object.id === mergeAnchorId);
   if (!anchorObject) {
-    return false;
+    return null;
   }
   const anchorCell = getObjectCells(anchorObject)[0];
-  return x === anchorCell?.x && y === anchorCell?.y;
+  return anchorCell ? { x: anchorCell.x, y: anchorCell.y, type: "anchor" } : null;
 }
 
 function prioritizeAnchorPoint(points) {
@@ -1154,30 +1677,104 @@ function formatRuntimeSummary(value) {
 </script>
 
 <template>
-  <section class="workspace simple-editor-workspace">
+  <div ref="fitViewportRef" class="simple-editor-fit-viewport">
+    <div class="simple-editor-fit-shell" :style="editorFitShellStyle">
+      <section ref="fitContentRef" class="workspace simple-editor-workspace" :style="editorFitContentStyle">
     <div class="editor-topbar">
-      <button class="soft-button" type="button" @click="$emit('back')">返回列表</button>
-      <div>
-        <h1>simple 编辑器</h1>
-        <p>{{ document?.id ? `ID ${document.id}` : "Loading simple-demo" }}</p>
-      </div>
-      <div class="editor-actions">
-        <button
-          class="soft-button"
-          :disabled="Boolean(busyAction) || !document"
-          type="button"
-          @click="validateEditor"
-        >
-          校验
-        </button>
-        <button
-          class="soft-button"
-          :disabled="Boolean(busyAction) || !document"
-          type="button"
-          @click="saveEditor"
-        >
-          保存
-        </button>
+      <button class="soft-button editor-back-button" type="button" @click="$emit('back')">返回列表</button>
+      <div v-if="document" class="sequence-block frame-sequence-header">
+        <div class="sequence-head">
+          <h2>帧</h2>
+          <p>{{ frames.length }} frames</p>
+        </div>
+        <div class="frame-progress-row">
+          <div class="frame-progress-shell">
+            <div
+              class="frame-progress-track"
+              @pointerdown="startFrameDrag"
+              @pointermove="dragFrameProgress"
+              @pointerup="stopFrameDrag"
+              @pointercancel="stopFrameDrag"
+              @lostpointercapture="draggingFrameProgress = false"
+            >
+              <div
+                class="frame-progress-fill"
+                :style="{ width: `${activeFramePercent}%` }"
+              ></div>
+              <div
+                class="frame-progress-marker"
+                :style="{ left: `${activeFramePercent}%` }"
+              ></div>
+            </div>
+            <div class="frame-tick-row">
+              <button
+                v-for="(frame, index) in frames"
+                :key="`frame-${index}`"
+                class="frame-tick"
+                :class="{ active: displayedFrameIndex === index }"
+                type="button"
+                @click="selectFrame(index)"
+              >
+                <span class="frame-tick-dot"></span>
+                <span class="frame-tick-label">{{ index + 1 }}</span>
+              </button>
+            </div>
+          </div>
+          <div class="frame-icon-actions">
+            <button class="icon-add-button" type="button" aria-label="添加帧" data-tip="添加帧" @click="addFrame">
+              +
+            </button>
+            <button
+              class="icon-add-button"
+              type="button"
+              aria-label="复制当前帧到前一帧"
+              data-tip="复制当前帧到前一帧"
+              :disabled="activeFrameIndex <= 0"
+              @click="copyCurrentFrameToPreviousFrame"
+            >
+              P
+            </button>
+            <button
+              class="icon-add-button"
+              type="button"
+              aria-label="复制当前帧到后一帧"
+              data-tip="复制当前帧到后一帧"
+              :disabled="activeFrameIndex >= frames.length - 1"
+              @click="copyCurrentFrameToNextFrame"
+            >
+              N
+            </button>
+            <button
+              class="icon-add-button"
+              type="button"
+              aria-label="复制当前帧到所有帧"
+              data-tip="复制当前帧到所有帧"
+              :disabled="frames.length <= 1"
+              @click="copyCurrentFrameToAllFrames"
+            >
+              =
+            </button>
+            <button
+              class="icon-add-button icon-danger-button"
+              type="button"
+              aria-label="删除当前帧"
+              data-tip="删除当前帧"
+              :disabled="frames.length <= 1"
+              @click="deleteCurrentFrame"
+            >
+              -
+            </button>
+            <button
+              class="icon-add-button icon-danger-button"
+              type="button"
+              aria-label="删除所有帧"
+              data-tip="删除所有帧"
+              @click="deleteAllFrames"
+            >
+              *
+            </button>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -1224,16 +1821,10 @@ function formatRuntimeSummary(value) {
       </aside>
 
       <main class="editor-panel editor-center">
-        <div class="sequence-block">
-          <div class="sequence-head">
-            <h2>关卡</h2>
-            <div class="sequence-head-actions">
-              <p>{{ levels.length }} levels</p>
-              <button class="icon-add-button" type="button" aria-label="添加关卡" @click="addLevel">
-                +
-              </button>
-            </div>
-          </div>
+        <div class="level-sequence-row">
+          <button class="icon-add-button" type="button" aria-label="添加关卡" title="添加关卡" @click="addLevel">
+            +
+          </button>
           <div class="sequence-list">
             <button
               v-for="(level, index) in levels"
@@ -1248,133 +1839,39 @@ function formatRuntimeSummary(value) {
           </div>
         </div>
 
-        <div class="sequence-block">
-          <div class="sequence-head">
-            <h2>帧</h2>
-            <p>{{ frames.length }} frames</p>
-          </div>
-          <div class="frame-progress-row">
-            <div class="frame-progress-shell">
-              <div
-                class="frame-progress-track"
-                @pointerdown="startFrameDrag"
-                @pointermove="dragFrameProgress"
-                @pointerup="stopFrameDrag"
-                @pointercancel="stopFrameDrag"
-                @lostpointercapture="draggingFrameProgress = false"
-              >
-                <div
-                  class="frame-progress-fill"
-                  :style="{ width: `${activeFramePercent}%` }"
-                ></div>
-                <div
-                  class="frame-progress-marker"
-                  :style="{ left: `${activeFramePercent}%` }"
-                ></div>
-              </div>
-              <div class="frame-tick-row">
-                <button
-                  v-for="(frame, index) in frames"
-                  :key="`frame-${index}`"
-                  class="frame-tick"
-                  :class="{ active: activeFrameIndex === index }"
-                  type="button"
-                  @click="selectFrame(index)"
-                >
-                  <span class="frame-tick-dot"></span>
-                  <span class="frame-tick-label">{{ index + 1 }}</span>
-                </button>
-              </div>
-            </div>
-            <div class="frame-icon-actions">
-              <button class="icon-add-button" type="button" aria-label="添加帧" data-tip="添加帧" @click="addFrame">
-                +
-              </button>
-              <button
-                class="icon-add-button"
-                type="button"
-                aria-label="复制当前帧到前一帧"
-                data-tip="复制当前帧到前一帧"
-                :disabled="activeFrameIndex <= 0"
-                @click="copyCurrentFrameToPreviousFrame"
-              >
-                P
-              </button>
-              <button
-                class="icon-add-button"
-                type="button"
-                aria-label="复制当前帧到后一帧"
-                data-tip="复制当前帧到后一帧"
-                :disabled="activeFrameIndex >= frames.length - 1"
-                @click="copyCurrentFrameToNextFrame"
-              >
-                N
-              </button>
-              <button
-                class="icon-add-button"
-                type="button"
-                aria-label="复制当前帧到所有帧"
-                data-tip="复制当前帧到所有帧"
-                :disabled="frames.length <= 1"
-                @click="copyCurrentFrameToAllFrames"
-              >
-                =
-              </button>
-              <button
-                class="icon-add-button icon-danger-button"
-                type="button"
-                aria-label="删除当前帧"
-                data-tip="删除当前帧"
-                :disabled="frames.length <= 1"
-                @click="deleteCurrentFrame"
-              >
-                -
-              </button>
-              <button
-                class="icon-add-button icon-danger-button"
-                type="button"
-                aria-label="删除所有帧"
-                data-tip="删除所有帧"
-                @click="deleteAllFrames"
-              >
-                *
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <div class="frame-settings">
-          <label>
-            <span>当前关卡名称</span>
-            <input v-model="activeLevel.label" type="text" />
-          </label>
-          <label>
-            <span>当前帧重复次数</span>
-            <div class="repeat-times-control">
-              <input v-model.number="activeFrame.repeatTimes" min="1" type="number" />
-              <button
-                class="inline-symbol-button"
-                type="button"
-                title="应用当前重复次数到当前关卡所有帧"
-                aria-label="应用当前重复次数到当前关卡所有帧"
-                @click="applyCurrentRepeatTimesToAllFrames"
-              >
-                *
-              </button>
-            </div>
-          </label>
-        </div>
-
         <div class="matrix-status-bar" :class="{ active: panoramaMode || selectionMode || anchorEditMode }">
-          <div>
-            <strong>{{ anchorEditMode ? "修改基准" : panoramaMode ? "全景编辑" : "矩阵编辑" }}</strong>
-            <span>{{
-              anchorEditMode
-                ? "点击对象内部格子作为新基准"
-                : panoramaMode
-                  ? panoramaStatusText
-                  : `${matrixWidth} x ${matrixHeight}`
-            }}</span>
+          <div class="matrix-status-main">
+            <div class="matrix-status-title">
+              <strong>{{ anchorEditMode ? "修改基准" : panoramaMode ? "全景编辑" : "矩阵编辑" }}</strong>
+              <span>{{
+                anchorEditMode
+                  ? "点击对象内部格子作为新基准"
+                  : panoramaMode
+                    ? panoramaStatusText
+                    : `${matrixWidth} x ${matrixHeight}`
+              }}</span>
+            </div>
+            <div class="matrix-inline-fields">
+              <label>
+                <span>关卡</span>
+                <input v-model="activeLevel.label" type="text" />
+              </label>
+              <label class="matrix-repeat-field">
+                <span>重复</span>
+                <div class="repeat-times-control">
+                  <input v-model.number="activeFrame.repeatTimes" min="1" type="number" />
+                  <button
+                    class="inline-symbol-button"
+                    type="button"
+                    title="应用当前重复次数到当前关卡所有帧"
+                    aria-label="应用当前重复次数到当前关卡所有帧"
+                    @click="applyCurrentRepeatTimesToAllFrames"
+                  >
+                    *
+                  </button>
+                </div>
+              </label>
+            </div>
           </div>
           <div class="matrix-status-actions">
             <button class="soft-button compact-button" type="button" @click="togglePanoramaMode">
@@ -1400,13 +1897,16 @@ function formatRuntimeSummary(value) {
           </div>
         </div>
 
-        <div class="matrix-scroll" @wheel="zoomMatrix">
+        <div ref="matrixScrollRef" class="matrix-scroll" @wheel="zoomMatrix">
           <SimpleMatrixCanvas
             :cells="matrixCells"
             :column-count="matrixColumnCount"
             :row-count="matrixRowCount"
             :cell-size="matrixCellSizeValue"
             :gap-size="matrixGapSizeValue"
+            :base-patch-cells="matrixBasePatchCells"
+            :base-patch-version="matrixBasePatchVersion"
+            :overlay-highlights="matrixOverlayHighlights"
             :range-create-enabled="!selectionMode && !anchorEditMode"
             @cell-click="handleCellClick"
             @cell-range-create="handleCellRangeCreate"
@@ -1618,6 +2118,22 @@ function formatRuntimeSummary(value) {
               >
                 打开预览
               </button>
+              <button
+                class="soft-button runtime-start-button"
+                :disabled="Boolean(busyAction) || !document"
+                type="button"
+                @click="validateEditor"
+              >
+                校验
+              </button>
+              <button
+                class="soft-button runtime-start-button"
+                :disabled="Boolean(busyAction) || !document"
+                type="button"
+                @click="saveEditor"
+              >
+                保存
+              </button>
               <p v-if="runtimeStatusMessage" class="status-line">{{ runtimeStatusMessage }}</p>
               <p v-if="previewStatusMessage" class="status-line">{{ previewStatusMessage }}</p>
               <p v-if="runtimeErrorMessage" class="error-line">{{ runtimeErrorMessage }}</p>
@@ -1634,5 +2150,7 @@ function formatRuntimeSummary(value) {
         </div>
       </aside>
     </div>
-  </section>
+      </section>
+    </div>
+  </div>
 </template>

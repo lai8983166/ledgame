@@ -2,6 +2,8 @@ node_modules/
 .pnpm-store/
 dist/
 dist-electron/
+build-resources/
+release/
 *.log
 .DS_Store
 openspec/

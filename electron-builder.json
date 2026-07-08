@@ -1,0 +1,53 @@
+{
+  "appId": "com.ledgame.app",
+  "productName": "LED Game",
+  "asar": true,
+  "directories": {
+    "output": "release"
+  },
+  "files": [
+    "dist/**/*",
+    "electron/**/*",
+    "package.json"
+  ],
+  "extraResources": [
+    {
+      "from": "build-resources/backend",
+      "to": "backend",
+      "filter": [
+        "**/*",
+        "!**/*.md"
+      ]
+    },
+    {
+      "from": "build-resources/jre",
+      "to": "jre",
+      "filter": [
+        "**/*",
+        "!**/*.md"
+      ]
+    },
+    {
+      "from": "build-resources/seed-database",
+      "to": "seed-database",
+      "filter": [
+        "**/*",
+        "!**/*.md"
+      ]
+    },
+    {
+      "from": "build-resources/media",
+      "to": "media",
+      "filter": [
+        "**/*",
+        "!**/*.md"
+      ]
+    }
+  ],
+  "win": {
+    "target": [
+      "dir",
+      "zip"
+    ]
+  }
+}

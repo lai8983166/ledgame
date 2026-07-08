@@ -26,16 +26,33 @@ const props = defineProps({
     type: Boolean,
     default: true,
   },
+  basePatchCells: {
+    type: Array,
+    default: () => [],
+  },
+  basePatchVersion: {
+    type: Number,
+    default: 0,
+  },
+  overlayHighlights: {
+    type: Array,
+    default: () => [],
+  },
 });
 
 const emit = defineEmits(["cell-click", "cell-range-create", "matrix-contextmenu"]);
 
-const canvasRef = ref(null);
-const hoverCellKey = ref("");
-const hoverTitle = ref("矩阵编辑区");
-const dragStartCell = ref(null);
-const dragCurrentCell = ref(null);
-let animationFrame = 0;
+const baseCanvasRef = ref(null);
+const overlayCanvasRef = ref(null);
+let hoverCell = null;
+let dragStartCell = null;
+let dragCurrentCell = null;
+let baseAnimationFrame = 0;
+let overlayAnimationFrame = 0;
+let pendingBaseDrawMode = "full";
+let pendingBasePatchCells = [];
+let appliedBasePatchVersion = 0;
+let lastGeometrySignature = "";
 
 const stride = computed(() => props.cellSize + props.gapSize);
 const canvasWidth = computed(() =>
@@ -49,11 +66,17 @@ const canvasStyle = computed(() => ({
   height: `${canvasHeight.value}px`,
 }));
 
-onMounted(scheduleDraw);
+onMounted(() => {
+  scheduleBaseDraw();
+  scheduleOverlayDraw();
+});
 
 onBeforeUnmount(() => {
-  if (animationFrame) {
-    window.cancelAnimationFrame(animationFrame);
+  if (baseAnimationFrame) {
+    window.cancelAnimationFrame(baseAnimationFrame);
+  }
+  if (overlayAnimationFrame) {
+    window.cancelAnimationFrame(overlayAnimationFrame);
   }
 });
 
@@ -64,33 +87,121 @@ watch(
     props.rowCount,
     props.cellSize,
     props.gapSize,
-    props.rangeCreateEnabled,
-    hoverCellKey.value,
-    dragStartCell.value,
-    dragCurrentCell.value,
   ],
-  scheduleDraw,
+  () => {
+    const request = resolveBaseDrawMode();
+    scheduleBaseDraw(request.mode, request.cells);
+    scheduleOverlayDraw();
+  },
   { flush: "post" },
 );
 
-function scheduleDraw() {
-  if (animationFrame) {
+watch(
+  () => [props.rangeCreateEnabled, props.overlayHighlights],
+  scheduleOverlayDraw,
+  { flush: "post" },
+);
+
+function scheduleBaseDraw(mode = "full", patchCells = []) {
+  if (mode === "full" || pendingBaseDrawMode === "full") {
+    pendingBaseDrawMode = "full";
+    pendingBasePatchCells = [];
+  } else {
+    pendingBaseDrawMode = "patch";
+    pendingBasePatchCells = dedupePatchCells([...pendingBasePatchCells, ...patchCells]);
+  }
+  if (baseAnimationFrame) {
     return;
   }
-  animationFrame = window.requestAnimationFrame(() => {
-    animationFrame = 0;
-    drawCanvas();
+  baseAnimationFrame = window.requestAnimationFrame(() => {
+    baseAnimationFrame = 0;
+    const drawMode = pendingBaseDrawMode;
+    const patchCells = pendingBasePatchCells;
+    pendingBaseDrawMode = "full";
+    pendingBasePatchCells = [];
+    if (drawMode === "patch" && patchCells.length) {
+      drawBasePatch(patchCells);
+      return;
+    }
+    drawBaseCanvas();
   });
 }
 
-function drawCanvas() {
-  const canvas = canvasRef.value;
+function scheduleOverlayDraw() {
+  if (overlayAnimationFrame) {
+    return;
+  }
+  overlayAnimationFrame = window.requestAnimationFrame(() => {
+    overlayAnimationFrame = 0;
+    drawOverlayCanvas();
+  });
+}
+
+function drawBaseCanvas() {
+  const canvas = baseCanvasRef.value;
   if (!canvas || !canvasWidth.value || !canvasHeight.value) {
     return;
   }
-  const ratio = window.devicePixelRatio || 1;
   const width = canvasWidth.value;
   const height = canvasHeight.value;
+  const context = prepareCanvas(canvas, width, height);
+  context.clearRect(0, 0, width, height);
+  for (let index = 0; index < props.cells.length; index += 1) {
+    drawCell(context, props.cells[index], index);
+  }
+  lastGeometrySignature = createGeometrySignature();
+  appliedBasePatchVersion = props.basePatchVersion;
+}
+
+function drawBasePatch(patchCells) {
+  const canvas = baseCanvasRef.value;
+  if (!canvas || !canvasWidth.value || !canvasHeight.value) {
+    return;
+  }
+  if (lastGeometrySignature !== createGeometrySignature()) {
+    drawBaseCanvas();
+    return;
+  }
+  const width = canvasWidth.value;
+  const height = canvasHeight.value;
+  const context = prepareCanvas(canvas, width, height);
+  for (const patchCell of patchCells) {
+    const renderCell = findRenderCell(patchCell);
+    if (!renderCell) {
+      continue;
+    }
+    const position = getCellPosition(renderCell);
+    if (!position) {
+      continue;
+    }
+    const clearOffset = Math.max(4, Math.ceil(props.cellSize * 0.16));
+    context.clearRect(
+      position.left - clearOffset,
+      position.top - clearOffset,
+      props.cellSize + clearOffset * 2,
+      props.cellSize + clearOffset * 2,
+    );
+    drawCell(context, renderCell, renderCell.renderIndex);
+  }
+  appliedBasePatchVersion = props.basePatchVersion;
+}
+
+function drawOverlayCanvas() {
+  const canvas = overlayCanvasRef.value;
+  if (!canvas || !canvasWidth.value || !canvasHeight.value) {
+    return;
+  }
+  const width = canvasWidth.value;
+  const height = canvasHeight.value;
+  const context = prepareCanvas(canvas, width, height);
+  context.clearRect(0, 0, width, height);
+  drawOverlayHighlights(context);
+  drawHoverOutline(context);
+  drawDragSelection(context);
+}
+
+function prepareCanvas(canvas, width, height) {
+  const ratio = window.devicePixelRatio || 1;
   const pixelWidth = Math.max(1, Math.round(width * ratio));
   const pixelHeight = Math.max(1, Math.round(height * ratio));
   if (canvas.width !== pixelWidth || canvas.height !== pixelHeight) {
@@ -99,11 +210,7 @@ function drawCanvas() {
   }
   const context = canvas.getContext("2d");
   context.setTransform(ratio, 0, 0, ratio, 0, 0);
-  context.clearRect(0, 0, width, height);
-  for (let index = 0; index < props.cells.length; index += 1) {
-    drawCell(context, props.cells[index], index);
-  }
-  drawDragSelection(context);
+  return context;
 }
 
 function drawCell(context, cell, index) {
@@ -115,11 +222,7 @@ function drawCell(context, cell, index) {
   const classes = cell.classes || {};
   const realCell = Boolean(classes["real-cell"]);
   const virtualCell = Boolean(classes["virtual-cell"]);
-  const selectedCell = Boolean(classes["selected-object-cell"]);
-  const mergeSelectedCell = Boolean(classes["merge-selected-cell"]);
-  const anchorCell = Boolean(classes["anchor-cell"]);
   const overlapCell = Boolean(classes["overlap-cell"]);
-  const hoveredCell = cell.key === hoverCellKey.value;
 
   context.globalAlpha = virtualCell && !classes["object-cell"] ? 0.78 : 1;
   context.fillStyle = cell.color || (realCell ? "#303b49" : "#101821");
@@ -145,21 +248,6 @@ function drawCell(context, cell, index) {
     drawOverlapIndicator(context, left, top, size, cell.overlapCount);
   }
 
-  if (hoveredCell) {
-    drawOutline(context, left, top, size, "rgba(219, 228, 241, 0.46)", 2, 1);
-  }
-  if (selectedCell) {
-    drawOutline(context, left, top, size, "#f7d56f", 2, 1);
-  }
-  if (mergeSelectedCell) {
-    drawOutline(context, left, top, size, "#70d6b3", 2, 1);
-  }
-  if (anchorCell) {
-    drawOutline(context, left, top, size, "#ff8a5c", 3, 2);
-    context.strokeStyle = "rgba(255, 255, 255, 0.28)";
-    context.lineWidth = 2;
-    context.strokeRect(left + 3, top + 3, Math.max(1, size - 6), Math.max(1, size - 6));
-  }
 }
 
 function drawOverlapIndicator(context, left, top, size, overlapCount) {
@@ -208,31 +296,36 @@ function handlePointerDown(event) {
     return;
   }
   event.preventDefault();
-  canvasRef.value?.setPointerCapture?.(event.pointerId);
-  dragStartCell.value = cell;
-  dragCurrentCell.value = cell;
-  hoverCellKey.value = cell.key;
-  hoverTitle.value = cell.title || "矩阵编辑区";
+  overlayCanvasRef.value?.setPointerCapture?.(event.pointerId);
+  dragStartCell = cell;
+  dragCurrentCell = cell;
+  updateHoverCell(cell);
+  scheduleOverlayDraw();
 }
 
 function handlePointerMove(event) {
   const cell = getCellFromPointer(event);
   updateHoverCell(cell);
-  if (!props.rangeCreateEnabled || !dragStartCell.value || !cell) {
+  if (!props.rangeCreateEnabled || !dragStartCell || !cell) {
     return;
   }
-  dragCurrentCell.value = cell;
+  if (dragCurrentCell?.key === cell.key) {
+    return;
+  }
+  dragCurrentCell = cell;
+  scheduleOverlayDraw();
 }
 
 function handlePointerUp(event) {
-  if (!dragStartCell.value) {
+  if (!dragStartCell) {
     return;
   }
-  canvasRef.value?.releasePointerCapture?.(event.pointerId);
-  const startCell = dragStartCell.value;
-  const endCell = getCellFromPointer(event) || dragCurrentCell.value || startCell;
-  dragStartCell.value = null;
-  dragCurrentCell.value = null;
+  overlayCanvasRef.value?.releasePointerCapture?.(event.pointerId);
+  const startCell = dragStartCell;
+  const endCell = getCellFromPointer(event) || dragCurrentCell || startCell;
+  dragStartCell = null;
+  dragCurrentCell = null;
+  scheduleOverlayDraw();
   if (!endCell) {
     return;
   }
@@ -248,38 +341,44 @@ function handlePointerUp(event) {
 }
 
 function handlePointerCancel(event) {
-  canvasRef.value?.releasePointerCapture?.(event.pointerId);
-  dragStartCell.value = null;
-  dragCurrentCell.value = null;
+  overlayCanvasRef.value?.releasePointerCapture?.(event.pointerId);
+  dragStartCell = null;
+  dragCurrentCell = null;
+  scheduleOverlayDraw();
 }
 
 function handleContextMenu(event) {
   emit("matrix-contextmenu", event);
 }
 
-function handleMouseMove(event) {
-  updateHoverCell(getCellFromPointer(event));
-}
-
 function updateHoverCell(cell) {
   const nextKey = cell?.key || "";
-  hoverTitle.value = cell?.title || "矩阵编辑区";
-  if (nextKey === hoverCellKey.value) {
+  updateCanvasTitle(cell?.title || "矩阵编辑区");
+  if (nextKey === (hoverCell?.key || "")) {
     return;
   }
-  hoverCellKey.value = nextKey;
+  hoverCell = cell || null;
+  scheduleOverlayDraw();
 }
 
 function clearHover() {
-  if (!hoverCellKey.value) {
+  if (!hoverCell) {
     return;
   }
-  hoverCellKey.value = "";
-  hoverTitle.value = "矩阵编辑区";
+  hoverCell = null;
+  updateCanvasTitle("矩阵编辑区");
+  scheduleOverlayDraw();
+}
+
+function updateCanvasTitle(title) {
+  const canvas = overlayCanvasRef.value;
+  if (canvas && canvas.title !== title) {
+    canvas.title = title;
+  }
 }
 
 function getCellFromPointer(event) {
-  const canvas = canvasRef.value;
+  const canvas = overlayCanvasRef.value;
   if (!canvas || !props.columnCount || !props.rowCount) {
     return null;
   }
@@ -305,7 +404,22 @@ function getCellFromPointer(event) {
   ) {
     return null;
   }
-  return props.cells[rowIndex * props.columnCount + columnIndex] || null;
+  const renderIndex = rowIndex * props.columnCount + columnIndex;
+  const cell = props.cells[renderIndex];
+  return cell ? { ...cell, renderIndex } : null;
+}
+
+function resolveBaseDrawMode() {
+  if (lastGeometrySignature && lastGeometrySignature !== createGeometrySignature()) {
+    return { mode: "full", cells: [] };
+  }
+  if (
+    props.basePatchVersion > appliedBasePatchVersion &&
+    props.basePatchCells.length
+  ) {
+    return { mode: "patch", cells: props.basePatchCells };
+  }
+  return { mode: "full", cells: [] };
 }
 
 function getCellsInRange(startCell, endCell) {
@@ -317,11 +431,11 @@ function getCellsInRange(startCell, endCell) {
 }
 
 function drawDragSelection(context) {
-  if (!props.rangeCreateEnabled || !dragStartCell.value || !dragCurrentCell.value) {
+  if (!props.rangeCreateEnabled || !dragStartCell || !dragCurrentCell) {
     return;
   }
-  const startPosition = getCellPosition(dragStartCell.value);
-  const endPosition = getCellPosition(dragCurrentCell.value);
+  const startPosition = getCellPosition(dragStartCell);
+  const endPosition = getCellPosition(dragCurrentCell);
   if (!startPosition || !endPosition) {
     return;
   }
@@ -339,8 +453,47 @@ function drawDragSelection(context) {
   context.restore();
 }
 
+function drawHoverOutline(context) {
+  if (!hoverCell) {
+    return;
+  }
+  const position = getCellPosition(hoverCell);
+  if (!position) {
+    return;
+  }
+  drawOutline(context, position.left, position.top, props.cellSize, "rgba(219, 228, 241, 0.46)", 2, 1);
+}
+
+function drawOverlayHighlights(context) {
+  for (const highlight of props.overlayHighlights || []) {
+    const position = getCellPosition(highlight);
+    if (!position) {
+      continue;
+    }
+    if (highlight.type === "anchor") {
+      drawAnchorOutline(context, position.left, position.top);
+    } else if (highlight.type === "merge") {
+      drawOutline(context, position.left, position.top, props.cellSize, "#70d6b3", 2, 1);
+    } else {
+      drawOutline(context, position.left, position.top, props.cellSize, "#f7d56f", 2, 1);
+    }
+  }
+}
+
+function drawAnchorOutline(context, left, top) {
+  const size = props.cellSize;
+  drawOutline(context, left, top, size, "#ff8a5c", 3, 2);
+  context.strokeStyle = "rgba(255, 255, 255, 0.28)";
+  context.lineWidth = 2;
+  context.strokeRect(left + 3, top + 3, Math.max(1, size - 6), Math.max(1, size - 6));
+}
+
 function getCellPosition(cell) {
-  const index = props.cells.findIndex((item) => item.key === cell.key);
+  const index = Number.isInteger(cell?.renderIndex)
+    ? cell.renderIndex
+    : props.cells.findIndex((item) =>
+        cell?.key ? item.key === cell.key : item.x === cell?.x && item.y === cell?.y,
+      );
   if (index < 0) {
     return null;
   }
@@ -351,15 +504,44 @@ function getCellPosition(cell) {
     top: rowIndex * stride.value,
   };
 }
+
+function findRenderCell(point) {
+  const index = props.cells.findIndex((cell) => cell.x === point.x && cell.y === point.y);
+  if (index < 0) {
+    return null;
+  }
+  return { ...props.cells[index], renderIndex: index };
+}
+
+function createGeometrySignature() {
+  return `${props.columnCount}:${props.rowCount}:${props.cellSize}:${props.gapSize}:${canvasWidth.value}:${canvasHeight.value}`;
+}
+
+function dedupePatchCells(cells) {
+  const map = new Map();
+  for (const cell of cells || []) {
+    if (!Number.isFinite(Number(cell?.x)) || !Number.isFinite(Number(cell?.y))) {
+      continue;
+    }
+    map.set(`${cell.x}:${cell.y}`, { x: Number(cell.x), y: Number(cell.y) });
+  }
+  return [...map.values()];
+}
 </script>
 
 <template>
   <div class="editable-matrix matrix-canvas-wrapper" :style="canvasStyle">
     <canvas
-      ref="canvasRef"
-      class="matrix-canvas-surface"
+      ref="baseCanvasRef"
+      class="matrix-canvas-surface matrix-base-canvas"
       :style="canvasStyle"
-      :title="hoverTitle"
+      aria-hidden="true"
+    ></canvas>
+    <canvas
+      ref="overlayCanvasRef"
+      class="matrix-canvas-surface matrix-overlay-canvas"
+      :style="canvasStyle"
+      title="矩阵编辑区"
       aria-label="矩阵编辑区"
       @contextmenu.prevent.stop="handleContextMenu"
       @pointerdown="handlePointerDown"
