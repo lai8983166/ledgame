@@ -16,6 +16,8 @@ contextBridge.exposeInMainWorld('ledGame', {
   getGameEditor: (gameId) => ipcRenderer.invoke('game-editor:get', gameId),
   validateGameEditor: (document) => ipcRenderer.invoke('game-editor:validate', document),
   saveGameEditor: (gameId, document) => ipcRenderer.invoke('game-editor:save', gameId, document),
+  exportFrameJson: (payload) => ipcRenderer.invoke('frame:export-json', payload),
+  importFrameJson: () => ipcRenderer.invoke('frame:import-json'),
   reportEditorLayout: (snapshot) => ipcRenderer.send('diagnostic:editor-layout', snapshot),
   latestFrame: () => ipcRenderer.invoke('frame:latest'),
   onLedFrame: (callback) => {

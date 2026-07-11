@@ -803,7 +803,8 @@ button:disabled {
   min-width: 0;
   min-height: 0;
   padding: 0;
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-gutter: stable both-edges;
 }

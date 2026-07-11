@@ -712,6 +712,13 @@ async function startGame() {
     runtimeResult.value = result?.data || result;
     runtimeStatusMessage.value = "启动成功";
     previewStatusMessage.value = "可打开预览窗口观察运行帧";
+    // 启动成功后自动弹出/切换到 debug 面板；打开失败不影响已成功的启动。
+    try {
+      await api?.openDebugPanel?.();
+      previewStatusMessage.value = "预览窗口已打开";
+    } catch (openError) {
+      previewStatusMessage.value = "预览窗口未能自动打开，可点击「打开预览」";
+    }
   } catch (error) {
     runtimeStatusMessage.value = "";
     runtimeErrorMessage.value = error.message || String(error);
@@ -755,6 +762,78 @@ async function openPreview() {
   } catch (error) {
     previewStatusMessage.value = "";
     runtimeErrorMessage.value = error.message || String(error);
+  }
+}
+
+async function exportCurrentFrame() {
+  statusMessage.value = "";
+  errorMessage.value = "";
+  const frame = activeFrame.value;
+  if (!frame) {
+    errorMessage.value = "当前没有可导出的帧";
+    return;
+  }
+  try {
+    if (!api?.exportFrameJson) {
+      throw new Error("Electron 导出 API 不可用");
+    }
+    const content = JSON.stringify(serializeActiveFrame(), null, 2);
+    const defaultFileName = `led-frame-L${activeLevelIndex.value + 1}-F${activeFrameIndex.value + 1}.json`;
+    const result = await api.exportFrameJson({ content, defaultFileName });
+    if (result?.canceled) {
+      return;
+    }
+    statusMessage.value = `当前帧已导出到 ${result?.filePath || "文件"}`;
+  } catch (error) {
+    errorMessage.value = error.message || String(error);
+  }
+}
+
+async function importFrame() {
+  statusMessage.value = "";
+  errorMessage.value = "";
+  const frame = ensureActiveFrame();
+  if (!frame) {
+    errorMessage.value = "当前没有可替换的帧";
+    return;
+  }
+  const frameIndex = activeFrameIndex.value;
+  try {
+    if (!api?.importFrameJson) {
+      throw new Error("Electron 导入 API 不可用");
+    }
+    const result = await api.importFrameJson();
+    if (result?.canceled) {
+      return;
+    }
+    const parsed = JSON.parse(result?.content || "");
+    const matrixSource = Array.isArray(parsed) ? parsed : parsed?.matrix;
+    if (!Array.isArray(matrixSource)) {
+      throw new Error("JSON 中未找到 matrix 数组");
+    }
+    const normalized = matrixSource
+      .map((entry) => normalizeMatrixObject(entry, frame, frameIndex))
+      .filter((object) => isObjectInsideRealMatrix(object));
+    const dropped = matrixSource.length - normalized.length;
+    frame.matrix = normalized.map((object) => ({
+      x: toInteger(object.x, 0),
+      y: toInteger(object.y, 0),
+      id: object.id,
+      color: clampColorIndex(object.color),
+      points: getObjectPoints(object).map(([dx, dy]) => [dx, dy]),
+    }));
+    if (parsed && Object.prototype.hasOwnProperty.call(parsed, "repeatTimes")) {
+      frame.repeatTimes = toInteger(parsed.repeatTimes, toInteger(frame.repeatTimes, 1));
+    }
+    invalidateMatrixFrame(frame);
+    syncSelectedObject();
+    scheduleMatrixCacheWarmup(frameIndex);
+    statusMessage.value =
+      dropped > 0
+        ? `已导入 ${normalized.length} 个对象（丢弃 ${dropped} 个界外对象）`
+        : `已导入 ${normalized.length} 个对象`;
+  } catch (error) {
+    errorMessage.value = `导入帧失败：${error.message || String(error)}`;
   }
 }
 
@@ -1873,23 +1952,39 @@ function createBlankFrame() {
   };
 }
 
+function cleanFrameMatrix(frame) {
+  return (frame?.matrix || [])
+    .filter((object) => isObjectInsideRealMatrix(object))
+    .map((object) => ({
+      x: Number(object.x || 0),
+      y: Number(object.y || 0),
+      id: object.id,
+      color: clampColorIndex(object.color),
+      points: getObjectPoints(object),
+    }));
+}
+
 function createEditorPayload() {
   const payload = JSON.parse(JSON.stringify(toRaw(document.value)));
   payload.levels?.forEach((level) => {
     level.frameList?.forEach((frame) => {
-      frame.matrix = (frame.matrix || [])
-        .filter((object) => isObjectInsideRealMatrix(object))
-        .map((object) => ({
-          x: Number(object.x || 0),
-          y: Number(object.y || 0),
-          id: object.id,
-          color: clampColorIndex(object.color),
-          points: getObjectPoints(object),
-        }));
+      frame.matrix = cleanFrameMatrix(frame);
       delete frame.__matrixVersion;
     });
   });
   return payload;
+}
+
+// 导出当前帧内容：{ repeatTimes, matrix }，matrix 为清洗后的 object form，不含帧索引。
+function serializeActiveFrame() {
+  const frame = activeFrame.value;
+  if (!frame) {
+    return null;
+  }
+  return {
+    repeatTimes: toInteger(frame.repeatTimes, 1),
+    matrix: cleanFrameMatrix(frame),
+  };
 }
 
 function createOccupancyIndex(objects) {
@@ -2140,13 +2235,8 @@ function syncSelectedObject() {
   stopAnchorEdit();
 }
 
-function handleGlobalKeydown(event) {
-  const tagName = event.target?.tagName?.toLowerCase();
-  if (["input", "textarea", "select"].includes(tagName) || event.target?.isContentEditable) {
-    return;
-  }
-  if (
-    event.key.toLowerCase() === "q" &&
+function canTriggerGlobalShortcut(event) {
+  return (
     !event.repeat &&
     !event.isComposing &&
     !event.ctrlKey &&
@@ -2156,9 +2246,28 @@ function handleGlobalKeydown(event) {
     !selectionMode.value &&
     !anchorEditMode.value &&
     !objectDragState
-  ) {
+  );
+}
+
+function handleGlobalKeydown(event) {
+  const tagName = event.target?.tagName?.toLowerCase();
+  if (["input", "textarea", "select"].includes(tagName) || event.target?.isContentEditable) {
+    return;
+  }
+  const lowerKey = event.key.toLowerCase();
+  if (lowerKey === "q" && canTriggerGlobalShortcut(event)) {
     event.preventDefault();
     setInteractionMode(interactionMode.value === "add" ? "select-move" : "add");
+    return;
+  }
+  // A/D 切换上一帧/下一帧（不限定编辑模式，复用 Q 的冲突保护；首尾帧不回绕）。
+  const frameStep = lowerKey === "a" ? -1 : lowerKey === "d" ? 1 : 0;
+  if (frameStep !== 0 && canTriggerGlobalShortcut(event)) {
+    const nextIndex = activeFrameIndex.value + frameStep;
+    if (nextIndex >= 0 && nextIndex < frames.value.length) {
+      event.preventDefault();
+      selectFrame(nextIndex);
+    }
     return;
   }
   const movement = {
@@ -2247,7 +2356,7 @@ function formatRuntimeSummary(value) {
       <div v-if="document" class="sequence-block frame-sequence-header">
         <div class="sequence-head">
           <h2>帧</h2>
-          <p>{{ frames.length }} frames</p>
+          <p>{{ frames.length }} frames · A/D 切换帧</p>
         </div>
         <div class="frame-progress-row">
           <div class="frame-progress-shell">
@@ -2324,6 +2433,24 @@ function formatRuntimeSummary(value) {
               @click="deleteCurrentFrame"
             >
               -
+            </button>
+            <button
+              class="icon-add-button"
+              type="button"
+              aria-label="导出当前帧"
+              data-tip="导出当前帧（JSON）"
+              @click="exportCurrentFrame"
+            >
+              ⬇
+            </button>
+            <button
+              class="icon-add-button"
+              type="button"
+              aria-label="导入帧替换当前帧"
+              data-tip="导入帧替换当前帧（JSON）"
+              @click="importFrame"
+            >
+              ⬆
             </button>
           </div>
         </div>

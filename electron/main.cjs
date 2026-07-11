@@ -878,6 +878,31 @@ ipcMain.handle('open-debug-panel', () => {
 })
 
 ipcMain.handle('frame:latest', () => latestFrame)
+ipcMain.handle('frame:export-json', async (_event, payload) => {
+  const result = await dialog.showSaveDialog({
+    title: '导出帧',
+    defaultPath: payload?.defaultFileName || 'led-frame.json',
+    filters: [{ name: 'JSON', extensions: ['json'] }],
+  })
+  if (result.canceled || !result.filePath) {
+    return { canceled: true }
+  }
+  await fs.writeFile(result.filePath, payload?.content ?? '', 'utf8')
+  return { canceled: false, filePath: result.filePath }
+})
+ipcMain.handle('frame:import-json', async () => {
+  const result = await dialog.showOpenDialog({
+    title: '导入帧',
+    properties: ['openFile'],
+    filters: [{ name: 'JSON', extensions: ['json'] }],
+  })
+  if (result.canceled || !result.filePaths?.length) {
+    return { canceled: true }
+  }
+  const filePath = result.filePaths[0]
+  const content = await fs.readFile(filePath, 'utf8')
+  return { canceled: false, filePath, content }
+})
 ipcMain.handle('engine:start-fixed', () => engineStateRequest('/engine/demo/fixed/start', { method: 'POST' }))
 ipcMain.handle('engine:start-input', () => engineStateRequest('/engine/demo/input/start', { method: 'POST' }))
 ipcMain.handle('engine:start-game', (_event, request) =>
