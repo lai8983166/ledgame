@@ -30,17 +30,25 @@ const objectIdCounter = ref(0);
 const contextMenu = ref({ visible: false, x: 0, y: 0 });
 const fitViewportRef = ref(null);
 const fitContentRef = ref(null);
+const MIN_EDITOR_FIT_WIDTH = 1600;
+const MIN_EDITOR_FIT_HEIGHT = 860;
+const MIN_EDITOR_READABLE_SCALE = 0.65;
+const EDITOR_VIEWPORT_GUTTER = 24;
 const editorFitScale = ref(1);
-const editorFitBaseWidth = ref(0);
-const editorFitBaseHeight = ref(0);
+const editorFitBaseWidth = ref(MIN_EDITOR_FIT_WIDTH);
+const editorFitBaseHeight = ref(MIN_EDITOR_FIT_HEIGHT);
+const editorFitAvailableWidth = ref(0);
+const editorFitAvailableHeight = ref(0);
+const editorFitReady = ref(false);
 let pendingZoomDirection = 0;
 let zoomAnimationFrame = 0;
 let fitResizeObserver = null;
 let fitMeasureFrame = 0;
+let editorFitCanReveal = false;
+let layoutDiagnosticFrame = 0;
+let lastLayoutDiagnostic = "";
 
 const PANORAMA_PADDING = 8;
-const MIN_EDITOR_FIT_WIDTH = 1500;
-const MIN_EDITOR_FIT_HEIGHT = 860;
 
 // Matrix auto-fit: the matrix canvas is sized from these container measurements so it
 // fills the .matrix-scroll column instead of using a fixed 18px cell. matrixZoom remains
@@ -59,7 +67,7 @@ let matrixCacheWarmupQueue = [];
 const matrixCacheRevision = ref(0);
 const MIN_MATRIX_CELL = 8;
 const MAX_MATRIX_CELL = 64;
-const MATRIX_GAP_RATIO = 0.12;
+const MATRIX_GAP_RATIO = 0;
 const MATRIX_SCROLL_PADDING = 18;
 const MATRIX_CACHE_WARMUP_BATCH_SIZE = 2;
 
@@ -90,7 +98,7 @@ const matrixCellSizeValue = computed(() => {
   return Math.min(MAX_MATRIX_CELL, Math.max(MIN_MATRIX_CELL, cell));
 });
 const matrixGapSizeValue = computed(() =>
-  Math.max(1, Math.round(matrixCellSizeValue.value * MATRIX_GAP_RATIO)),
+  Math.max(0, Math.round(matrixCellSizeValue.value * MATRIX_GAP_RATIO)),
 );
 const matrixRange = computed(() => {
   const padding = panoramaMode.value ? PANORAMA_PADDING : 0;
@@ -199,8 +207,14 @@ const panoramaStatusText = computed(
     `x ${matrixRange.value.minX}..${matrixRange.value.maxX}, y ${matrixRange.value.minY}..${matrixRange.value.maxY}`,
 );
 const editorFitShellStyle = computed(() => ({
-  width: `${Math.ceil(editorFitBaseWidth.value * editorFitScale.value)}px`,
-  height: `${Math.ceil(editorFitBaseHeight.value * editorFitScale.value)}px`,
+  width: `${Math.ceil(Math.max(
+    editorFitAvailableWidth.value,
+    editorFitBaseWidth.value * editorFitScale.value + EDITOR_VIEWPORT_GUTTER * 2,
+  ))}px`,
+  height: `${Math.ceil(Math.max(
+    editorFitAvailableHeight.value,
+    editorFitBaseHeight.value * editorFitScale.value + EDITOR_VIEWPORT_GUTTER * 2,
+  ))}px`,
 }));
 const editorFitContentStyle = computed(() => ({
   width: `${editorFitBaseWidth.value || MIN_EDITOR_FIT_WIDTH}px`,
@@ -218,8 +232,9 @@ watch(
     // the whole editor from inner scrollWidth makes the centered fit shell
     // drift horizontally while the user zooms, enters panorama mode, or drags
     // the frame sequence.
-    scheduleEditorFitMeasurement();
-    scheduleEditorFitMeasurementAfterFrames(1);
+    if (editorFitReady.value) {
+      scheduleEditorFitMeasurement();
+    }
     scheduleMatrixCacheWarmup();
   },
   { flush: "post" },
@@ -256,6 +271,7 @@ onMounted(() => {
   window.addEventListener("keydown", handleGlobalKeydown);
   window.addEventListener("click", closeContextMenu);
   window.addEventListener("resize", scheduleEditorFitMeasurement);
+  window.visualViewport?.addEventListener("resize", scheduleEditorFitMeasurement);
 
   // Font loads (system fallback in packaged builds) can shift layout metrics
   // after the first measure; re-fit once fonts settle, then a couple of frames
@@ -264,8 +280,9 @@ onMounted(() => {
   if (fonts && typeof fonts.ready?.then === "function") {
     fonts.ready
       .then(() => {
-        scheduleEditorFitMeasurement();
-        scheduleEditorFitMeasurementAfterFrames(2);
+        if (editorFitReady.value) {
+          scheduleEditorFitMeasurement();
+        }
       })
       .catch(() => {});
   }
@@ -275,16 +292,20 @@ onBeforeUnmount(() => {
   window.removeEventListener("keydown", handleGlobalKeydown);
   window.removeEventListener("click", closeContextMenu);
   window.removeEventListener("resize", scheduleEditorFitMeasurement);
+  window.visualViewport?.removeEventListener("resize", scheduleEditorFitMeasurement);
   fitResizeObserver?.disconnect();
   fitResizeObserver = null;
   matrixResizeObserver?.disconnect();
   matrixResizeObserver = null;
   cancelEditorFitMeasurement();
+  cancelEditorLayoutDiagnostic();
   cancelZoomFrame();
   cancelMatrixCacheWarmup();
 });
 
 async function loadEditor() {
+  editorFitReady.value = false;
+  editorFitCanReveal = false;
   await runEditorAction("load", async () => {
     const seeded = await api.seedSimpleDemo();
     const gameId = seeded?.data?.id;
@@ -307,14 +328,35 @@ async function loadEditor() {
     previewStatusMessage.value = "";
     validationErrors.value = [];
     scheduleMatrixCacheWarmup(0);
-    scheduleEditorFitMeasurement();
-    nextTick(() => {
-      // Let the v-if="document" three-column grid lay out before re-measuring;
-      // the ResizeObserver can't catch this growth (content box is pinned).
-      scheduleEditorFitMeasurement();
-      scheduleEditorFitMeasurementAfterFrames(3);
-    });
+    await nextTick();
+    await waitForEditorFonts();
+    await stabilizeEditorFitBeforeReveal(3);
   });
+}
+
+async function waitForEditorFonts() {
+  const fonts = window.document?.fonts;
+  if (!fonts || typeof fonts.ready?.then !== "function") {
+    return;
+  }
+  try {
+    await fonts.ready;
+  } catch (_error) {
+    // Font readiness is an optimization; layout can still stabilize without it.
+  }
+}
+
+async function stabilizeEditorFitBeforeReveal(frames) {
+  for (let index = 0; index < frames; index += 1) {
+    await nextAnimationFrame();
+    measureEditorFit();
+  }
+  editorFitCanReveal = true;
+  measureEditorFit();
+}
+
+function nextAnimationFrame() {
+  return new Promise((resolve) => window.requestAnimationFrame(resolve));
 }
 
 function setupEditorFitMeasurement() {
@@ -343,18 +385,6 @@ function scheduleEditorFitMeasurement() {
   });
 }
 
-function scheduleEditorFitMeasurementAfterFrames(frames = 1) {
-  let remaining = Math.max(1, frames);
-  const tick = () => {
-    remaining -= 1;
-    scheduleEditorFitMeasurement();
-    if (remaining > 0) {
-      window.requestAnimationFrame(tick);
-    }
-  };
-  window.requestAnimationFrame(tick);
-}
-
 function measureEditorFit() {
   const viewport = fitViewportRef.value;
   const content = fitContentRef.value;
@@ -370,11 +400,40 @@ function measureEditorFit() {
     scheduleEditorFitMeasurement();
     return;
   }
-  const baseWidth = Math.max(viewportWidth, content.scrollWidth, MIN_EDITOR_FIT_WIDTH);
-  const baseHeight = Math.max(viewportHeight, content.scrollHeight, MIN_EDITOR_FIT_HEIGHT);
+  editorFitAvailableWidth.value = viewportWidth;
+  editorFitAvailableHeight.value = viewportHeight;
+  const availableContentWidth = Math.max(1, viewportWidth - EDITOR_VIEWPORT_GUTTER * 2);
+  const availableContentHeight = Math.max(1, viewportHeight - EDITOR_VIEWPORT_GUTTER * 2);
+  // Measure the complete unscaled content box so overflow from the actual editor
+  // layout is included in the scrollable shell. The stable scrollbar gutter and
+  // safe flex alignment prevent this from causing the old centering oscillation.
+  const naturalBounds = measureNaturalEditorBounds(content);
+  const naturalWidth = Math.max(
+    content.scrollWidth,
+    content.offsetWidth,
+    naturalBounds.width,
+    MIN_EDITOR_FIT_WIDTH,
+  );
+  const naturalHeight = Math.max(
+    content.scrollHeight,
+    content.offsetHeight,
+    naturalBounds.height,
+    MIN_EDITOR_FIT_HEIGHT,
+  );
+  const baseWidth = Math.max(availableContentWidth, naturalWidth);
+  const baseHeight = Math.max(availableContentHeight, naturalHeight);
   editorFitBaseWidth.value = baseWidth;
   editorFitBaseHeight.value = baseHeight;
-  editorFitScale.value = Number(Math.min(viewportWidth / baseWidth, viewportHeight / baseHeight, 1).toFixed(4));
+  const fitScale = Math.min(
+    availableContentWidth / baseWidth,
+    availableContentHeight / baseHeight,
+    1,
+  );
+  editorFitScale.value = Number(Math.max(fitScale, MIN_EDITOR_READABLE_SCALE).toFixed(4));
+  scheduleEditorLayoutDiagnostic();
+  if (errorMessage.value || (document.value && editorFitCanReveal)) {
+    editorFitReady.value = true;
+  }
 }
 
 function applyInitialEditorFit() {
@@ -391,12 +450,22 @@ function applyInitialEditorFit() {
   }
   const approxViewportWidth = Math.max(0, vw - 84);
   const approxViewportHeight = Math.max(0, vh - 120);
+  const approxContentWidth = Math.max(1, approxViewportWidth - EDITOR_VIEWPORT_GUTTER * 2);
+  const approxContentHeight = Math.max(1, approxViewportHeight - EDITOR_VIEWPORT_GUTTER * 2);
   editorFitBaseWidth.value = MIN_EDITOR_FIT_WIDTH;
   editorFitBaseHeight.value = MIN_EDITOR_FIT_HEIGHT;
+  editorFitAvailableWidth.value = approxViewportWidth;
+  editorFitAvailableHeight.value = approxViewportHeight;
   editorFitScale.value = Number(
     Math.min(
-      approxViewportWidth / MIN_EDITOR_FIT_WIDTH,
-      approxViewportHeight / MIN_EDITOR_FIT_HEIGHT,
+      Math.max(
+        Math.min(
+          approxContentWidth / MIN_EDITOR_FIT_WIDTH,
+          approxContentHeight / MIN_EDITOR_FIT_HEIGHT,
+          1,
+        ),
+        MIN_EDITOR_READABLE_SCALE,
+      ),
       1,
     ).toFixed(4),
   );
@@ -409,6 +478,128 @@ function cancelEditorFitMeasurement() {
   }
   window.cancelAnimationFrame(fitMeasureFrame);
   fitMeasureFrame = 0;
+}
+
+function scheduleEditorLayoutDiagnostic() {
+  if (layoutDiagnosticFrame || typeof window.ledGame?.reportEditorLayout !== "function") {
+    return;
+  }
+  layoutDiagnosticFrame = window.requestAnimationFrame(() => {
+    layoutDiagnosticFrame = 0;
+    reportEditorLayoutDiagnostic();
+  });
+}
+
+function cancelEditorLayoutDiagnostic() {
+  if (!layoutDiagnosticFrame) {
+    return;
+  }
+  window.cancelAnimationFrame(layoutDiagnosticFrame);
+  layoutDiagnosticFrame = 0;
+}
+
+function reportEditorLayoutDiagnostic() {
+  const viewport = fitViewportRef.value;
+  const content = fitContentRef.value;
+  if (!viewport || !content || !document.value) {
+    return;
+  }
+  const shell = viewport.querySelector(".simple-editor-fit-shell");
+  const snapshot = {
+    diagnostic: "layout-v2",
+    window: {
+      innerWidth: window.innerWidth,
+      innerHeight: window.innerHeight,
+      outerWidth: window.outerWidth,
+      outerHeight: window.outerHeight,
+      devicePixelRatio: window.devicePixelRatio,
+      scrollX: window.scrollX,
+      scrollY: window.scrollY,
+      visualViewportWidth: Math.round(window.visualViewport?.width || 0),
+      visualViewportHeight: Math.round(window.visualViewport?.height || 0),
+      visualViewportScale: window.visualViewport?.scale || 0,
+    },
+    screen: {
+      width: window.screen.width,
+      height: window.screen.height,
+      availWidth: window.screen.availWidth,
+      availHeight: window.screen.availHeight,
+      colorDepth: window.screen.colorDepth,
+      pixelDepth: window.screen.pixelDepth,
+    },
+    fit: {
+      scale: editorFitScale.value,
+      baseWidth: editorFitBaseWidth.value,
+      baseHeight: editorFitBaseHeight.value,
+      availableWidth: editorFitAvailableWidth.value,
+      availableHeight: editorFitAvailableHeight.value,
+    },
+    documentElement: measureElementBox(window.document.documentElement),
+    body: measureElementBox(window.document.body),
+    appShell: measureElementBox(window.document.querySelector(".app-shell")),
+    appNav: measureElementBox(window.document.querySelector(".app-nav")),
+    viewport: measureElementBox(viewport),
+    shell: measureElementBox(shell),
+    content: measureElementBox(content),
+    layout: measureElementBox(content.querySelector(".simple-editor-layout")),
+    rightPanel: measureElementBox(content.querySelector(".editor-right")),
+    rightMain: measureElementBox(content.querySelector(".editor-right-main")),
+    objectPanel: measureElementBox(content.querySelector(".object-panel")),
+    sideRail: measureElementBox(content.querySelector(".editor-side-rail")),
+  };
+  const serialized = JSON.stringify(snapshot);
+  if (serialized === lastLayoutDiagnostic) {
+    return;
+  }
+  lastLayoutDiagnostic = serialized;
+  window.ledGame.reportEditorLayout(snapshot);
+}
+
+function measureElementBox(element) {
+  if (!element) {
+    return null;
+  }
+  const rect = element.getBoundingClientRect();
+  const style = window.getComputedStyle(element);
+  return {
+    client: `${element.clientWidth}x${element.clientHeight}`,
+    scroll: `${element.scrollWidth}x${element.scrollHeight}`,
+    offset: `${element.offsetWidth}x${element.offsetHeight}`,
+    rect: `${Math.round(rect.left)},${Math.round(rect.top)},${Math.round(rect.right)},${Math.round(rect.bottom)},${Math.round(rect.width)}x${Math.round(rect.height)}`,
+    overflow: `${style.overflowX}/${style.overflowY}`,
+    position: style.position,
+    width: style.width,
+    minWidth: style.minWidth,
+    maxWidth: style.maxWidth,
+    padding: `${style.paddingTop},${style.paddingRight},${style.paddingBottom},${style.paddingLeft}`,
+    transform: style.transform,
+    zoom: style.zoom || "1",
+    scrollLeft: element.scrollLeft,
+    scrollTop: element.scrollTop,
+  };
+}
+
+function measureNaturalEditorBounds(content) {
+  const scale = Math.max(editorFitScale.value, 0.0001);
+  const contentRect = content.getBoundingClientRect();
+  let left = 0;
+  let top = 0;
+  let right = content.scrollWidth;
+  let bottom = content.scrollHeight;
+  const candidates = content.querySelectorAll(
+    ".simple-editor-layout, .editor-right-main, .object-panel, .editor-side-rail",
+  );
+  for (const candidate of candidates) {
+    const rect = candidate.getBoundingClientRect();
+    left = Math.min(left, (rect.left - contentRect.left) / scale);
+    top = Math.min(top, (rect.top - contentRect.top) / scale);
+    right = Math.max(right, (rect.right - contentRect.left) / scale);
+    bottom = Math.max(bottom, (rect.bottom - contentRect.top) / scale);
+  }
+  return {
+    width: Math.ceil(right - left),
+    height: Math.ceil(bottom - top),
+  };
 }
 
 function measureMatrixContainer() {
@@ -581,16 +772,14 @@ function buildMatrixCellsForFrame(frame) {
       const colorIndex = clampColorIndex(cell?.object?.color);
       const color = cell?.object
         ? colorOptions.value[colorIndex]?.value || "#26313d"
-        : realCell
-          ? "#303b49"
-          : "#101821";
+        : "#000000";
       const overlapCount = occupants.length;
       cells.push({
         key: `${column}:${row}`,
         x: column,
         y: row,
         color,
-        title: createCellTitle(column, row, occupants),
+        objectId,
         overlapCount,
         classes: {
           "real-cell": realCell,
@@ -598,7 +787,6 @@ function buildMatrixCellsForFrame(frame) {
           "object-cell": Boolean(cell),
           "overlap-cell": overlapCount > 1,
         },
-        memo: `${objectId}:${color}:${realCell ? 1 : 0}:${overlapCount}`,
       });
     }
   }
@@ -634,6 +822,103 @@ function invalidateMatrixFrame(frame = activeFrame.value) {
   matrixFrameCache.delete(frame);
   frameOccupancyCache.delete(frame);
   matrixCacheRevision.value += 1;
+  scheduleMatrixCacheWarmup();
+}
+
+// Lightweight in-place cache update for a single-object add/remove: updates only the
+// affected cells in the cached matrixCells array + occupancy index (O(object cells))
+// instead of wiping the whole frame cache (which forced an O(rows*cols) rebuild).
+// matrixCacheRevision is intentionally NOT bumped, so the matrixCells computed keeps
+// returning the same (mutated) array and only the canvas is told via the patch props.
+function patchMatrixFrame(frame, object, op) {
+  if (!frame) {
+    return;
+  }
+  const cellsEntry = matrixFrameCache.get(frame);
+  const occEntry = frameOccupancyCache.get(frame);
+  if (!cellsEntry || !occEntry) {
+    // Cold frame (never built) — fall back to a full invalidate+rebuild.
+    invalidateMatrixFrame(frame);
+    return;
+  }
+  const cells = cellsEntry.cells;
+  const occupancy = occEntry.index;
+  const objectCells = getObjectCells(object);
+  const objectIndex = (frame.matrix || []).findIndex((item) => item.id === object.id);
+  const changedKeys = new Set();
+
+  for (const oc of objectCells) {
+    const key = createPointKey(oc.x, oc.y);
+    if (op === "add") {
+      let occupants = occupancy.get(key);
+      if (!occupants) {
+        occupants = [];
+        occupancy.set(key, occupants);
+      }
+      occupants.push({
+        x: oc.x,
+        y: oc.y,
+        dx: oc.dx,
+        dy: oc.dy,
+        object,
+        objectIndex,
+        pointIndex: occupants.length,
+      });
+    } else {
+      const occupants = occupancy.get(key);
+      if (occupants) {
+        const at = occupants.findIndex((entry) => entry.object?.id === object.id);
+        if (at >= 0) {
+          occupants.splice(at, 1);
+        }
+        if (!occupants.length) {
+          occupancy.delete(key);
+        }
+      }
+    }
+    changedKeys.add(key);
+  }
+
+  const changedPositions = [];
+  for (const key of changedKeys) {
+    const sep = key.indexOf(":");
+    const x = Number(key.slice(0, sep));
+    const y = Number(key.slice(sep + 1));
+    const renderIndex =
+      (y - matrixRange.value.minY) * matrixColumnCount.value +
+      (x - matrixRange.value.minX);
+    if (renderIndex < 0 || renderIndex >= cells.length) {
+      continue;
+    }
+    const occupants = occupancy.get(key) || [];
+    const topEntry = getTopOccupancyEntry(occupants);
+    const top = topEntry?.object;
+    const realCell = isRealCell(x, y);
+    const colorIndex = clampColorIndex(top?.color);
+    const color = top
+      ? colorOptions.value[colorIndex]?.value || "#26313d"
+      : "#000000";
+    cells[renderIndex] = {
+      key,
+      x,
+      y,
+      color,
+      objectId: top?.id || "",
+      overlapCount: occupants.length,
+      classes: {
+        "real-cell": realCell,
+        "virtual-cell": !realCell,
+        "object-cell": Boolean(top),
+        "overlap-cell": occupants.length > 1,
+      },
+    };
+    changedPositions.push({ x, y });
+  }
+
+  setMatrixFrameVersion(frame, getMatrixFrameVersion(frame) + 1);
+  cellsEntry.key = createMatrixFrameCacheKey(frame);
+  occEntry.key = getMatrixFrameVersion(frame);
+  queueMatrixBasePatch(changedPositions);
   scheduleMatrixCacheWarmup();
 }
 
@@ -808,6 +1093,35 @@ function addLevel() {
   scheduleMatrixCacheWarmup(0);
 }
 
+const canMoveActiveLevelUp = computed(() => activeLevelIndex.value > 0);
+const canMoveActiveLevelDown = computed(
+  () => activeLevelIndex.value >= 0 && activeLevelIndex.value < levels.value.length - 1,
+);
+
+function moveActiveLevelUp() {
+  moveActiveLevel(-1);
+}
+
+function moveActiveLevelDown() {
+  moveActiveLevel(1);
+}
+
+function moveActiveLevel(direction) {
+  const fromIndex = activeLevelIndex.value;
+  const toIndex = fromIndex + direction;
+  if (toIndex < 0 || toIndex >= levels.value.length) {
+    return;
+  }
+  const [level] = document.value.levels.splice(fromIndex, 1);
+  document.value.levels.splice(toIndex, 0, level);
+  activeLevelIndex.value = toIndex;
+  activeFrameIndex.value = Math.min(activeFrameIndex.value, Math.max(0, frames.value.length - 1));
+  ensureActiveFrame();
+  syncSelectedObject();
+  scheduleMatrixCacheWarmup(activeFrameIndex.value);
+  statusMessage.value = direction < 0 ? "关卡已前移" : "关卡已后移";
+}
+
 function addFrame() {
   const level = activeLevel.value;
   if (!level) {
@@ -826,6 +1140,9 @@ function deleteCurrentFrame() {
   if (!level?.frameList?.length) {
     return;
   }
+  if (!confirmDestructiveAction(`确定删除第 ${activeFrameIndex.value + 1} 帧吗？`)) {
+    return;
+  }
   level.frameList.splice(activeFrameIndex.value, 1);
   resetMatrixFrameCache();
   if (!level.frameList.length) {
@@ -836,16 +1153,8 @@ function deleteCurrentFrame() {
   scheduleMatrixCacheWarmup(activeFrameIndex.value);
 }
 
-function deleteAllFrames() {
-  const level = activeLevel.value;
-  if (!level) {
-    return;
-  }
-  level.frameList = [createBlankFrame()];
-  resetMatrixFrameCache();
-  activeFrameIndex.value = 0;
-  syncSelectedObject();
-  scheduleMatrixCacheWarmup(0);
+function confirmDestructiveAction(message) {
+  return window.confirm(message);
 }
 
 function applyCurrentRepeatTimesToAllFrames() {
@@ -885,9 +1194,8 @@ function handleCellClick(x, y) {
   }
   const object = createMatrixObject(x, y, selectedColor.value, frame);
   frame.matrix.push(object);
-  invalidateMatrixFrame(frame);
+  patchMatrixFrame(frame, object, "add");
   selectedObjectId.value = object.id;
-  queueMatrixBasePatch(getObjectCells(object));
   statusMessage.value = isRealCell(x, y) ? "已创建单格对象" : "已创建虚拟单格对象";
 }
 
@@ -911,9 +1219,8 @@ function handleCellRangeCreate(payload) {
     points: cells.map((cell) => [cell.x - anchorX, cell.y - anchorY]),
   };
   frame.matrix.push(object);
-  invalidateMatrixFrame(frame);
+  patchMatrixFrame(frame, object, "add");
   selectedObjectId.value = object.id;
-  queueMatrixBasePatch(getObjectCells(object));
   statusMessage.value = hasOverlap ? "已创建重叠多格对象" : "已创建多格对象";
 }
 
@@ -957,11 +1264,14 @@ function selectObject(id) {
 }
 
 function applyBrushColorToSelectedObject() {
-  if (!selectedObject.value) {
+  const object = selectedObject.value;
+  if (!object) {
     return;
   }
-  selectedObject.value.color = selectedColor.value;
-  invalidateMatrixFrame();
+  object.color = selectedColor.value;
+  const frame = ensureActiveFrame();
+  patchMatrixFrame(frame, object, "remove");
+  patchMatrixFrame(frame, object, "add");
 }
 
 function deleteSelectedObject() {
@@ -970,8 +1280,11 @@ function deleteSelectedObject() {
   if (index < 0) {
     return;
   }
-  frame.matrix.splice(index, 1);
-  invalidateMatrixFrame(frame);
+  if (!confirmDestructiveAction("确定删除当前选中的对象吗？")) {
+    return;
+  }
+  const [removed] = frame.matrix.splice(index, 1);
+  patchMatrixFrame(frame, removed, "remove");
   selectedObjectId.value = "";
   stopSelectionMode();
   stopAnchorEdit();
@@ -1084,7 +1397,21 @@ function copyCurrentFrameToPreviousFrame() {
 }
 
 function copyCurrentFrameToNextFrame() {
-  copyCurrentFrameToFrame(activeFrameIndex.value + 1);
+  const level = activeLevel.value;
+  if (!level) {
+    return;
+  }
+  const targetIndex = activeFrameIndex.value + 1;
+  const sourceFrame = ensureActiveFrame();
+  let targetFrame = level.frameList[targetIndex];
+  if (!targetFrame) {
+    targetFrame = createBlankFrame();
+    level.frameList.splice(targetIndex, 0, targetFrame);
+  }
+  replaceFrameObjects(sourceFrame, targetFrame);
+  invalidateMatrixFrame(targetFrame);
+  selectFrame(targetIndex);
+  statusMessage.value = `当前帧已复制到第 ${targetIndex + 1} 帧`;
 }
 
 function copyCurrentFrameToAllFrames() {
@@ -1678,8 +2005,12 @@ function formatRuntimeSummary(value) {
 
 <template>
   <div ref="fitViewportRef" class="simple-editor-fit-viewport">
-    <div class="simple-editor-fit-shell" :style="editorFitShellStyle">
-      <section ref="fitContentRef" class="workspace simple-editor-workspace" :style="editorFitContentStyle">
+    <div class="simple-editor-fit-shell" :class="{ ready: editorFitReady }" :style="editorFitShellStyle">
+      <section
+        ref="fitContentRef"
+        class="workspace simple-editor-workspace simple-editor-fit-content"
+        :style="editorFitContentStyle"
+      >
     <div class="editor-topbar">
       <button class="soft-button editor-back-button" type="button" @click="$emit('back')">返回列表</button>
       <div v-if="document" class="sequence-block frame-sequence-header">
@@ -1739,7 +2070,6 @@ function formatRuntimeSummary(value) {
               type="button"
               aria-label="复制当前帧到后一帧"
               data-tip="复制当前帧到后一帧"
-              :disabled="activeFrameIndex >= frames.length - 1"
               @click="copyCurrentFrameToNextFrame"
             >
               N
@@ -1763,15 +2093,6 @@ function formatRuntimeSummary(value) {
               @click="deleteCurrentFrame"
             >
               -
-            </button>
-            <button
-              class="icon-add-button icon-danger-button"
-              type="button"
-              aria-label="删除所有帧"
-              data-tip="删除所有帧"
-              @click="deleteAllFrames"
-            >
-              *
             </button>
           </div>
         </div>
@@ -1825,6 +2146,28 @@ function formatRuntimeSummary(value) {
           <button class="icon-add-button" type="button" aria-label="添加关卡" title="添加关卡" @click="addLevel">
             +
           </button>
+          <div class="level-reorder-actions" aria-label="调整关卡顺序">
+            <button
+              class="icon-add-button"
+              type="button"
+              aria-label="关卡前移"
+              data-tip="关卡前移"
+              :disabled="!canMoveActiveLevelUp"
+              @click="moveActiveLevelUp"
+            >
+              ↑
+            </button>
+            <button
+              class="icon-add-button"
+              type="button"
+              aria-label="关卡后移"
+              data-tip="关卡后移"
+              :disabled="!canMoveActiveLevelDown"
+              @click="moveActiveLevelDown"
+            >
+              ↓
+            </button>
+          </div>
           <div class="sequence-list">
             <button
               v-for="(level, index) in levels"

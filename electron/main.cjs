@@ -46,6 +46,7 @@ let backendBaseUrl = process.env.LED_BACKEND_URL || 'http://127.0.0.1:8080'
 let runtimeStateStreamUrl = process.env.LED_RUNTIME_STATE_URL || defaultRuntimeStateStreamUrl(backendBaseUrl)
 let latestFrame = null
 let tcpServer = null
+const frameSockets = new Set()
 let runtimeStateSocket = null
 let runtimeStateReconnectTimer = null
 let runtimeStateStreamStopped = false
@@ -93,8 +94,8 @@ function resolveWindowBounds({ targetWidth, targetHeight, minWidth, minHeight })
   const availWidth = Math.max(0, work.width)
   const availHeight = Math.max(0, work.height)
 
-  const width = Math.max(minWidth, Math.min(targetWidth, availWidth))
-  const height = Math.max(minHeight, Math.min(targetHeight, availHeight))
+  const width = availWidth > 0 ? Math.min(targetWidth, availWidth) : targetWidth
+  const height = availHeight > 0 ? Math.min(targetHeight, availHeight) : targetHeight
   const x = work.x + Math.max(0, Math.floor((availWidth - width) / 2))
   const y = work.y + Math.max(0, Math.floor((availHeight - height) / 2))
 
@@ -103,9 +104,34 @@ function resolveWindowBounds({ targetWidth, targetHeight, minWidth, minHeight })
     height,
     x,
     y,
-    minWidth: Math.min(minWidth, availWidth || minWidth),
-    minHeight: Math.min(minHeight, availHeight || minHeight),
+    minWidth: Math.min(minWidth, width),
+    minHeight: Math.min(minHeight, height),
   }
+}
+
+function logWindowGeometry(window, label) {
+  if (!window || window.isDestroyed()) {
+    return
+  }
+  const bounds = window.getBounds()
+  const contentBounds = window.getContentBounds()
+  const display = screen.getDisplayMatching(bounds)
+  const displays = screen
+    .getAllDisplays()
+    .map(
+      (item) =>
+        `${item.id}:bounds=${item.bounds.x},${item.bounds.y},${item.bounds.width}x${item.bounds.height},` +
+        `workArea=${item.workArea.x},${item.workArea.y},${item.workArea.width}x${item.workArea.height},` +
+        `scale=${item.scaleFactor}`,
+    )
+    .join('|')
+  appendStartupLog(
+    `${label}: diagnostic=layout-v2; appVersion=${app.getVersion()}; execPath=${process.execPath}; ` +
+      `bounds=${bounds.x},${bounds.y},${bounds.width}x${bounds.height}; ` +
+      `contentBounds=${contentBounds.x},${contentBounds.y},${contentBounds.width}x${contentBounds.height}; ` +
+      `workArea=${display.workArea.x},${display.workArea.y},${display.workArea.width}x${display.workArea.height}; ` +
+      `scaleFactor=${display.scaleFactor}; zoomFactor=${window.webContents.getZoomFactor()}; displays=[${displays}]`,
+  )
 }
 
 function createWindow() {
@@ -123,12 +149,11 @@ function createWindow() {
     minHeight: bounds.minHeight,
     x: bounds.x,
     y: bounds.y,
-    // width/height then describe the page area (what fit-viewport measures),
-    // removing the ~30px Windows frame gap that previously clipped the right edge.
-    useContentSize: true,
-    center: true,
     // Start hidden, maximize, then show on ready-to-show so the app opens maximized
     // without a small-then-maximized flicker. The bounds above become the restore size.
+    // NOTE: do NOT combine maximize() with useContentSize — on Windows that inflates the
+    // reported content area (100vh/clientHeight) beyond the visible work area, which makes
+    // the simple editor's fit-scaling overflow bottom-right and clip the right edge.
     show: false,
     backgroundColor: '#0f1115',
     webPreferences: {
@@ -141,8 +166,11 @@ function createWindow() {
     },
   })
   mainWindow.setAutoHideMenuBar(true)
+  logWindowGeometry(mainWindow, 'main-window-created')
+  mainWindow.once('maximize', () => logWindowGeometry(mainWindow, 'main-window-maximized'))
   mainWindow.maximize()
   mainWindow.once('ready-to-show', () => {
+    logWindowGeometry(mainWindow, 'main-window-ready')
     mainWindow.show()
   })
 
@@ -213,10 +241,20 @@ function startFrameServer() {
 
   tcpServer = nodeNet.createServer((socket) => {
     let buffer = Buffer.alloc(0)
+    frameSockets.add(socket)
 
     socket.on('data', (chunk) => {
       buffer = Buffer.concat([buffer, chunk])
       buffer = parseFrames(buffer)
+    })
+    socket.on('error', (error) => {
+      const code = error && error.code
+      if (code !== 'ECONNRESET' && code !== 'ECONNABORTED') {
+        console.warn(`LED debug TCP socket error: ${error.message || String(error)}`)
+      }
+    })
+    socket.on('close', () => {
+      frameSockets.delete(socket)
     })
   })
 
@@ -226,6 +264,23 @@ function startFrameServer() {
 
   tcpServer.listen(framePort, '127.0.0.1', () => {
     console.log(`LED debug TCP server listening on 127.0.0.1:${framePort}`)
+  })
+}
+
+function stopFrameServer() {
+  for (const socket of frameSockets) {
+    socket.destroy()
+  }
+  frameSockets.clear()
+  if (!tcpServer) {
+    return
+  }
+  const server = tcpServer
+  tcpServer = null
+  server.close((error) => {
+    if (error && error.code !== 'ERR_SERVER_NOT_RUNNING') {
+      console.warn(`Close LED debug TCP server failed: ${error.message || String(error)}`)
+    }
   })
 }
 
@@ -873,6 +928,16 @@ ipcMain.handle('game-editor:save', (_event, gameId, document) =>
 ipcMain.handle('spirit:list', () => backendRequest('/spirit/simpleListSpirits'))
 ipcMain.handle('media:list', () => listMediaLibrary())
 ipcMain.handle('media:get-preview-url', (_event, relativePath) => getMediaPreviewUrl(relativePath))
+ipcMain.on('diagnostic:editor-layout', (event, snapshot) => {
+  if (!mainWindow || mainWindow.isDestroyed() || event.sender !== mainWindow.webContents) {
+    return
+  }
+  try {
+    appendStartupLog(`editor-layout: ${JSON.stringify(snapshot).slice(0, 12000)}`)
+  } catch (_error) {
+    appendStartupLog('editor-layout: unable to serialize snapshot')
+  }
+})
 
 app.whenReady()
   .then(async () => {
@@ -898,8 +963,6 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', () => {
   stopRuntimeStateStream()
-  if (tcpServer) {
-    tcpServer.close()
-  }
+  stopFrameServer()
   stopEmbeddedBackend()
 })

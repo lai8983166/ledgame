@@ -28,17 +28,27 @@ button {
 
 .app-shell {
   display: grid;
-  grid-template-rows: auto 1fr;
-  min-height: 100vh;
+  grid-template-rows: auto minmax(0, 1fr);
+  height: 100vh;
+  min-height: 0;
   padding: clamp(18px, 3vh, 42px);
+  overflow: hidden;
   background:
     radial-gradient(circle at 18% 16%, rgba(255, 255, 255, 0.76), transparent 30%),
     linear-gradient(145deg, #f4f6f9 0%, #e8edf3 100%);
 }
 
+.app-shell > .workspace {
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  scrollbar-gutter: stable;
+}
+
 .app-shell:has(.simple-editor-fit-viewport) {
   height: 100vh;
   min-height: 0;
+  grid-template-rows: auto minmax(0, 1fr);
   overflow: hidden;
 }
 
@@ -777,6 +787,7 @@ button:disabled {
   grid-template-rows: auto auto auto minmax(0, 1fr);
   width: 100%;
   height: 100%;
+  min-width: 0;
   min-height: 0;
   margin: 0;
   padding-top: 24px;
@@ -785,22 +796,38 @@ button:disabled {
 }
 
 .simple-editor-fit-viewport {
-  display: grid;
+  position: relative;
+  display: block;
   width: 100%;
   height: 100%;
+  min-width: 0;
   min-height: 0;
-  place-items: start center;
-  overflow: hidden;
+  padding: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable both-edges;
 }
 
 .simple-editor-fit-shell {
   position: relative;
+  display: flex;
+  align-items: flex-start;
+  justify-content: safe center;
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 24px;
   min-width: 0;
   min-height: 0;
   overflow: visible;
+  visibility: hidden;
+}
+
+.simple-editor-fit-shell.ready {
+  visibility: visible;
 }
 
 .simple-editor-fit-content {
+  flex: 0 0 auto;
   transform-origin: top left;
 }
 
@@ -866,7 +893,7 @@ button:disabled {
 
 .editor-left {
   align-content: start;
-  overflow-y: auto;
+  overflow: visible;
   overscroll-behavior: contain;
   min-height: 0;
 }
@@ -895,7 +922,7 @@ button:disabled {
 .editor-right {
   align-content: start;
   grid-template-rows: auto minmax(0, 1fr);
-  overflow-y: auto;
+  overflow: visible;
   overscroll-behavior: contain;
   min-height: 0;
 }
@@ -1184,10 +1211,21 @@ button:disabled {
 
 .level-sequence-row {
   display: grid;
-  grid-template-columns: 36px minmax(0, 1fr);
+  grid-template-columns: 36px auto minmax(0, 1fr);
   align-items: start;
   gap: 8px;
   min-width: 0;
+}
+
+.level-reorder-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.level-reorder-actions .icon-add-button {
+  width: 32px;
+  min-width: 32px;
+  padding: 0;
 }
 
 .level-sequence-row .sequence-list {
@@ -1349,14 +1387,11 @@ button:disabled {
   place-items: center;
   padding: 18px;
   border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 18px;
-  background:
-    radial-gradient(circle at 18% 14%, rgba(91, 107, 128, 0.28), transparent 28%),
-    linear-gradient(145deg, #1f2731, #141a22);
+  border-radius: 10px;
+  background: #000;
   box-shadow:
-    inset 10px 10px 22px rgba(4, 7, 10, 0.52),
-    inset -10px -10px 22px rgba(71, 82, 96, 0.24),
-    10px 10px 20px rgba(178, 187, 201, 0.24);
+    inset 0 0 0 1px rgba(255, 255, 255, 0.03),
+    8px 8px 18px rgba(178, 187, 201, 0.18);
 }
 
 @media (min-width: 1181px) {
@@ -2249,11 +2284,11 @@ button:disabled {
   }
 }
 
-.simple-editor-fit-content .simple-editor-workspace {
+.simple-editor-fit-content.simple-editor-workspace {
   display: grid;
   grid-template-rows: auto auto auto minmax(0, 1fr);
   height: 100%;
-  overflow: hidden;
+  overflow: visible;
   padding-top: 24px;
   padding-bottom: 6px;
 }
@@ -2262,7 +2297,7 @@ button:disabled {
   grid-template-columns: minmax(200px, 2fr) minmax(780px, 8fr) minmax(560px, 4fr);
   grid-row: 4;
   height: 100%;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .simple-editor-fit-content .editor-right-main {

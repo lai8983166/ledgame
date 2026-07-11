@@ -53,6 +53,11 @@ let pendingBaseDrawMode = "full";
 let pendingBasePatchCells = [];
 let appliedBasePatchVersion = 0;
 let lastGeometrySignature = "";
+// Offscreen cache of the empty grid (all cells drawn as-if-empty: bg fill + grid stroke).
+// Keyed by createGeometrySignature(); rebuilt only when cellSize/gap/cols/rows change, so
+// full redraws (e.g. frame switches) become one drawImage + O(objects) instead of O(cells).
+let emptyGridCanvas = null;
+let emptyGridSignature = "";
 
 const stride = computed(() => props.cellSize + props.gapSize);
 const canvasWidth = computed(() =>
@@ -78,6 +83,8 @@ onBeforeUnmount(() => {
   if (overlayAnimationFrame) {
     window.cancelAnimationFrame(overlayAnimationFrame);
   }
+  emptyGridCanvas = null;
+  emptyGridSignature = "";
 });
 
 watch(
@@ -87,6 +94,7 @@ watch(
     props.rowCount,
     props.cellSize,
     props.gapSize,
+    props.basePatchVersion,
   ],
   () => {
     const request = resolveBaseDrawMode();
@@ -146,8 +154,17 @@ function drawBaseCanvas() {
   const height = canvasHeight.value;
   const context = prepareCanvas(canvas, width, height);
   context.clearRect(0, 0, width, height);
+  // Blit the cached empty grid (built once per geometry change), then draw only the
+  // occupied cells on top — O(objects) instead of redrawing every (mostly empty) cell.
+  const background = prepareEmptyGridBackground();
+  if (background) {
+    context.drawImage(background, 0, 0, width, height);
+  }
   for (let index = 0; index < props.cells.length; index += 1) {
-    drawCell(context, props.cells[index], index);
+    const cell = props.cells[index];
+    if (cell && cell.classes && cell.classes["object-cell"]) {
+      drawCellOverlay(context, cell, index);
+    }
   }
   lastGeometrySignature = createGeometrySignature();
   appliedBasePatchVersion = props.basePatchVersion;
@@ -213,7 +230,38 @@ function prepareCanvas(canvas, width, height) {
   return context;
 }
 
-function drawCell(context, cell, index) {
+function drawEmptyCell(context, index) {
+  const columnIndex = index % props.columnCount;
+  const rowIndex = Math.floor(index / props.columnCount);
+  const left = columnIndex * stride.value;
+  const top = rowIndex * stride.value;
+  const size = props.cellSize;
+  const cell = props.cells[index];
+  const classes = cell?.classes || {};
+  const realCell = Boolean(classes["real-cell"]);
+  const virtualCell = Boolean(classes["virtual-cell"]);
+
+  context.globalAlpha = virtualCell ? 0.78 : 1;
+  context.fillStyle = "#000000";
+  context.fillRect(left, top, size, size);
+
+  context.globalAlpha = 1;
+  context.lineWidth = 1;
+  context.setLineDash(virtualCell ? [3, 2] : []);
+  context.strokeStyle = realCell
+    ? "rgba(190, 205, 220, 0.28)"
+    : "rgba(100, 110, 124, 0.34)";
+  context.strokeRect(left + 0.5, top + 0.5, Math.max(0, size - 1), Math.max(0, size - 1));
+  context.stroke();
+  context.setLineDash([]);
+
+  if (realCell) {
+    context.strokeStyle = "rgba(93, 121, 151, 0.12)";
+    context.strokeRect(left - 0.5, top - 0.5, size + 1, size + 1);
+  }
+}
+
+function drawCellOverlay(context, cell, index) {
   const columnIndex = index % props.columnCount;
   const rowIndex = Math.floor(index / props.columnCount);
   const left = columnIndex * stride.value;
@@ -222,20 +270,24 @@ function drawCell(context, cell, index) {
   const classes = cell.classes || {};
   const realCell = Boolean(classes["real-cell"]);
   const virtualCell = Boolean(classes["virtual-cell"]);
+  const objectCell = Boolean(classes["object-cell"]);
   const overlapCell = Boolean(classes["overlap-cell"]);
 
-  context.globalAlpha = virtualCell && !classes["object-cell"] ? 0.78 : 1;
-  context.fillStyle = cell.color || (realCell ? "#303b49" : "#101821");
-  drawRoundedRect(context, left, top, size, size, Math.min(4, size / 4));
-  context.fill();
-
+  // Opaque object fill covers the empty-grid background for this cell.
   context.globalAlpha = 1;
-  context.lineWidth = 1;
+  context.fillStyle = cell.color || "#000000";
+  context.fillRect(left, top, size, size);
+
+  // Redraw the grid stroke ON TOP of the object fill to match the non-cached look
+  // (drawCell originally strokes after filling).
+  context.lineWidth = objectCell ? 1.25 : 1;
   context.setLineDash(virtualCell ? [3, 2] : []);
-  context.strokeStyle = realCell
-    ? "rgba(210, 225, 244, 0.24)"
-    : "rgba(143, 158, 176, 0.2)";
-  drawRoundedRect(context, left + 0.5, top + 0.5, size - 1, size - 1, Math.min(4, size / 4));
+  context.strokeStyle = objectCell
+    ? "rgba(0, 0, 0, 0.84)"
+    : realCell
+      ? "rgba(190, 205, 220, 0.34)"
+      : "rgba(100, 110, 124, 0.42)";
+  context.strokeRect(left + 0.5, top + 0.5, Math.max(0, size - 1), Math.max(0, size - 1));
   context.stroke();
   context.setLineDash([]);
 
@@ -247,7 +299,41 @@ function drawCell(context, cell, index) {
   if (overlapCell) {
     drawOverlapIndicator(context, left, top, size, cell.overlapCount);
   }
+}
 
+// Full single-cell repaint (used by the patch path after clearing a cell region):
+// empty background + object overlay if the cell is occupied.
+function drawCell(context, cell, index) {
+  drawEmptyCell(context, index);
+  if (cell?.classes?.["object-cell"]) {
+    drawCellOverlay(context, cell, index);
+  }
+}
+
+function prepareEmptyGridBackground() {
+  const width = canvasWidth.value;
+  const height = canvasHeight.value;
+  if (!width || !height) {
+    return null;
+  }
+  const signature = createGeometrySignature();
+  if (emptyGridCanvas && emptyGridSignature === signature) {
+    return emptyGridCanvas;
+  }
+  const ratio = window.devicePixelRatio || 1;
+  const pixelWidth = Math.max(1, Math.round(width * ratio));
+  const pixelHeight = Math.max(1, Math.round(height * ratio));
+  const canvas = document.createElement("canvas");
+  canvas.width = pixelWidth;
+  canvas.height = pixelHeight;
+  const context = canvas.getContext("2d");
+  context.setTransform(ratio, 0, 0, ratio, 0, 0);
+  for (let index = 0; index < props.cells.length; index += 1) {
+    drawEmptyCell(context, index);
+  }
+  emptyGridCanvas = canvas;
+  emptyGridSignature = signature;
+  return canvas;
 }
 
 function drawOverlapIndicator(context, left, top, size, overlapCount) {
@@ -353,12 +439,26 @@ function handleContextMenu(event) {
 
 function updateHoverCell(cell) {
   const nextKey = cell?.key || "";
-  updateCanvasTitle(cell?.title || "矩阵编辑区");
+  updateCanvasTitle(buildCellTitle(cell));
   if (nextKey === (hoverCell?.key || "")) {
     return;
   }
   hoverCell = cell || null;
   scheduleOverlayDraw();
+}
+
+function buildCellTitle(cell) {
+  if (!cell) {
+    return "矩阵编辑区";
+  }
+  const parts = [`x ${cell.x}`, `y ${cell.y}`];
+  if (cell.objectId) {
+    parts.push(cell.objectId);
+  }
+  if (cell.overlapCount > 1) {
+    parts.push(`重叠 ${cell.overlapCount} 层`);
+  }
+  return parts.join(", ");
 }
 
 function clearHover() {

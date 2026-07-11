@@ -16,6 +16,7 @@ contextBridge.exposeInMainWorld('ledGame', {
   getGameEditor: (gameId) => ipcRenderer.invoke('game-editor:get', gameId),
   validateGameEditor: (document) => ipcRenderer.invoke('game-editor:validate', document),
   saveGameEditor: (gameId, document) => ipcRenderer.invoke('game-editor:save', gameId, document),
+  reportEditorLayout: (snapshot) => ipcRenderer.send('diagnostic:editor-layout', snapshot),
   latestFrame: () => ipcRenderer.invoke('frame:latest'),
   onLedFrame: (callback) => {
     const listener = (_event, frame) => callback(frame)
