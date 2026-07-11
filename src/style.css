@@ -1078,15 +1078,22 @@ button:disabled {
 }
 
 .frame-icon-actions {
+  position: relative;
   display: grid;
   grid-auto-flow: column;
   grid-template-rows: repeat(2, 36px);
   grid-auto-columns: 36px;
   gap: 8px;
+  overflow: visible;
 }
 
 .frame-icon-actions .icon-add-button {
   position: relative;
+}
+
+.frame-icon-actions .icon-add-button:hover,
+.frame-icon-actions .icon-add-button:focus-visible {
+  z-index: 60;
 }
 
 .frame-icon-actions .icon-add-button::after {
@@ -1424,12 +1431,22 @@ button:disabled {
 }
 
 .matrix-base-canvas {
-  position: relative;
+  position: absolute;
 }
 
 .matrix-overlay-canvas {
   position: absolute;
   cursor: crosshair;
+  touch-action: none;
+  user-select: none;
+}
+
+.matrix-overlay-canvas.matrix-object-drag-enabled {
+  cursor: grab;
+}
+
+.matrix-overlay-canvas.matrix-object-drag-enabled:active {
+  cursor: grabbing;
 }
 
 .matrix-cell {
@@ -1657,6 +1674,11 @@ button:disabled {
   font-size: 18px;
   font-weight: 800;
   line-height: 1;
+}
+
+.object-actions .color-copy-button {
+  min-height: 34px;
+  font-size: 11px;
 }
 
 .object-list {

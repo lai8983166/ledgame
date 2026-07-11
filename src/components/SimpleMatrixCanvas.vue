@@ -26,6 +26,18 @@ const props = defineProps({
     type: Boolean,
     default: true,
   },
+  objectDragEnabled: {
+    type: Boolean,
+    default: false,
+  },
+  outsideRangeCreateEnabled: {
+    type: Boolean,
+    default: false,
+  },
+  outsideRangePadding: {
+    type: Number,
+    default: 2,
+  },
   basePatchCells: {
     type: Array,
     default: () => [],
@@ -40,7 +52,15 @@ const props = defineProps({
   },
 });
 
-const emit = defineEmits(["cell-click", "cell-range-create", "matrix-contextmenu"]);
+const emit = defineEmits([
+  "cell-click",
+  "cell-range-create",
+  "object-drag-start",
+  "object-drag",
+  "object-drag-end",
+  "cell-hover",
+  "matrix-contextmenu",
+]);
 
 const baseCanvasRef = ref(null);
 const overlayCanvasRef = ref(null);
@@ -66,9 +86,25 @@ const canvasWidth = computed(() =>
 const canvasHeight = computed(() =>
   props.rowCount ? props.rowCount * props.cellSize + Math.max(0, props.rowCount - 1) * props.gapSize : 0,
 );
-const canvasStyle = computed(() => ({
+const outsidePaddingCells = computed(() =>
+  props.outsideRangeCreateEnabled ? Math.max(0, Math.floor(props.outsideRangePadding)) : 0,
+);
+const outsidePaddingPixels = computed(() => outsidePaddingCells.value * stride.value);
+const interactionCanvasWidth = computed(() => canvasWidth.value + outsidePaddingPixels.value * 2);
+const interactionCanvasHeight = computed(() => canvasHeight.value + outsidePaddingPixels.value * 2);
+const wrapperStyle = computed(() => ({
+  width: `${interactionCanvasWidth.value}px`,
+  height: `${interactionCanvasHeight.value}px`,
+}));
+const baseCanvasStyle = computed(() => ({
   width: `${canvasWidth.value}px`,
   height: `${canvasHeight.value}px`,
+  left: `${outsidePaddingPixels.value}px`,
+  top: `${outsidePaddingPixels.value}px`,
+}));
+const overlayCanvasStyle = computed(() => ({
+  width: `${interactionCanvasWidth.value}px`,
+  height: `${interactionCanvasHeight.value}px`,
 }));
 
 onMounted(() => {
@@ -105,8 +141,20 @@ watch(
 );
 
 watch(
-  () => [props.rangeCreateEnabled, props.overlayHighlights],
-  scheduleOverlayDraw,
+  () => [
+    props.rangeCreateEnabled,
+    props.objectDragEnabled,
+    props.outsideRangeCreateEnabled,
+    props.outsideRangePadding,
+    props.overlayHighlights,
+  ],
+  () => {
+    if (!props.rangeCreateEnabled && !props.objectDragEnabled) {
+      dragStartCell = null;
+      dragCurrentCell = null;
+    }
+    scheduleOverlayDraw();
+  },
   { flush: "post" },
 );
 
@@ -187,7 +235,7 @@ function drawBasePatch(patchCells) {
     if (!renderCell) {
       continue;
     }
-    const position = getCellPosition(renderCell);
+    const position = getGridCellPosition(renderCell);
     if (!position) {
       continue;
     }
@@ -205,11 +253,11 @@ function drawBasePatch(patchCells) {
 
 function drawOverlayCanvas() {
   const canvas = overlayCanvasRef.value;
-  if (!canvas || !canvasWidth.value || !canvasHeight.value) {
+  if (!canvas || !interactionCanvasWidth.value || !interactionCanvasHeight.value) {
     return;
   }
-  const width = canvasWidth.value;
-  const height = canvasHeight.value;
+  const width = interactionCanvasWidth.value;
+  const height = interactionCanvasHeight.value;
   const context = prepareCanvas(canvas, width, height);
   context.clearRect(0, 0, width, height);
   drawOverlayHighlights(context);
@@ -386,12 +434,29 @@ function handlePointerDown(event) {
   dragStartCell = cell;
   dragCurrentCell = cell;
   updateHoverCell(cell);
+  if (props.objectDragEnabled) {
+    emit("object-drag-start", cell);
+  }
   scheduleOverlayDraw();
 }
 
 function handlePointerMove(event) {
   const cell = getCellFromPointer(event);
   updateHoverCell(cell);
+  if (props.objectDragEnabled && dragStartCell && cell) {
+    event.preventDefault();
+    if (dragCurrentCell?.key === cell.key) {
+      return;
+    }
+    dragCurrentCell = cell;
+    emit("object-drag", {
+      objectId: dragStartCell.objectId || "",
+      start: dragStartCell,
+      current: cell,
+    });
+    scheduleOverlayDraw();
+    return;
+  }
   if (!props.rangeCreateEnabled || !dragStartCell || !cell) {
     return;
   }
@@ -409,9 +474,19 @@ function handlePointerUp(event) {
   overlayCanvasRef.value?.releasePointerCapture?.(event.pointerId);
   const startCell = dragStartCell;
   const endCell = getCellFromPointer(event) || dragCurrentCell || startCell;
+  if (props.objectDragEnabled) {
+    emit("object-drag-end", {
+      objectId: startCell.objectId || "",
+      start: startCell,
+      current: endCell,
+    });
+  }
   dragStartCell = null;
   dragCurrentCell = null;
   scheduleOverlayDraw();
+  if (props.objectDragEnabled) {
+    return;
+  }
   if (!endCell) {
     return;
   }
@@ -427,6 +502,14 @@ function handlePointerUp(event) {
 }
 
 function handlePointerCancel(event) {
+  if (props.objectDragEnabled && dragStartCell) {
+    emit("object-drag-end", {
+      objectId: dragStartCell.objectId || "",
+      start: dragStartCell,
+      current: dragCurrentCell || dragStartCell,
+      cancelled: true,
+    });
+  }
   overlayCanvasRef.value?.releasePointerCapture?.(event.pointerId);
   dragStartCell = null;
   dragCurrentCell = null;
@@ -444,6 +527,7 @@ function updateHoverCell(cell) {
     return;
   }
   hoverCell = cell || null;
+  emit("cell-hover", hoverCell ? { x: hoverCell.x, y: hoverCell.y } : null);
   scheduleOverlayDraw();
 }
 
@@ -466,6 +550,7 @@ function clearHover() {
     return;
   }
   hoverCell = null;
+  emit("cell-hover", null);
   updateCanvasTitle("矩阵编辑区");
   scheduleOverlayDraw();
 }
@@ -483,30 +568,60 @@ function getCellFromPointer(event) {
     return null;
   }
   const bounds = canvas.getBoundingClientRect();
-  const scaleX = canvasWidth.value / bounds.width;
-  const scaleY = canvasHeight.value / bounds.height;
+  const scaleX = interactionCanvasWidth.value / bounds.width;
+  const scaleY = interactionCanvasHeight.value / bounds.height;
   const localX = (event.clientX - bounds.left) * scaleX;
   const localY = (event.clientY - bounds.top) * scaleY;
-  if (localX < 0 || localY < 0 || localX >= canvasWidth.value || localY >= canvasHeight.value) {
-    return null;
-  }
-  const columnIndex = Math.floor(localX / stride.value);
-  const rowIndex = Math.floor(localY / stride.value);
-  const cellLocalX = localX - columnIndex * stride.value;
-  const cellLocalY = localY - rowIndex * stride.value;
   if (
-    columnIndex < 0 ||
-    columnIndex >= props.columnCount ||
-    rowIndex < 0 ||
-    rowIndex >= props.rowCount ||
-    cellLocalX >= props.cellSize ||
-    cellLocalY >= props.cellSize
+    localX < 0 ||
+    localY < 0 ||
+    localX >= interactionCanvasWidth.value ||
+    localY >= interactionCanvasHeight.value
   ) {
     return null;
   }
-  const renderIndex = rowIndex * props.columnCount + columnIndex;
-  const cell = props.cells[renderIndex];
-  return cell ? { ...cell, renderIndex } : null;
+  const gridLocalX = localX - outsidePaddingPixels.value;
+  const gridLocalY = localY - outsidePaddingPixels.value;
+  const columnIndex = Math.floor(gridLocalX / stride.value);
+  const rowIndex = Math.floor(gridLocalY / stride.value);
+  const cellLocalX = gridLocalX - columnIndex * stride.value;
+  const cellLocalY = gridLocalY - rowIndex * stride.value;
+  if (cellLocalX >= props.cellSize || cellLocalY >= props.cellSize) {
+    return null;
+  }
+  const insideGrid =
+    columnIndex >= 0 &&
+    columnIndex < props.columnCount &&
+    rowIndex >= 0 &&
+    rowIndex < props.rowCount;
+  if (insideGrid) {
+    const renderIndex = rowIndex * props.columnCount + columnIndex;
+    const cell = props.cells[renderIndex];
+    return cell
+      ? { ...cell, renderIndex, canvasColumnIndex: columnIndex, canvasRowIndex: rowIndex }
+      : null;
+  }
+  const padding = outsidePaddingCells.value;
+  const insideInteractionPadding =
+    props.outsideRangeCreateEnabled &&
+    columnIndex >= -padding &&
+    columnIndex < props.columnCount + padding &&
+    rowIndex >= -padding &&
+    rowIndex < props.rowCount + padding;
+  if (!insideInteractionPadding) {
+    return null;
+  }
+  const firstCell = props.cells[0];
+  return {
+    key: `outside:${columnIndex}:${rowIndex}`,
+    x: Number(firstCell?.x || 0) + columnIndex,
+    y: Number(firstCell?.y || 0) + rowIndex,
+    objectId: "",
+    overlapCount: 0,
+    canvasColumnIndex: columnIndex,
+    canvasRowIndex: rowIndex,
+    classes: { "virtual-cell": true },
+  };
 }
 
 function resolveBaseDrawMode() {
@@ -534,8 +649,8 @@ function drawDragSelection(context) {
   if (!props.rangeCreateEnabled || !dragStartCell || !dragCurrentCell) {
     return;
   }
-  const startPosition = getCellPosition(dragStartCell);
-  const endPosition = getCellPosition(dragCurrentCell);
+  const startPosition = getOverlayCellPosition(dragStartCell);
+  const endPosition = getOverlayCellPosition(dragCurrentCell);
   if (!startPosition || !endPosition) {
     return;
   }
@@ -557,7 +672,7 @@ function drawHoverOutline(context) {
   if (!hoverCell) {
     return;
   }
-  const position = getCellPosition(hoverCell);
+  const position = getOverlayCellPosition(hoverCell);
   if (!position) {
     return;
   }
@@ -566,18 +681,34 @@ function drawHoverOutline(context) {
 
 function drawOverlayHighlights(context) {
   for (const highlight of props.overlayHighlights || []) {
-    const position = getCellPosition(highlight);
+    const position = getOverlayCellPosition(highlight);
     if (!position) {
       continue;
     }
     if (highlight.type === "anchor") {
       drawAnchorOutline(context, position.left, position.top);
+    } else if (highlight.type === "drag-preview") {
+      drawDragPreview(context, position.left, position.top, highlight.color);
+    } else if (highlight.type === "hover-object") {
+      drawOutline(context, position.left, position.top, props.cellSize, "#71a7d8", 2, 1);
     } else if (highlight.type === "merge") {
       drawOutline(context, position.left, position.top, props.cellSize, "#70d6b3", 2, 1);
     } else {
       drawOutline(context, position.left, position.top, props.cellSize, "#f7d56f", 2, 1);
     }
   }
+}
+
+function drawDragPreview(context, left, top, color) {
+  const size = props.cellSize;
+  context.save();
+  context.globalAlpha = 0.82;
+  context.fillStyle = color || "#ffffff";
+  context.fillRect(left, top, size, size);
+  context.globalAlpha = 1;
+  context.setLineDash([4, 3]);
+  drawOutline(context, left, top, size, "#70d6b3", 2, 1);
+  context.restore();
 }
 
 function drawAnchorOutline(context, left, top) {
@@ -588,7 +719,35 @@ function drawAnchorOutline(context, left, top) {
   context.strokeRect(left + 3, top + 3, Math.max(1, size - 6), Math.max(1, size - 6));
 }
 
-function getCellPosition(cell) {
+function getGridCellPosition(cell) {
+  const indices = getCellGridIndices(cell);
+  if (!indices || indices.columnIndex < 0 || indices.rowIndex < 0) {
+    return null;
+  }
+  return {
+    left: indices.columnIndex * stride.value,
+    top: indices.rowIndex * stride.value,
+  };
+}
+
+function getOverlayCellPosition(cell) {
+  const indices = getCellGridIndices(cell);
+  if (!indices) {
+    return null;
+  }
+  return {
+    left: outsidePaddingPixels.value + indices.columnIndex * stride.value,
+    top: outsidePaddingPixels.value + indices.rowIndex * stride.value,
+  };
+}
+
+function getCellGridIndices(cell) {
+  if (Number.isInteger(cell?.canvasColumnIndex) && Number.isInteger(cell?.canvasRowIndex)) {
+    return {
+      columnIndex: cell.canvasColumnIndex,
+      rowIndex: cell.canvasRowIndex,
+    };
+  }
   const index = Number.isInteger(cell?.renderIndex)
     ? cell.renderIndex
     : props.cells.findIndex((item) =>
@@ -597,11 +756,9 @@ function getCellPosition(cell) {
   if (index < 0) {
     return null;
   }
-  const columnIndex = index % props.columnCount;
-  const rowIndex = Math.floor(index / props.columnCount);
   return {
-    left: columnIndex * stride.value,
-    top: rowIndex * stride.value,
+    columnIndex: index % props.columnCount,
+    rowIndex: Math.floor(index / props.columnCount),
   };
 }
 
@@ -630,17 +787,18 @@ function dedupePatchCells(cells) {
 </script>
 
 <template>
-  <div class="editable-matrix matrix-canvas-wrapper" :style="canvasStyle">
+  <div class="editable-matrix matrix-canvas-wrapper" :style="wrapperStyle">
     <canvas
       ref="baseCanvasRef"
       class="matrix-canvas-surface matrix-base-canvas"
-      :style="canvasStyle"
+      :style="baseCanvasStyle"
       aria-hidden="true"
     ></canvas>
     <canvas
       ref="overlayCanvasRef"
       class="matrix-canvas-surface matrix-overlay-canvas"
-      :style="canvasStyle"
+      :class="{ 'matrix-object-drag-enabled': objectDragEnabled }"
+      :style="overlayCanvasStyle"
       title="矩阵编辑区"
       aria-label="矩阵编辑区"
       @contextmenu.prevent.stop="handleContextMenu"

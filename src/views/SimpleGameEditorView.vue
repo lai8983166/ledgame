@@ -1,5 +1,6 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, toRaw, watch } from "vue";
+import EditorInteractionModeSwitch from "../components/EditorInteractionModeSwitch.vue";
 import SimpleMatrixCanvas from "../components/SimpleMatrixCanvas.vue";
 
 defineEmits(["back"]);
@@ -17,10 +18,12 @@ const document = ref(null);
 const activeLevelIndex = ref(0);
 const activeFrameIndex = ref(0);
 const selectedColor = ref(0);
+const interactionMode = ref("select-move");
 const matrixZoom = ref(1);
 const draggingFrameProgress = ref(false);
 const previewFrameIndex = ref(null);
 const selectedObjectId = ref("");
+const hoveredObjectId = ref("");
 const panoramaMode = ref(false);
 const selectionMode = ref(false);
 const mergeSelectionIds = ref([]);
@@ -59,12 +62,14 @@ const matrixContainerHeight = ref(0);
 let matrixResizeObserver = null;
 const matrixBasePatchVersion = ref(0);
 const matrixBasePatchCells = ref([]);
+const objectDragPreview = ref(null);
 let matrixFrameCache = new WeakMap();
 let frameOccupancyCache = new WeakMap();
 let matrixCacheWarmupHandle = 0;
 let matrixCacheWarmupHandleType = "";
 let matrixCacheWarmupQueue = [];
 const matrixCacheRevision = ref(0);
+let objectDragState = null;
 const MIN_MATRIX_CELL = 8;
 const MAX_MATRIX_CELL = 64;
 const MATRIX_GAP_RATIO = 0;
@@ -134,6 +139,10 @@ const colorOptions = computed(() => [
   { index: 2, label: "Color 2", value: normalizeColor(document.value?.color2, "#ff00ff") },
   { index: 3, label: "Color 3", value: normalizeColor(document.value?.color3, "#ffffff") },
 ]);
+const interactionModeOptions = [
+  { value: "add", label: "新增对象", icon: "+", title: "新增对象：点击空白格或拖拽框选创建对象；按 Q 快速切换" },
+  { value: "select-move", label: "选择/移动", icon: "↖", title: "选择/移动对象：点击对象选中并拖动；按 Q 快速切换" },
+];
 const matrixCells = computed(() => {
   matrixCacheRevision.value;
   const frame = previewFrame.value;
@@ -145,6 +154,18 @@ const matrixOverlayHighlights = computed(() => {
     return [];
   }
   const highlights = [];
+  const hovered = (frame.matrix || []).find((object) => object.id === hoveredObjectId.value);
+  if (hovered && interactionMode.value === "select-move") {
+    for (const cell of getObjectCells(hovered)) {
+      if (!isCellInMatrixRange(cell.x, cell.y)) {
+        continue;
+      }
+      const occupants = occupancyIndex.value.get(createPointKey(cell.x, cell.y)) || [];
+      if (getTopOccupancyEntry(occupants)?.object?.id === hovered.id) {
+        highlights.push({ x: cell.x, y: cell.y, type: "hover-object" });
+      }
+    }
+  }
   const selected = (frame.matrix || []).find((object) => object.id === selectedObjectId.value);
   if (selected) {
     getObjectCells(selected).forEach((cell) => {
@@ -168,12 +189,32 @@ const matrixOverlayHighlights = computed(() => {
   if (anchorHighlight && isCellInMatrixRange(anchorHighlight.x, anchorHighlight.y)) {
     highlights.push(anchorHighlight);
   }
+  const dragPreview = objectDragPreview.value;
+  if (dragPreview?.objectId === selectedObjectId.value) {
+    for (const cell of dragPreview.cells) {
+      if (isCellInMatrixRange(cell.x, cell.y)) {
+        highlights.push({
+          x: cell.x,
+          y: cell.y,
+          type: "drag-preview",
+          color: dragPreview.color,
+        });
+      }
+    }
+  }
   return highlights;
 });
 const runtimeSummary = computed(() => formatRuntimeSummary(runtimeResult.value));
 const frameObjects = computed(() =>
   (activeFrame.value?.matrix || []).map((object, index) => createObjectSummary(object, index)),
 );
+const frameColorObjectCounts = computed(() => {
+  const counts = [0, 0, 0, 0];
+  for (const object of activeFrame.value?.matrix || []) {
+    counts[clampColorIndex(object.color)] += 1;
+  }
+  return counts;
+});
 const selectedObject = computed(() =>
   (activeFrame.value?.matrix || []).find((object) => object.id === selectedObjectId.value) || null,
 );
@@ -184,12 +225,14 @@ const selectedObjectCanMoveUp = computed(
   () => selectedObjectIndex.value >= 0 && selectedObjectIndex.value < (activeFrame.value?.matrix || []).length - 1,
 );
 const selectedObjectCanMoveDown = computed(() => selectedObjectIndex.value > 0);
-const occupancyIndex = computed(() =>
-  activeFrame.value ? getOrCreateFrameOccupancyIndex(activeFrame.value) : new Map(),
-);
-const expandedCellMap = computed(() =>
-  activeFrame.value ? createExpandedCellMap(activeFrame.value) : new Map(),
-);
+const occupancyIndex = computed(() => {
+  matrixCacheRevision.value;
+  return activeFrame.value ? getOrCreateFrameOccupancyIndex(activeFrame.value) : new Map();
+});
+const expandedCellMap = computed(() => {
+  matrixCacheRevision.value;
+  return activeFrame.value ? createExpandedCellMap(activeFrame.value) : new Map();
+});
 
 function createExpandedCellMap(frame) {
   const occupancy = getOrCreateFrameOccupancyIndex(frame);
@@ -318,6 +361,7 @@ async function loadEditor() {
     activeLevelIndex.value = 0;
     activeFrameIndex.value = 0;
     selectedColor.value = 0;
+    interactionMode.value = "select-move";
     selectedObjectId.value = "";
     stopSelectionMode();
     panoramaMode.value = false;
@@ -830,7 +874,7 @@ function invalidateMatrixFrame(frame = activeFrame.value) {
 // instead of wiping the whole frame cache (which forced an O(rows*cols) rebuild).
 // matrixCacheRevision is intentionally NOT bumped, so the matrixCells computed keeps
 // returning the same (mutated) array and only the canvas is told via the patch props.
-function patchMatrixFrame(frame, object, op) {
+function patchMatrixFrame(frame, object, op, { warmup = true } = {}) {
   if (!frame) {
     return;
   }
@@ -919,7 +963,9 @@ function patchMatrixFrame(frame, object, op) {
   cellsEntry.key = createMatrixFrameCacheKey(frame);
   occEntry.key = getMatrixFrameVersion(frame);
   queueMatrixBasePatch(changedPositions);
-  scheduleMatrixCacheWarmup();
+  if (warmup) {
+    scheduleMatrixCacheWarmup();
+  }
 }
 
 function resetMatrixFrameCache() {
@@ -1175,6 +1221,21 @@ function selectColor(index) {
   selectedColor.value = index;
 }
 
+function setInteractionMode(mode) {
+  if (mode !== "add" && mode !== "select-move") {
+    return;
+  }
+  interactionMode.value = mode;
+  objectDragState = null;
+  objectDragPreview.value = null;
+  hoveredObjectId.value = "";
+  stopSelectionMode();
+  stopAnchorEdit();
+  statusMessage.value = mode === "add"
+    ? "新增对象模式：点击空白格或拖拽框选创建对象"
+    : "选择/移动模式：点击对象选中并拖动";
+}
+
 function handleCellClick(x, y) {
   const frame = ensureActiveFrame();
   const existing = expandedCellMap.value.get(createPointKey(x, y));
@@ -1188,8 +1249,20 @@ function handleCellClick(x, y) {
   }
   const topObject = getTopOccupancyEntry(existing?.occupants)?.object;
   if (topObject?.id) {
-    selectObject(topObject.id);
-    statusMessage.value = "已选中对象";
+    if (interactionMode.value === "select-move") {
+      selectObject(topObject.id);
+      statusMessage.value = "已选中对象";
+    } else {
+      statusMessage.value = "该格已有对象，新增模式不会重复创建";
+    }
+    return;
+  }
+  if (interactionMode.value !== "add") {
+    statusMessage.value = "当前没有对象，请切换到新增对象模式";
+    return;
+  }
+  if (!panoramaMode.value && !isRealCell(x, y)) {
+    statusMessage.value = "非全景模式下仅创建 RGB 区域内的格子";
     return;
   }
   const object = createMatrixObject(x, y, selectedColor.value, frame);
@@ -1200,7 +1273,7 @@ function handleCellClick(x, y) {
 }
 
 function handleCellRangeCreate(payload) {
-  if (anchorEditMode.value || selectionMode.value) {
+  if (interactionMode.value !== "add" || anchorEditMode.value || selectionMode.value) {
     return;
   }
   const frame = ensureActiveFrame();
@@ -1209,8 +1282,11 @@ function handleCellRangeCreate(payload) {
     return;
   }
   const hasOverlap = cells.some((cell) => expandedCellMap.value.has(createPointKey(cell.x, cell.y)));
-  const anchorX = toInteger(payload?.anchorX, cells[0].x);
-  const anchorY = toInteger(payload?.anchorY, cells[0].y);
+  const requestedAnchorX = toInteger(payload?.anchorX, cells[0].x);
+  const requestedAnchorY = toInteger(payload?.anchorY, cells[0].y);
+  const anchorInsideRealMatrix = isRealCell(requestedAnchorX, requestedAnchorY);
+  const anchorX = !panoramaMode.value && !anchorInsideRealMatrix ? cells[0].x : requestedAnchorX;
+  const anchorY = !panoramaMode.value && !anchorInsideRealMatrix ? cells[0].y : requestedAnchorY;
   const object = {
     id: createUniqueObjectId(frame, activeFrameIndex.value),
     x: anchorX,
@@ -1222,6 +1298,108 @@ function handleCellRangeCreate(payload) {
   patchMatrixFrame(frame, object, "add");
   selectedObjectId.value = object.id;
   statusMessage.value = hasOverlap ? "已创建重叠多格对象" : "已创建多格对象";
+}
+
+function handleObjectDragStart(cell) {
+  if (interactionMode.value !== "select-move" || selectionMode.value || anchorEditMode.value) {
+    return;
+  }
+  const existing = expandedCellMap.value.get(createPointKey(cell?.x, cell?.y));
+  const selectedEntry = existing?.occupants?.find(
+    (entry) => entry.object?.id === selectedObjectId.value,
+  );
+  const object = selectedEntry?.object || getTopOccupancyEntry(existing?.occupants)?.object;
+  if (!object?.id) {
+    objectDragState = null;
+    objectDragPreview.value = null;
+    return;
+  }
+  selectObject(object.id);
+  objectDragState = {
+    objectId: object.id,
+    startX: toInteger(cell.x, 0),
+    startY: toInteger(cell.y, 0),
+    originX: toInteger(object.x, 0),
+    originY: toInteger(object.y, 0),
+    points: getObjectPoints(object).map(([dx, dy]) => [dx, dy]),
+    color: colorOptions.value[clampColorIndex(object.color)]?.value || "#ffffff",
+    deltaX: 0,
+    deltaY: 0,
+    moved: false,
+  };
+  hoveredObjectId.value = "";
+  objectDragPreview.value = null;
+  statusMessage.value = "已选中对象，可拖动移动";
+}
+
+function handleCellHover(cell) {
+  if (
+    interactionMode.value !== "select-move" ||
+    selectionMode.value ||
+    anchorEditMode.value ||
+    objectDragState ||
+    !cell
+  ) {
+    hoveredObjectId.value = "";
+    return;
+  }
+  const occupants = occupancyIndex.value.get(createPointKey(cell.x, cell.y)) || [];
+  hoveredObjectId.value = getTopOccupancyEntry(occupants)?.object?.id || "";
+}
+
+function handleObjectDrag(payload) {
+  if (!objectDragState || !selectedObject.value) {
+    return;
+  }
+  const currentX = toInteger(payload.current?.x, objectDragState.startX);
+  const currentY = toInteger(payload.current?.y, objectDragState.startY);
+  const deltaX = currentX - objectDragState.startX;
+  const deltaY = currentY - objectDragState.startY;
+  if (deltaX === objectDragState.deltaX && deltaY === objectDragState.deltaY) {
+    return;
+  }
+  objectDragState.deltaX = deltaX;
+  objectDragState.deltaY = deltaY;
+  objectDragState.moved = Boolean(deltaX || deltaY);
+  objectDragPreview.value = objectDragState.moved
+    ? {
+        objectId: objectDragState.objectId,
+        color: objectDragState.color,
+        cells: objectDragState.points.map(([dx, dy]) => ({
+          x: objectDragState.originX + deltaX + dx,
+          y: objectDragState.originY + deltaY + dy,
+        })),
+      }
+    : null;
+}
+
+function handleObjectDragEnd(payload) {
+  if (!objectDragState) {
+    return;
+  }
+  const dragState = objectDragState;
+  objectDragState = null;
+  objectDragPreview.value = null;
+  if (dragState.moved && !payload.cancelled) {
+    const object = selectedObject.value;
+    if (!object || object.id !== dragState.objectId) {
+      return;
+    }
+    const previousX = toInteger(object.x, 0);
+    const previousY = toInteger(object.y, 0);
+    object.x = dragState.originX + dragState.deltaX;
+    object.y = dragState.originY + dragState.deltaY;
+    wrapSelectedObjectInPanorama();
+    invalidateMatrixFrame();
+    if (anchorCandidate.value?.objectId === object.id) {
+      anchorCandidate.value = {
+        ...anchorCandidate.value,
+        x: anchorCandidate.value.x + toInteger(object.x, 0) - previousX,
+        y: anchorCandidate.value.y + toInteger(object.y, 0) - previousY,
+      };
+    }
+    statusMessage.value = "对象已移动";
+  }
 }
 
 function queueMatrixBasePatch(cells) {
@@ -1364,6 +1542,33 @@ function copySelectedObjectToAllFrames() {
     copied += 1;
   });
   statusMessage.value = copied ? `已更新 ${copied} 帧` : "没有可复制的目标帧";
+}
+
+function copyColorObjectsToAllFrames(colorIndex) {
+  const normalizedColor = clampColorIndex(colorIndex);
+  const sourceFrame = ensureActiveFrame();
+  const sourceObjects = (sourceFrame.matrix || []).filter(
+    (object) => clampColorIndex(object.color) === normalizedColor,
+  );
+  if (!sourceObjects.length) {
+    statusMessage.value = `当前帧没有 Color ${normalizedColor} 对象`;
+    return;
+  }
+  let copiedFrames = 0;
+  for (let frameIndex = 0; frameIndex < frames.value.length; frameIndex += 1) {
+    if (frameIndex === activeFrameIndex.value) {
+      continue;
+    }
+    const targetFrame = frames.value[frameIndex];
+    for (const object of sourceObjects) {
+      upsertObjectInFrame(object, targetFrame);
+    }
+    invalidateMatrixFrame(targetFrame);
+    copiedFrames += 1;
+  }
+  statusMessage.value = copiedFrames
+    ? `已将本帧 ${sourceObjects.length} 个 Color ${normalizedColor} 对象复制到 ${copiedFrames} 帧`
+    : "没有可复制的目标帧";
 }
 
 function copySelectedObjectToFrame(frameIndex) {
@@ -1709,6 +1914,13 @@ function getTopOccupancyEntry(occupants) {
   if (!Array.isArray(occupants) || !occupants.length) {
     return null;
   }
+  // Simple runtime treats green (Color 0) as the dominant object. Within the
+  // same color group, the last matrix entry remains the top object.
+  for (let index = occupants.length - 1; index >= 0; index -= 1) {
+    if (Number(occupants[index]?.object?.color) === 0) {
+      return occupants[index];
+    }
+  }
   return occupants[occupants.length - 1];
 }
 
@@ -1855,8 +2067,8 @@ function isCellInMatrixRange(x, y) {
 
 function createAnchorHighlight(frame) {
   const selected = (frame.matrix || []).find((object) => object.id === selectedObjectId.value);
-  if (anchorEditMode.value && selected) {
-    const anchor = anchorCandidate.value || selected;
+  if (selected) {
+    const anchor = anchorEditMode.value ? anchorCandidate.value || selected : selected;
     return {
       x: toInteger(anchor.x, 0),
       y: toInteger(anchor.y, 0),
@@ -1918,6 +2130,9 @@ function cancelZoomFrame() {
 
 function syncSelectedObject() {
   const frame = ensureActiveFrame();
+  objectDragState = null;
+  objectDragPreview.value = null;
+  hoveredObjectId.value = "";
   if (!frame.matrix.some((object) => object.id === selectedObjectId.value)) {
     selectedObjectId.value = "";
   }
@@ -1930,13 +2145,29 @@ function handleGlobalKeydown(event) {
   if (["input", "textarea", "select"].includes(tagName) || event.target?.isContentEditable) {
     return;
   }
+  if (
+    event.key.toLowerCase() === "q" &&
+    !event.repeat &&
+    !event.isComposing &&
+    !event.ctrlKey &&
+    !event.altKey &&
+    !event.shiftKey &&
+    !event.metaKey &&
+    !selectionMode.value &&
+    !anchorEditMode.value &&
+    !objectDragState
+  ) {
+    event.preventDefault();
+    setInteractionMode(interactionMode.value === "add" ? "select-move" : "add");
+    return;
+  }
   const movement = {
     ArrowLeft: [-1, 0],
     ArrowRight: [1, 0],
     ArrowUp: [0, -1],
     ArrowDown: [0, 1],
   }[event.key];
-  if (!movement || !selectedObject.value || selectionMode.value) {
+  if (interactionMode.value !== "select-move" || !movement || !selectedObject.value || selectionMode.value) {
     return;
   }
   event.preventDefault();
@@ -2250,9 +2481,15 @@ function formatRuntimeSummary(value) {
             :base-patch-cells="matrixBasePatchCells"
             :base-patch-version="matrixBasePatchVersion"
             :overlay-highlights="matrixOverlayHighlights"
-            :range-create-enabled="!selectionMode && !anchorEditMode"
+            :range-create-enabled="interactionMode === 'add' && !selectionMode && !anchorEditMode"
+            :object-drag-enabled="interactionMode === 'select-move' && !selectionMode && !anchorEditMode"
+            :outside-range-create-enabled="interactionMode === 'add' && !panoramaMode && !selectionMode && !anchorEditMode"
             @cell-click="handleCellClick"
             @cell-range-create="handleCellRangeCreate"
+            @object-drag-start="handleObjectDragStart"
+            @object-drag="handleObjectDrag"
+            @object-drag-end="handleObjectDragEnd"
+            @cell-hover="handleCellHover"
             @matrix-contextmenu="openContextMenu"
           />
         </div>
@@ -2318,7 +2555,7 @@ function formatRuntimeSummary(value) {
                 </button>
                 <button
                   class="soft-button compact-button"
-                  :disabled="!selectedObject || !panoramaMode"
+                  :disabled="!selectedObject"
                   type="button"
                   @click="startAnchorEdit"
                 >
@@ -2328,7 +2565,7 @@ function formatRuntimeSummary(value) {
                   class="soft-button compact-button layer-symbol-button"
                   :disabled="!selectedObjectCanMoveUp"
                   type="button"
-                  title="层级 +1"
+                  title="层级 +1（绿色对象仍优先）"
                   aria-label="层级加一"
                   @click="moveSelectedObjectLayerUp"
                 >
@@ -2338,7 +2575,7 @@ function formatRuntimeSummary(value) {
                   class="soft-button compact-button layer-symbol-button"
                   :disabled="!selectedObjectCanMoveDown"
                   type="button"
-                  title="层级 -1"
+                  title="层级 -1（绿色对象仍优先）"
                   aria-label="层级减一"
                   @click="moveSelectedObjectLayerDown"
                 >
@@ -2395,6 +2632,33 @@ function formatRuntimeSummary(value) {
                   删除
                 </button>
               </template>
+              <button
+                class="soft-button compact-button color-copy-button"
+                :disabled="frames.length <= 1 || frameColorObjectCounts[0] === 0"
+                type="button"
+                title="复制本帧所有绿色对象到当前关卡所有帧"
+                @click="copyColorObjectsToAllFrames(0)"
+              >
+                绿色到全帧
+              </button>
+              <button
+                class="soft-button compact-button color-copy-button"
+                :disabled="frames.length <= 1 || frameColorObjectCounts[1] === 0"
+                type="button"
+                title="复制本帧所有蓝色对象到当前关卡所有帧"
+                @click="copyColorObjectsToAllFrames(1)"
+              >
+                蓝色到全帧
+              </button>
+              <button
+                class="soft-button compact-button color-copy-button"
+                :disabled="frames.length <= 1 || frameColorObjectCounts[3] === 0"
+                type="button"
+                title="复制本帧所有粉色对象到当前关卡所有帧"
+                @click="copyColorObjectsToAllFrames(3)"
+              >
+                粉色到全帧
+              </button>
             </div>
             <div class="object-list">
               <button
@@ -2408,7 +2672,11 @@ function formatRuntimeSummary(value) {
                 <span class="object-color" :style="{ backgroundColor: colorOptions[object.color]?.value }"></span>
                 <span class="object-main">
                   <strong>{{ object.id }}</strong>
-                  <small>层 {{ object.index + 1 }}/{{ frameObjects.length }} · 基准 {{ object.x }},{{ object.y }} · Color {{ object.color }} · {{ object.occupiedCount }} 格</small>
+                  <small>
+                    层 {{ object.index + 1 }}/{{ frameObjects.length }} · 基准 {{ object.x }},{{ object.y }} ·
+                    Color {{ object.color }}<template v-if="object.color === 0">（绿色优先）</template> ·
+                    {{ object.occupiedCount }} 格
+                  </small>
                 </span>
               </button>
             </div>
@@ -2416,6 +2684,11 @@ function formatRuntimeSummary(value) {
           <div class="editor-side-rail">
             <div class="editor-side-section">
               <h2>画笔</h2>
+              <EditorInteractionModeSwitch
+                :model-value="interactionMode"
+                :options="interactionModeOptions"
+                @update:model-value="setInteractionMode"
+              />
               <div class="palette-options">
                 <button
                   v-for="color in colorOptions"
