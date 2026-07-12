@@ -458,6 +458,12 @@ button:disabled {
   min-width: 96px;
 }
 
+.spirit-heading-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
 .spirit-panel-header {
   display: flex;
   align-items: center;
@@ -594,6 +600,151 @@ button:disabled {
   font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.spirit-preview-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 10px;
+}
+
+.spirit-editor-backdrop {
+  position: fixed;
+  z-index: 1000;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(20, 27, 37, 0.56);
+}
+
+.spirit-editor-dialog {
+  display: grid;
+  grid-template-rows: auto auto minmax(260px, 1fr) auto auto;
+  gap: 16px;
+  width: min(760px, 100%);
+  height: min(760px, 100%);
+  min-height: 0;
+  padding: 20px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.76);
+  border-radius: 8px;
+  outline: none;
+  background: #eef1f5;
+  box-shadow: 0 24px 70px rgba(25, 34, 46, 0.38);
+}
+
+.spirit-editor-dialog.creating {
+  grid-template-rows: auto auto auto minmax(260px, 1fr) auto auto;
+}
+
+.spirit-editor-header,
+.spirit-editor-actions,
+.spirit-editor-size-controls {
+  display: flex;
+  align-items: center;
+}
+
+.spirit-editor-name {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  color: #596574;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.spirit-editor-name input {
+  width: 100%;
+}
+
+.spirit-editor-header,
+.spirit-editor-actions {
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.spirit-editor-header h2,
+.spirit-editor-header p {
+  margin: 0;
+}
+
+.spirit-editor-header h2 {
+  color: #343d4a;
+  font-size: 20px;
+}
+
+.spirit-editor-header p {
+  margin-top: 4px;
+  color: #778392;
+  font-size: 12px;
+}
+
+.spirit-editor-size-controls {
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.spirit-editor-size-controls label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #596574;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.spirit-editor-size-controls input {
+  width: 76px;
+}
+
+.spirit-editor-size-controls > span {
+  margin-left: auto;
+  color: #74808e;
+  font-size: 12px;
+}
+
+.spirit-editor-stage {
+  display: grid;
+  place-items: center;
+  min-width: 0;
+  min-height: 0;
+  padding: 16px;
+  overflow: hidden;
+  border: 1px solid rgba(151, 166, 184, 0.35);
+  background: #dfe5ec;
+  box-shadow: inset 6px 6px 14px rgba(164, 175, 190, 0.32);
+}
+
+.spirit-editor-canvas {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+  cursor: crosshair;
+  touch-action: none;
+}
+
+.spirit-editor-error {
+  margin: 0;
+  color: #a04f59;
+  font-size: 13px;
+}
+
+.spirit-editor-actions {
+  justify-content: flex-end;
+}
+
+@media (max-width: 680px), (max-height: 680px) {
+  .spirit-editor-backdrop {
+    padding: 10px;
+  }
+
+  .spirit-editor-dialog {
+    height: 100%;
+    padding: 14px;
+  }
 }
 
 .spirit-preview-body {

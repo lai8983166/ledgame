@@ -2,6 +2,8 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, toRaw, watch } from "vue";
 import EditorInteractionModeSwitch from "../components/EditorInteractionModeSwitch.vue";
 import SimpleMatrixCanvas from "../components/SimpleMatrixCanvas.vue";
+import { encodeSimpleGifInWorker } from "../lib/encodeSimpleGif.js";
+import { prepareSimpleLevelGif, selectSimpleTopItem } from "../lib/simpleLevelGif.js";
 
 defineEmits(["back"]);
 
@@ -14,6 +16,7 @@ const runtimeErrorMessage = ref("");
 const runtimeResult = ref(null);
 const previewStatusMessage = ref("");
 const validationErrors = ref([]);
+const gifExportProgress = ref("");
 const document = ref(null);
 const activeLevelIndex = ref(0);
 const activeFrameIndex = ref(0);
@@ -685,6 +688,42 @@ async function saveEditor() {
     statusMessage.value = result?.data?.saved ? "保存成功" : "保存完成";
     validationErrors.value = [];
   });
+}
+
+async function exportCurrentLevelGif() {
+  const level = activeLevel.value;
+  if (!level?.frameList?.length || busyAction.value) {
+    return;
+  }
+  busyAction.value = "gif-export";
+  errorMessage.value = "";
+  gifExportProgress.value = "正在准备 GIF...";
+  try {
+    if (!api?.saveGif) {
+      throw new Error("Electron GIF 保存接口不可用");
+    }
+    const prepared = prepareSimpleLevelGif(level, document.value);
+    const bytes = await encodeSimpleGifInWorker(prepared, (completed, total) => {
+      gifExportProgress.value = `正在编码 GIF ${completed}/${total}`;
+    });
+    const levelName = String(level.label || `level-${activeLevelIndex.value + 1}`)
+      .replace(/[\\/:*?"<>|]+/g, "-")
+      .trim();
+    const result = await api.saveGif({
+      bytes,
+      defaultFileName: `${levelName || "simple-level"}.gif`,
+    });
+    if (result?.canceled) {
+      statusMessage.value = "已取消导出 GIF";
+    } else {
+      statusMessage.value = `GIF 已保存：${result?.fileName || "导出完成"}`;
+    }
+  } catch (error) {
+    errorMessage.value = error?.message || "导出 GIF 失败";
+  } finally {
+    gifExportProgress.value = "";
+    busyAction.value = "";
+  }
 }
 
 async function startGame() {
@@ -2006,17 +2045,7 @@ function createOccupancyIndex(objects) {
 }
 
 function getTopOccupancyEntry(occupants) {
-  if (!Array.isArray(occupants) || !occupants.length) {
-    return null;
-  }
-  // Simple runtime treats green (Color 0) as the dominant object. Within the
-  // same color group, the last matrix entry remains the top object.
-  for (let index = occupants.length - 1; index >= 0; index -= 1) {
-    if (Number(occupants[index]?.object?.color) === 0) {
-      return occupants[index];
-    }
-  }
-  return occupants[occupants.length - 1];
+  return selectSimpleTopItem(occupants, (entry) => entry?.object?.color);
 }
 
 function createCellTitle(x, y, occupants) {
@@ -2877,6 +2906,15 @@ function formatRuntimeSummary(value) {
               >
                 保存
               </button>
+              <button
+                class="soft-button runtime-start-button"
+                :disabled="Boolean(busyAction) || !activeLevel?.frameList?.length"
+                type="button"
+                @click="exportCurrentLevelGif"
+              >
+                {{ busyAction === "gif-export" ? "导出中" : "导出 GIF" }}
+              </button>
+              <p v-if="gifExportProgress" class="status-line">{{ gifExportProgress }}</p>
               <p v-if="runtimeStatusMessage" class="status-line">{{ runtimeStatusMessage }}</p>
               <p v-if="previewStatusMessage" class="status-line">{{ previewStatusMessage }}</p>
               <p v-if="runtimeErrorMessage" class="error-line">{{ runtimeErrorMessage }}</p>

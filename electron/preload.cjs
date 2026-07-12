@@ -18,6 +18,7 @@ contextBridge.exposeInMainWorld('ledGame', {
   saveGameEditor: (gameId, document) => ipcRenderer.invoke('game-editor:save', gameId, document),
   exportFrameJson: (payload) => ipcRenderer.invoke('frame:export-json', payload),
   importFrameJson: () => ipcRenderer.invoke('frame:import-json'),
+  saveGif: (payload) => ipcRenderer.invoke('level:save-gif', payload),
   reportEditorLayout: (snapshot) => ipcRenderer.send('diagnostic:editor-layout', snapshot),
   latestFrame: () => ipcRenderer.invoke('frame:latest'),
   onLedFrame: (callback) => {
@@ -39,4 +40,6 @@ contextBridge.exposeInMainWorld('mediaLibrary', {
 
 contextBridge.exposeInMainWorld('spiritLibrary', {
   list: () => ipcRenderer.invoke('spirit:list'),
+  create: (payload) => ipcRenderer.invoke('spirit:create', payload),
+  update: (spiritId, payload) => ipcRenderer.invoke('spirit:update', spiritId, payload),
 })

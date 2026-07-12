@@ -1,5 +1,6 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import SpiritPointEditorDialog from "../components/SpiritPointEditorDialog.vue";
 
 const DEFAULT_PREVIEW_GAP = 2;
 
@@ -8,6 +9,10 @@ const selectedSpiritId = ref("");
 const isLoading = ref(false);
 const errorMessage = ref("");
 const noticeMessage = ref("");
+const editingSpirit = ref(null);
+const creatingSpirit = ref(false);
+const isSavingSpirit = ref(false);
+const editErrorMessage = ref("");
 const previewStageRef = ref(null);
 const previewStageSize = ref({ width: 0, height: 0 });
 let previewResizeObserver = null;
@@ -119,6 +124,72 @@ function selectSpirit(spirit) {
   selectedSpiritId.value = spirit?.id || "";
 }
 
+function openSpiritEditor() {
+  if (!selectedSpirit.value) {
+    return;
+  }
+  editErrorMessage.value = "";
+  creatingSpirit.value = false;
+  editingSpirit.value = { ...selectedSpirit.value };
+}
+
+function openSpiritCreator() {
+  editErrorMessage.value = "";
+  creatingSpirit.value = true;
+  editingSpirit.value = {
+    id: "",
+    name: "",
+    color: 0,
+    width: 16,
+    height: 16,
+    points: "[]",
+    basic: false,
+  };
+}
+
+function closeSpiritEditor() {
+  if (!isSavingSpirit.value) {
+    editingSpirit.value = null;
+    creatingSpirit.value = false;
+    editErrorMessage.value = "";
+  }
+}
+
+async function saveSpirit(payload) {
+  const saveRequest = creatingSpirit.value ? spiritApi.value?.create : spiritApi.value?.update;
+  if (!editingSpirit.value || !saveRequest) {
+    editErrorMessage.value = creatingSpirit.value
+      ? "当前运行环境未提供精灵创建接口"
+      : "当前运行环境未提供精灵更新接口";
+    return;
+  }
+  isSavingSpirit.value = true;
+  editErrorMessage.value = "";
+  try {
+    const result = creatingSpirit.value
+      ? await saveRequest(payload)
+      : await saveRequest(editingSpirit.value.id, payload);
+    const updated = result?.data;
+    if (!updated?.id) {
+      throw new Error("后端未返回更新后的精灵数据");
+    }
+    const index = spirits.value.findIndex((spirit) => spirit.id === updated.id);
+    if (index >= 0) {
+      spirits.value.splice(index, 1, updated);
+    } else {
+      spirits.value.push(updated);
+    }
+    selectedSpiritId.value = updated.id;
+    editingSpirit.value = null;
+    creatingSpirit.value = false;
+    noticeMessage.value = `已${index >= 0 ? "保存" : "新增"} ${spiritName(updated)}`;
+  } catch (error) {
+    editErrorMessage.value = error?.message || "保存精灵失败";
+  } finally {
+    isSavingSpirit.value = false;
+  }
+}
+
 function parsePoints(points) {
   if (!points) {
     return [];
@@ -212,9 +283,12 @@ onBeforeUnmount(() => {
         <h1>精灵库</h1>
         <p>Spirit Library</p>
       </div>
-      <button class="soft-button spirit-refresh-button" type="button" :disabled="isLoading" @click="loadSpirits">
-        {{ isLoading ? "刷新中" : "刷新" }}
-      </button>
+      <div class="spirit-heading-actions">
+        <button class="icon-add-button" type="button" title="新增精灵" @click="openSpiritCreator">+</button>
+        <button class="soft-button spirit-refresh-button" type="button" :disabled="isLoading" @click="loadSpirits">
+          {{ isLoading ? "刷新中" : "刷新" }}
+        </button>
+      </div>
     </div>
 
     <div v-if="isLoading" class="spirit-state-panel">
@@ -258,9 +332,12 @@ onBeforeUnmount(() => {
               <h2>{{ spiritName(selectedSpirit) }}</h2>
               <p>{{ selectedSpirit.id }}</p>
             </div>
-            <span class="spirit-badge" :class="{ basic: selectedSpirit.basic }">
-              {{ selectedSpirit.basic ? "基础" : "自定义" }}
-            </span>
+            <div class="spirit-preview-actions">
+              <span class="spirit-badge" :class="{ basic: selectedSpirit.basic }">
+                {{ selectedSpirit.basic ? "基础" : "自定义" }}
+              </span>
+              <button class="soft-button" type="button" @click="openSpiritEditor">修改</button>
+            </div>
           </div>
 
           <div class="spirit-preview-body">
@@ -308,5 +385,15 @@ onBeforeUnmount(() => {
     </section>
 
     <p v-if="noticeMessage && !errorMessage" class="status-line">{{ noticeMessage }}</p>
+
+    <SpiritPointEditorDialog
+      v-if="editingSpirit"
+      :spirit="editingSpirit"
+      :creating="creatingSpirit"
+      :saving="isSavingSpirit"
+      :error="editErrorMessage"
+      @cancel="closeSpiritEditor"
+      @save="saveSpirit"
+    />
   </section>
 </template>

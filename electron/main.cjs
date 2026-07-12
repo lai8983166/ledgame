@@ -903,6 +903,22 @@ ipcMain.handle('frame:import-json', async () => {
   const content = await fs.readFile(filePath, 'utf8')
   return { canceled: false, filePath, content }
 })
+ipcMain.handle('level:save-gif', async (_event, payload) => {
+  const bytes = payload?.bytes
+  if (!bytes || typeof bytes.byteLength !== 'number' || bytes.byteLength === 0) {
+    throw new Error('GIF 数据为空')
+  }
+  const result = await dialog.showSaveDialog({
+    title: '导出当前关卡 GIF',
+    defaultPath: payload?.defaultFileName || 'simple-level.gif',
+    filters: [{ name: 'GIF', extensions: ['gif'] }],
+  })
+  if (result.canceled || !result.filePath) {
+    return { canceled: true }
+  }
+  await fs.writeFile(result.filePath, Buffer.from(bytes))
+  return { canceled: false, filePath: result.filePath, fileName: path.basename(result.filePath) }
+})
 ipcMain.handle('engine:start-fixed', () => engineStateRequest('/engine/demo/fixed/start', { method: 'POST' }))
 ipcMain.handle('engine:start-input', () => engineStateRequest('/engine/demo/input/start', { method: 'POST' }))
 ipcMain.handle('engine:start-game', (_event, request) =>
@@ -951,6 +967,19 @@ ipcMain.handle('game-editor:save', (_event, gameId, document) =>
   }),
 )
 ipcMain.handle('spirit:list', () => backendRequest('/spirit/simpleListSpirits'))
+ipcMain.handle('spirit:create', (_event, payload) => backendRequest('/spirit', {
+  method: 'POST',
+  body: JSON.stringify(payload),
+}))
+ipcMain.handle('spirit:update', (_event, spiritId, payload) => {
+  if (!spiritId) {
+    throw new Error('缺少精灵 ID')
+  }
+  return backendRequest(`/spirit/${encodeURIComponent(spiritId)}`, {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  })
+})
 ipcMain.handle('media:list', () => listMediaLibrary())
 ipcMain.handle('media:get-preview-url', (_event, relativePath) => getMediaPreviewUrl(relativePath))
 ipcMain.on('diagnostic:editor-layout', (event, snapshot) => {

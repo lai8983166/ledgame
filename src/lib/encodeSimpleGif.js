@@ -1,0 +1,36 @@
+export function encodeSimpleGifInWorker(prepared, onProgress) {
+  return new Promise((resolve, reject) => {
+    const worker = new Worker(new URL("../workers/simpleGifEncoder.worker.js", import.meta.url), { type: "module" });
+    const frames = prepared.frames.map((frame) => ({
+      delay: frame.delay,
+      pixels: frame.pixels.buffer,
+    }));
+    const transfers = frames.map((frame) => frame.pixels);
+
+    worker.onmessage = (event) => {
+      if (event.data?.type === "progress") {
+        onProgress?.(event.data.completed, event.data.total);
+        return;
+      }
+      worker.terminate();
+      if (event.data?.type === "complete") {
+        resolve(new Uint8Array(event.data.bytes));
+      } else {
+        reject(new Error(event.data?.message || "GIF 编码失败"));
+      }
+    };
+    worker.onerror = (event) => {
+      worker.terminate();
+      reject(new Error(event.message || "GIF Worker 运行失败"));
+    };
+    worker.postMessage(
+      {
+        width: prepared.width,
+        height: prepared.height,
+        palette: prepared.palette,
+        frames,
+      },
+      transfers,
+    );
+  });
+}
