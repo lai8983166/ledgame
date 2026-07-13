@@ -15,6 +15,7 @@ const mediaProtocol = 'led-media'
 const mediaRootName = 'media'
 const imageExtensions = new Set(['.apng', '.avif', '.bmp', '.gif', '.jpeg', '.jpg', '.png', '.svg', '.webp'])
 const videoExtensions = new Set(['.m4v', '.mov', '.mp4', '.ogg', '.ogv', '.webm'])
+const audioExtensions = new Set(['.mp3', '.wav', '.ogg', '.m4a', '.aac', '.flac'])
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -759,11 +760,14 @@ function getMediaKind(fileName) {
   if (videoExtensions.has(extension)) {
     return 'video'
   }
+  if (audioExtensions.has(extension)) {
+    return 'audio'
+  }
   return 'file'
 }
 
 function isPreviewableMediaKind(mediaType) {
-  return mediaType === 'image' || mediaType === 'video'
+  return mediaType === 'image' || mediaType === 'video' || mediaType === 'audio'
 }
 
 async function readMediaDirectory(directoryPath, relativeBase = '') {

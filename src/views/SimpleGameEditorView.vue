@@ -2,6 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, toRaw, watch } from "vue";
 import EditorInteractionModeSwitch from "../components/EditorInteractionModeSwitch.vue";
 import SimpleMatrixCanvas from "../components/SimpleMatrixCanvas.vue";
+import GameGlobalConfigDialog from "../components/GameGlobalConfigDialog.vue";
 import { encodeSimpleGifInWorker } from "../lib/encodeSimpleGif.js";
 import { prepareSimpleLevelGif, selectSimpleTopItem } from "../lib/simpleLevelGif.js";
 
@@ -11,6 +12,8 @@ const api = window.ledGame;
 const busyAction = ref("");
 const errorMessage = ref("");
 const statusMessage = ref("");
+const globalConfigOpen = ref(false);
+const globalConfigDraft = ref({});
 const runtimeStatusMessage = ref("");
 const runtimeErrorMessage = ref("");
 const runtimeResult = ref(null);
@@ -688,6 +691,65 @@ async function saveEditor() {
     statusMessage.value = result?.data?.saved ? "保存成功" : "保存完成";
     validationErrors.value = [];
   });
+}
+
+function openGlobalConfig() {
+  if (!document.value || busyAction.value) {
+    return;
+  }
+  const doc = document.value;
+  globalConfigDraft.value = {
+    cover: doc.cover ?? "",
+    type: doc.type ?? "",
+    mode: doc.mode ?? "",
+    name: doc.name ?? "",
+    firstCatalog: doc.firstCatalog ?? "",
+    globalTimeLimit: Boolean(doc.globalTimeLimit),
+    globalTimeLimitValue: doc.globalTimeLimitValue ?? 0,
+    audio: { ...(doc.audio || {}) },
+    gif: { ...(doc.gif || {}) },
+    commonConfig: { ...(doc.commonConfig || {}) },
+  };
+  errorMessage.value = "";
+  globalConfigOpen.value = true;
+}
+
+function applyGlobalConfigPatch(target, patch) {
+  target.cover = patch.cover ?? "";
+  target.type = patch.type ?? "";
+  target.mode = patch.mode ?? "";
+  target.name = patch.name ?? "";
+  target.firstCatalog = patch.firstCatalog ?? "";
+  target.globalTimeLimit = Boolean(patch.globalTimeLimit);
+  target.globalTimeLimitValue = patch.globalTimeLimitValue ?? 0;
+  target.audio = { ...(target.audio || {}), ...(patch.audio || {}) };
+  target.gif = { ...(target.gif || {}), ...(patch.gif || {}) };
+  target.commonConfig = { ...(target.commonConfig || {}), ...(patch.commonConfig || {}) };
+}
+
+async function saveGlobalConfig(patch) {
+  const gameId = document.value?.id;
+  if (!gameId) {
+    return;
+  }
+  // 仅持久化配置字段：用后端上次已保存的文档作为 base，只应用配置 patch 后落库，
+  // 避免把 RGB 编辑区未保存的帧/矩阵改动一并提交。
+  await runEditorAction("save", async () => {
+    const detail = await api.getGameEditor(gameId);
+    const base = detail?.data;
+    if (!base) {
+      throw new Error("读取已保存文档失败");
+    }
+    applyGlobalConfigPatch(base, patch);
+    const result = await api.saveGameEditor(gameId, base);
+    statusMessage.value = result?.data?.saved ? "全局配置已保存" : "保存完成";
+    validationErrors.value = [];
+  });
+  if (!errorMessage.value) {
+    // 让内存文档反映新配置，但保留未保存的编辑区改动。
+    applyGlobalConfigPatch(document.value, patch);
+    globalConfigOpen.value = false;
+  }
 }
 
 async function exportCurrentLevelGif() {
@@ -2526,6 +2588,7 @@ function formatRuntimeSummary(value) {
             <input v-model.number="document.difficulty" min="0" type="number" />
           </label>
         </div>
+        <button class="soft-button" type="button" :disabled="Boolean(busyAction)" @click="openGlobalConfig">全局配置</button>
       </aside>
 
       <main class="editor-panel editor-center">
@@ -2933,5 +2996,13 @@ function formatRuntimeSummary(value) {
     </div>
       </section>
     </div>
+    <GameGlobalConfigDialog
+      v-if="globalConfigOpen"
+      :config="globalConfigDraft"
+      :saving="busyAction === 'save'"
+      :error="errorMessage"
+      @cancel="globalConfigOpen = false"
+      @save="saveGlobalConfig"
+    />
   </div>
 </template>
