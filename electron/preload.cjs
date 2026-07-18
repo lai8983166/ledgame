@@ -1,13 +1,32 @@
 const { contextBridge, ipcRenderer } = require('electron')
 
+function detectWindowKind(search) {
+  const kind = new URLSearchParams(search || '').get('window')
+  return kind === 'debug' || kind === 'touch' ? kind : 'main'
+}
+
 contextBridge.exposeInMainWorld('ledGame', {
-  windowKind: new URLSearchParams(window.location.search).get('window') === 'debug' ? 'debug' : 'main',
+  windowKind: detectWindowKind(window.location.search),
+  enterGameFlow: () => ipcRenderer.invoke('game-flow:enter'),
   openDebugPanel: () => ipcRenderer.invoke('open-debug-panel'),
   startFixed: () => ipcRenderer.invoke('engine:start-fixed'),
   startInput: () => ipcRenderer.invoke('engine:start-input'),
   startGame: (request) => ipcRenderer.invoke('engine:start-game', request),
   stopGame: () => ipcRenderer.invoke('engine:stop-game'),
   gameState: () => ipcRenderer.invoke('engine:game-state'),
+  listGames: () => ipcRenderer.invoke('game:list'),
+  touchGameState: () => ipcRenderer.invoke('game:state'),
+  startSystemIdle: () => ipcRenderer.invoke('game:idle'),
+  stopTouchGame: () => ipcRenderer.invoke('game:stop'),
+  createPreparation: () => ipcRenderer.invoke('game:preparation:create'),
+  selectPreparationGame: (sessionId, gameId) =>
+    ipcRenderer.invoke('game:preparation:select', sessionId, gameId),
+  updatePreparation: (sessionId, patch) =>
+    ipcRenderer.invoke('game:preparation:update', sessionId, patch),
+  confirmPreparation: (sessionId) =>
+    ipcRenderer.invoke('game:preparation:confirm', sessionId),
+  cancelPreparation: (sessionId) =>
+    ipcRenderer.invoke('game:preparation:cancel', sessionId),
   sendGameInput: (input) => ipcRenderer.invoke('engine:game-input', input),
   stop: () => ipcRenderer.invoke('engine:stop'),
   state: () => ipcRenderer.invoke('engine:state'),

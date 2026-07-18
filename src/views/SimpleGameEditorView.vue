@@ -794,21 +794,17 @@ async function startGame() {
     return;
   }
   busyAction.value = "start";
-  runtimeStatusMessage.value = "保存并启动中...";
+  runtimeStatusMessage.value = "启动中...";
   runtimeErrorMessage.value = "";
   runtimeResult.value = null;
   try {
     if (!api) {
       throw new Error("Electron API is unavailable");
     }
-    const payload = createEditorPayload();
-    await api.saveGameEditor(payload.id, payload);
-    statusMessage.value = "已保存当前编辑器内容";
-    validationErrors.value = [];
     const result = await api.startGame({
       id: gameId,
       startLevelIndex: 0,
-      launchMethod: "editor",
+      launchMethod: "debug",
     });
     runtimeResult.value = result?.data || result;
     runtimeStatusMessage.value = "启动成功";

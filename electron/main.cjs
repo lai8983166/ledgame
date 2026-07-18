@@ -5,6 +5,10 @@ const nodeFs = require('node:fs')
 const fs = require('node:fs/promises')
 const { pathToFileURL } = require('node:url')
 const { app, BrowserWindow, dialog, ipcMain, protocol, net: electronNet, screen } = require('electron')
+const {
+  preparationRequest,
+  shouldInitializeSystemIdle,
+} = require('./game-flow.cjs')
 
 const isDev = Boolean(process.env.VITE_DEV_SERVER_URL)
 const shouldUseEmbeddedBackend = !isDev && !process.env.LED_BACKEND_URL
@@ -43,9 +47,11 @@ try {
 
 let mainWindow
 let debugWindow
+let touchWindow
 let backendBaseUrl = process.env.LED_BACKEND_URL || 'http://127.0.0.1:8080'
 let runtimeStateStreamUrl = process.env.LED_RUNTIME_STATE_URL || defaultRuntimeStateStreamUrl(backendBaseUrl)
 let latestFrame = null
+let latestEngineState = null
 let tcpServer = null
 const frameSockets = new Set()
 let runtimeStateSocket = null
@@ -232,7 +238,67 @@ function createDebugWindow() {
     if (latestFrame) {
       debugWindow.webContents.send('led-frame', latestFrame)
     }
+    if (latestEngineState) {
+      debugWindow.webContents.send('engine-state', latestEngineState)
+    }
   })
+}
+
+function createTouchWindow() {
+  if (touchWindow && !touchWindow.isDestroyed()) {
+    if (touchWindow.isMinimized()) {
+      touchWindow.restore()
+    }
+    touchWindow.focus()
+    return touchWindow
+  }
+
+  const bounds = resolveWindowBounds({
+    targetWidth: 960,
+    targetHeight: 720,
+    minWidth: 640,
+    minHeight: 480,
+  })
+
+  touchWindow = new BrowserWindow({
+    width: bounds.width,
+    height: bounds.height,
+    minWidth: bounds.minWidth,
+    minHeight: bounds.minHeight,
+    x: bounds.x,
+    y: bounds.y,
+    useContentSize: true,
+    center: true,
+    title: 'LED Game Touch',
+    backgroundColor: '#071018',
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.cjs'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      backgroundThrottling: false,
+      zoomFactor: 1.0,
+    },
+  })
+  touchWindow.setAutoHideMenuBar(true)
+
+  touchWindow.on('closed', () => {
+    touchWindow = null
+  })
+
+  if (isDev) {
+    touchWindow.loadURL(`${process.env.VITE_DEV_SERVER_URL}?window=touch`)
+  } else {
+    touchWindow.loadFile(path.join(__dirname, '../dist/index.html'), {
+      query: { window: 'touch' },
+    })
+  }
+
+  touchWindow.webContents.once('did-finish-load', () => {
+    if (latestEngineState && touchWindow && !touchWindow.isDestroyed()) {
+      touchWindow.webContents.send('engine-state', latestEngineState)
+    }
+  })
+  return touchWindow
 }
 
 function startFrameServer() {
@@ -336,6 +402,8 @@ function publishEngineState(state) {
   if (!state) {
     return
   }
+
+  latestEngineState = state
 
   BrowserWindow.getAllWindows().forEach((window) => {
     if (!window.isDestroyed()) {
@@ -688,6 +756,28 @@ async function engineStateRequest(pathname, options = {}) {
   return result
 }
 
+function requestCurrentGameState() {
+  return engineStateRequest('/engine/game/input', {
+    method: 'POST',
+    body: JSON.stringify({ type: 'state' }),
+  })
+}
+
+async function enterGameFlow() {
+  createDebugWindow()
+  createTouchWindow()
+  const current = await requestCurrentGameState()
+  if (shouldInitializeSystemIdle(current?.data)) {
+    return engineStateRequest('/engine/game/idle', { method: 'POST' })
+  }
+  return current
+}
+
+function executePreparationRequest(kind, sessionId, payload) {
+  const request = preparationRequest(kind, sessionId, payload)
+  return engineStateRequest(request.pathname, request.options)
+}
+
 function normalizeGameStartRequest(request) {
   const source = request && typeof request === 'object' ? request : { id: request }
   const id = Number(source.id ?? source.gameId)
@@ -880,6 +970,7 @@ function registerMediaProtocol() {
 ipcMain.handle('open-debug-panel', () => {
   createDebugWindow()
 })
+ipcMain.handle('game-flow:enter', () => enterGameFlow())
 
 ipcMain.handle('frame:latest', () => latestFrame)
 ipcMain.handle('frame:export-json', async (_event, payload) => {
@@ -933,10 +1024,7 @@ ipcMain.handle('engine:start-game', (_event, request) =>
 )
 ipcMain.handle('engine:stop-game', () => engineStateRequest('/engine/game/stop', { method: 'POST' }))
 ipcMain.handle('engine:game-state', () =>
-  engineStateRequest('/engine/game/input', {
-    method: 'POST',
-    body: JSON.stringify({ type: 'state' }),
-  }),
+  requestCurrentGameState(),
 )
 ipcMain.handle('engine:game-input', (_event, input) =>
   engineStateRequest('/engine/game/input', {
@@ -946,6 +1034,25 @@ ipcMain.handle('engine:game-input', (_event, input) =>
 )
 ipcMain.handle('engine:stop', () => engineStateRequest('/engine/demo/stop', { method: 'POST' }))
 ipcMain.handle('engine:state', () => engineStateRequest('/engine/demo/state'))
+ipcMain.handle('game:list', () => backendRequest('/game'))
+ipcMain.handle('game:state', () => requestCurrentGameState())
+ipcMain.handle('game:idle', () => engineStateRequest('/engine/game/idle', { method: 'POST' }))
+ipcMain.handle('game:stop', () => engineStateRequest('/engine/game/stop', { method: 'POST' }))
+ipcMain.handle('game:preparation:create', () =>
+  executePreparationRequest('create'),
+)
+ipcMain.handle('game:preparation:select', (_event, sessionId, gameId) =>
+  executePreparationRequest('select', sessionId, gameId),
+)
+ipcMain.handle('game:preparation:update', (_event, sessionId, patch) =>
+  executePreparationRequest('update', sessionId, patch),
+)
+ipcMain.handle('game:preparation:confirm', (_event, sessionId) =>
+  executePreparationRequest('confirm', sessionId),
+)
+ipcMain.handle('game:preparation:cancel', (_event, sessionId) =>
+  executePreparationRequest('cancel', sessionId),
+)
 ipcMain.handle('engine:input', (_event, input) =>
   backendRequest('/engine/demo/input', {
     method: 'POST',

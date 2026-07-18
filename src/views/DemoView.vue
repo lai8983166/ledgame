@@ -1,6 +1,7 @@
 <script setup>
 import { computed, ref } from "vue";
 import ButtonMastery2_SelfMadeSystem from "../components/ButtonMastery2_SelfMadeSystem.vue";
+import DebugLedCanvas from "../components/DebugLedCanvas.vue";
 
 const props = defineProps({
   busyAction: {
@@ -76,11 +77,6 @@ const matrixWidth = computed(() => props.pixels[0]?.length || 16);
 const matrixHeight = computed(() => props.pixels.length || 16);
 const previewModeLabel = computed(() => (isInputMode.value ? "Input Demo" : "Runtime Preview"));
 const canClickMatrix = computed(() => props.isDebugWindow);
-const boardStyle = computed(() => ({
-  gridTemplateColumns: `repeat(${matrixWidth.value}, minmax(0, 1fr))`,
-  gridTemplateRows: `repeat(${matrixHeight.value}, minmax(0, 1fr))`,
-  aspectRatio: `${matrixWidth.value} / ${matrixHeight.value}`,
-}));
 
 function clampChannel(value) {
   return Math.min(255, Math.max(0, Number(value) || 0));
@@ -125,11 +121,6 @@ function emitLightCell(x, y) {
   emit("game-input", clampedX, clampedY);
 }
 
-function colorStyle(color) {
-  return {
-    backgroundColor: `rgb(${color.r}, ${color.g}, ${color.b})`,
-  };
-}
 </script>
 
 <template>
@@ -149,26 +140,14 @@ function colorStyle(color) {
 
     <section class="debug-workspace">
       <section class="panel-area">
-        <div
-          class="led-board"
-          :class="{ disabled: !canClickMatrix }"
-          :style="boardStyle"
-          @mouseleave="$emit('clear-hover-cell')"
-        >
-          <template v-for="(row, y) in pixels" :key="y">
-            <button
-              v-for="(color, x) in row"
-              :key="`${x}-${y}`"
-              class="led-cell"
-              :class="{ active: hoverCell?.x === x && hoverCell?.y === y }"
-              :disabled="!canClickMatrix"
-              :style="colorStyle(color)"
-              type="button"
-              @click="emitLightCell(x, y)"
-              @mouseenter="$emit('set-hover-cell', x, y)"
-            />
-          </template>
-        </div>
+        <DebugLedCanvas
+          :disabled="!canClickMatrix"
+          :hover-cell="hoverCell"
+          :pixels="pixels"
+          @cell-click="emitLightCell"
+          @clear-hover="$emit('clear-hover-cell')"
+          @hover-cell="(x, y) => $emit('set-hover-cell', x, y)"
+        />
       </section>
 
       <aside class="debug-side">

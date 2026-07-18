@@ -5,9 +5,11 @@ import GameListView from "./views/GameListView.vue";
 import MediaLibraryView from "./views/MediaLibraryView.vue";
 import SimpleGameEditorView from "./views/SimpleGameEditorView.vue";
 import SpiritLibraryView from "./views/SpiritLibraryView.vue";
+import LedGameTouchView from "./views/LedGameTouchView.vue";
 
 const api = window.ledGame;
 const isDebugWindow = api?.windowKind === "debug";
+const isTouchWindow = api?.windowKind === "touch";
 const engineState = ref("UNKNOWN");
 const demoType = ref(null);
 const busyAction = ref("");
@@ -64,6 +66,9 @@ const runtimeStatusItems = computed(() => {
 });
 
 onMounted(async () => {
+  if (isTouchWindow) {
+    return;
+  }
   removeEngineStateListener = api?.onEngineState?.((state) => {
     applyState(state);
   });
@@ -135,6 +140,14 @@ function stopEngine() {
 
 function openDebugPanel() {
   return runAction("debug", () => api.openDebugPanel());
+}
+
+function enterGameFlow() {
+  if (!api?.enterGameFlow) {
+    errorMessage.value = "完整游戏入口 API 不可用";
+    return;
+  }
+  return runAction("game-flow", () => api.enterGameFlow());
 }
 
 function openSimpleEditor() {
@@ -238,7 +251,7 @@ function sendRuntimeGameInput(x, y) {
       y,
     })
     .then((result) => {
-      applyGameRuntimeResult(result);
+      applyState(result?.data ?? result);
     })
     .catch((error) => {
       errorMessage.value = error.message || String(error);
@@ -272,8 +285,10 @@ function formatRuntimeValue(value, fallback = "-") {
 </script>
 
 <template>
+  <LedGameTouchView v-if="isTouchWindow" />
+
   <DemoView
-    v-if="isDebugWindow"
+    v-else-if="isDebugWindow"
     :demo-type="demoType"
     :engine-state="engineState"
     :error-message="debugErrorMessage"
@@ -297,6 +312,14 @@ function formatRuntimeValue(value, fallback = "-") {
     <header class="app-nav" aria-label="Primary">
       <div class="brand-mark" aria-hidden="true"></div>
       <nav class="nav-tabs">
+        <button
+          class="nav-tab"
+          type="button"
+          :disabled="busyAction === 'game-flow'"
+          @click="enterGameFlow"
+        >
+          {{ busyAction === "game-flow" ? "进入中" : "进入游戏" }}
+        </button>
         <button
           class="nav-tab"
           :class="{ active: activeView === 'demo' }"
