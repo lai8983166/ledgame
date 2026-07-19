@@ -1,11 +1,15 @@
 <script setup>
 import { computed, onMounted, onUnmounted, ref } from "vue";
+import { useI18n } from "vue-i18n";
 import DemoView from "./views/DemoView.vue";
 import GameListView from "./views/GameListView.vue";
 import MediaLibraryView from "./views/MediaLibraryView.vue";
 import SimpleGameEditorView from "./views/SimpleGameEditorView.vue";
 import SpiritLibraryView from "./views/SpiritLibraryView.vue";
 import LedGameTouchView from "./views/LedGameTouchView.vue";
+import LanguageView from "./views/LanguageView.vue";
+
+const { t } = useI18n({ useScope: "global" });
 
 const api = window.ledGame;
 const isDebugWindow = api?.windowKind === "debug";
@@ -23,13 +27,13 @@ let removeEngineStateListener = null;
 
 const frameAge = computed(() => {
   if (!frameState.value.receivedAt) {
-    return "No frame";
+    return t("debug.noFrame");
   }
   const seconds = Math.max(
     0,
     Math.round((Date.now() - frameState.value.receivedAt) / 1000),
   );
-  return `${seconds}s ago`;
+  return t("debug.secondsAgo", { seconds });
 });
 const frameSizeLabel = computed(() => `${frameState.value.width} x ${frameState.value.height}`);
 const gameplaySummary = computed(() => {
@@ -38,12 +42,12 @@ const gameplaySummary = computed(() => {
     return "";
   }
   const parts = [
-    `score ${gameplay.score ?? 0}`,
-    `life ${gameplay.life ?? 0}`,
-    `phase ${gameplay.phase || "-"}`,
+    t("debug.summaryScore", { value: gameplay.score ?? 0 }),
+    t("debug.summaryLife", { value: gameplay.life ?? 0 }),
+    t("debug.summaryPhase", { value: gameplay.phase || "-" }),
   ];
   if (gameplay.lastInput?.outcome) {
-    parts.push(`last ${gameplay.lastInput.outcome}`);
+    parts.push(t("debug.summaryLast", { value: gameplay.lastInput.outcome }));
   }
   return parts.join(" / ");
 });
@@ -53,15 +57,15 @@ const runtimeStatusItems = computed(() => {
   const gameplay = state.gameplay || {};
   const lastInput = gameplay.lastInput || {};
   return [
-    { label: "运行", value: state.running ? "运行中" : "未运行" },
+    { label: t("debug.running"), value: state.running ? t("debug.runningValue") : t("debug.stoppedValue") },
     { label: "Game ID", value: formatRuntimeValue(state.gameId) },
     { label: "Game", value: formatRuntimeValue(state.gameName || state.gameType) },
-    { label: "起始关卡", value: formatRuntimeValue(state.startLevelIndex) },
-    { label: "启动方式", value: formatRuntimeValue(state.launchMethod) },
-    { label: "阶段", value: formatRuntimeValue(gameplay.phase) },
-    { label: "分数", value: formatRuntimeValue(gameplay.score, "0") },
-    { label: "生命", value: formatRuntimeValue(gameplay.life, "0") },
-    { label: "最近点击", value: formatRuntimeValue(lastInput.outcome) },
+    { label: t("debug.startLevel"), value: formatRuntimeValue(state.startLevelIndex) },
+    { label: t("debug.launchMethod"), value: formatRuntimeValue(state.launchMethod) },
+    { label: t("debug.phase"), value: formatRuntimeValue(gameplay.phase) },
+    { label: t("debug.score"), value: formatRuntimeValue(gameplay.score, "0") },
+    { label: t("debug.life"), value: formatRuntimeValue(gameplay.life, "0") },
+    { label: t("debug.lastClick"), value: formatRuntimeValue(lastInput.outcome) },
   ];
 });
 
@@ -144,7 +148,7 @@ function openDebugPanel() {
 
 function enterGameFlow() {
   if (!api?.enterGameFlow) {
-    errorMessage.value = "完整游戏入口 API 不可用";
+    errorMessage.value = t("debug.entryApiUnavailable");
     return;
   }
   return runAction("game-flow", () => api.enterGameFlow());
@@ -318,7 +322,7 @@ function formatRuntimeValue(value, fallback = "-") {
           :disabled="busyAction === 'game-flow'"
           @click="enterGameFlow"
         >
-          {{ busyAction === "game-flow" ? "进入中" : "进入游戏" }}
+          {{ busyAction === "game-flow" ? t("nav.entering") : t("nav.enterGame") }}
         </button>
         <button
           class="nav-tab"
@@ -326,7 +330,7 @@ function formatRuntimeValue(value, fallback = "-") {
           type="button"
           @click="activeView = 'demo'"
         >
-          Demo
+          {{ t("nav.demo") }}
         </button>
         <button
           class="nav-tab"
@@ -334,7 +338,7 @@ function formatRuntimeValue(value, fallback = "-") {
           type="button"
           @click="activeView = 'games'"
         >
-          游戏列表
+          {{ t("nav.games") }}
         </button>
         <button
           class="nav-tab"
@@ -342,7 +346,7 @@ function formatRuntimeValue(value, fallback = "-") {
           type="button"
           @click="activeView = 'media'"
         >
-          媒体库
+          {{ t("nav.media") }}
         </button>
         <button
           class="nav-tab"
@@ -350,7 +354,15 @@ function formatRuntimeValue(value, fallback = "-") {
           type="button"
           @click="activeView = 'spirits'"
         >
-          精灵库
+          {{ t("nav.spirits") }}
+        </button>
+        <button
+          class="nav-tab"
+          :class="{ active: activeView === 'language' }"
+          type="button"
+          @click="activeView = 'language'"
+        >
+          {{ t("nav.language") }}
         </button>
       </nav>
     </header>
@@ -377,6 +389,8 @@ function formatRuntimeValue(value, fallback = "-") {
 
     <MediaLibraryView v-else-if="activeView === 'media'" />
 
-    <SpiritLibraryView v-else />
+    <SpiritLibraryView v-else-if="activeView === 'spirits'" />
+
+    <LanguageView v-else />
   </main>
 </template>

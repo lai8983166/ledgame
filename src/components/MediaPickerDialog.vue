@@ -1,12 +1,14 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { useI18n } from "vue-i18n";
 
 const props = defineProps({
   accept: { type: String, default: "any" }, // 'image' | 'audio' | 'any'
   currentValue: { type: String, default: "" },
-  title: { type: String, default: "选择媒体" },
+  title: { type: String, default: "" },
 });
 const emit = defineEmits(["cancel", "select"]);
+const { t } = useI18n();
 
 const mediaApi = typeof window !== "undefined" ? window.mediaLibrary : null;
 const dialogRef = ref(null);
@@ -17,10 +19,11 @@ const selected = ref(props.currentValue || "");
 const preview = ref(null);
 
 const acceptLabel = computed(() => {
-  if (props.accept === "audio") return "音频";
-  if (props.accept === "image") return "图片 / 动图";
-  return "全部媒体";
+  if (props.accept === "audio") return t("mediaPicker.audio");
+  if (props.accept === "image") return t("mediaPicker.images");
+  return t("mediaPicker.allMedia");
 });
+const dialogTitle = computed(() => props.title || t("mediaPicker.title"));
 
 function matchesAccept(mediaType) {
   if (props.accept === "image") return mediaType === "image";
@@ -41,7 +44,7 @@ function flatten(nodes, acc = []) {
 
 async function loadMedia() {
   if (!mediaApi?.list) {
-    loadError.value = "媒体库不可用";
+    loadError.value = t("mediaPicker.unavailable");
     return;
   }
   loading.value = true;
@@ -128,22 +131,22 @@ onBeforeUnmount(() => {
       class="media-picker-dialog"
       role="dialog"
       aria-modal="true"
-      :aria-label="title"
+      :aria-label="dialogTitle"
       tabindex="-1"
     >
       <header class="media-picker-header">
         <div>
-          <h2>{{ title }}</h2>
-          <p>{{ acceptLabel }} · {{ allFiles.length }} 个</p>
+          <h2>{{ dialogTitle }}</h2>
+          <p>{{ t("mediaPicker.count", { type: acceptLabel, count: allFiles.length }) }}</p>
         </div>
-        <button class="inline-symbol-button" type="button" title="关闭" @click="emit('cancel')">×</button>
+        <button class="inline-symbol-button" type="button" :title="t('common.close')" @click="emit('cancel')">×</button>
       </header>
 
       <div class="media-picker-body">
         <div class="media-picker-list">
-          <p v-if="loading" class="media-picker-hint">加载中…</p>
+          <p v-if="loading" class="media-picker-hint">{{ t("common.loading") }}…</p>
           <p v-else-if="loadError" class="media-picker-hint error">{{ loadError }}</p>
-          <p v-else-if="!allFiles.length" class="media-picker-hint">没有匹配的媒体</p>
+          <p v-else-if="!allFiles.length" class="media-picker-hint">{{ t("mediaPicker.noMatches") }}</p>
           <button
             v-for="file in allFiles"
             :key="file.relativePath"
@@ -160,8 +163,8 @@ onBeforeUnmount(() => {
         </div>
 
         <div class="media-picker-preview">
-          <p v-if="!selected" class="media-picker-hint">从左侧选择一个媒体预览</p>
-          <template v-else-if="!preview">加载预览…</template>
+          <p v-if="!selected" class="media-picker-hint">{{ t("mediaPicker.choosePreview") }}</p>
+          <template v-else-if="!preview">{{ t("mediaPicker.loadingPreview") }}…</template>
           <template v-else-if="preview.mediaType === 'image'">
             <img class="media-picker-image" :src="preview.url" :alt="preview.name" />
           </template>
@@ -179,8 +182,8 @@ onBeforeUnmount(() => {
       </div>
 
       <footer class="media-picker-actions">
-        <button class="soft-button" type="button" @click="emit('cancel')">取消</button>
-        <button class="action-button primary" type="button" :disabled="!selected" @click="confirm">确定</button>
+        <button class="soft-button" type="button" @click="emit('cancel')">{{ t("common.cancel") }}</button>
+        <button class="action-button primary" type="button" :disabled="!selected" @click="confirm">{{ t("common.confirm") }}</button>
       </footer>
     </section>
   </div>

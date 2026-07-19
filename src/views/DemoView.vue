@@ -1,7 +1,10 @@
 <script setup>
 import { computed, ref } from "vue";
+import { useI18n } from "vue-i18n";
 import ButtonMastery2_SelfMadeSystem from "../components/ButtonMastery2_SelfMadeSystem.vue";
 import DebugLedCanvas from "../components/DebugLedCanvas.vue";
+
+const { t } = useI18n({ useScope: "global" });
 
 const props = defineProps({
   busyAction: {
@@ -75,7 +78,7 @@ const isInputMode = computed(() =>
 );
 const matrixWidth = computed(() => props.pixels[0]?.length || 16);
 const matrixHeight = computed(() => props.pixels.length || 16);
-const previewModeLabel = computed(() => (isInputMode.value ? "Input Demo" : "Runtime Preview"));
+const previewModeLabel = computed(() => (isInputMode.value ? t("debug.inputDemo") : t("debug.runtimePreview")));
 const canClickMatrix = computed(() => props.isDebugWindow);
 
 function clampChannel(value) {
@@ -127,7 +130,7 @@ function emitLightCell(x, y) {
   <main v-if="isDebugWindow" class="debug-shell">
     <header class="debug-topbar">
       <div>
-        <h1>LED Preview</h1>
+        <h1>{{ t("debug.ledPreview") }}</h1>
         <p>
           {{ engineState }}<span> / {{ previewModeLabel }}</span>
         </p>
@@ -154,7 +157,7 @@ function emitLightCell(x, y) {
         <section class="debug-card runtime-state-card">
           <div class="debug-card-head">
             <div>
-              <h2>运行状态</h2>
+              <h2>{{ t("debug.runtimeState") }}</h2>
             </div>
           </div>
           <dl class="runtime-state-list">
@@ -173,8 +176,8 @@ function emitLightCell(x, y) {
           <div class="debug-card">
             <div class="debug-card-head">
               <div>
-                <p v-if="isInputMode">调色后直接点击面板</p>
-                <p v-else>点击面板模拟玩法输入</p>
+                <p v-if="isInputMode">{{ t("debug.adjustThenClick") }}</p>
+                <p v-else>{{ t("debug.clickForInput") }}</p>
               </div>
               <div
                 class="color-preview"
@@ -184,7 +187,7 @@ function emitLightCell(x, y) {
             </div>
 
             <label class="color-picker">
-              <span>Color</span>
+              <span>{{ t("debug.color") }}</span>
               <input
                 v-model="selectedColor"
                 :disabled="!isInputMode"
@@ -235,7 +238,7 @@ function emitLightCell(x, y) {
           >
             <div class="debug-card-head">
               <div>
-                <h2>坐标</h2>
+                <h2>{{ t("debug.coordinates") }}</h2>
               </div>
             </div>
 
@@ -263,7 +266,7 @@ function emitLightCell(x, y) {
             </div>
 
             <button class="debug-action" :disabled="!isInputMode" type="submit">
-              点亮
+              {{ t("debug.light") }}
             </button>
           </form>
         </section>
@@ -279,7 +282,7 @@ function emitLightCell(x, y) {
         type="button"
         @click="$emit('refresh-state')"
       >
-        Refresh
+        {{ t("debug.refresh") }}
       </button>
     </footer>
 
@@ -300,24 +303,24 @@ function emitLightCell(x, y) {
         :disabled="busyAction === 'debug'"
         @click="$emit('open-debug-panel')"
       >
-        Debug Panel
+        {{ t("debug.panel") }}
       </button>
     </div>
 
-    <section class="control-grid" aria-label="Demo controls">
+    <section class="control-grid" :aria-label="t('debug.controlsLabel')">
       <ButtonMastery2_SelfMadeSystem
         type="button"
         :disabled="Boolean(busyAction)"
         @click="$emit('start-fixed')"
       >
-        Fixed Demo
+        {{ t("debug.fixedDemo") }}
       </ButtonMastery2_SelfMadeSystem>
       <ButtonMastery2_SelfMadeSystem
         type="button"
         :disabled="Boolean(busyAction)"
         @click="$emit('start-input')"
       >
-        Input Demo
+        {{ t("debug.inputDemo") }}
       </ButtonMastery2_SelfMadeSystem>
       <ButtonMastery2_SelfMadeSystem
         class="danger"
@@ -325,14 +328,14 @@ function emitLightCell(x, y) {
         :disabled="Boolean(busyAction)"
         @click="$emit('stop-engine')"
       >
-        Stop
+        {{ t("common.stop") }}
       </ButtonMastery2_SelfMadeSystem>
       <ButtonMastery2_SelfMadeSystem
         type="button"
         :disabled="Boolean(busyAction)"
         @click="$emit('refresh-state')"
       >
-        Refresh
+        {{ t("debug.refresh") }}
       </ButtonMastery2_SelfMadeSystem>
     </section>
 

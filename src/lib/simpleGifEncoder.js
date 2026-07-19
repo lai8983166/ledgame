@@ -8,7 +8,9 @@ const { GIFEncoder, applyPalette } = lib;
 export function encodePreparedSimpleGif(prepared, onProgress) {
   const { width, height, palette, frames } = prepared || {};
   if (!width || !height || !Array.isArray(frames) || frames.length === 0) {
-    throw new Error("当前关卡没有可导出的帧");
+    const error = new Error("SIMPLE_GIF_EMPTY_LEVEL");
+    error.code = "SIMPLE_GIF_EMPTY_LEVEL";
+    throw error;
   }
   const encoder = GIFEncoder();
   frames.forEach((frame, index) => {

@@ -1,10 +1,19 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, toRaw, watch } from "vue";
+import { useI18n } from "vue-i18n";
 import EditorInteractionModeSwitch from "../components/EditorInteractionModeSwitch.vue";
 import SimpleMatrixCanvas from "../components/SimpleMatrixCanvas.vue";
 import GameGlobalConfigDialog from "../components/GameGlobalConfigDialog.vue";
 import { encodeSimpleGifInWorker } from "../lib/encodeSimpleGif.js";
 import { prepareSimpleLevelGif, selectSimpleTopItem } from "../lib/simpleLevelGif.js";
+import { resolveLiveOccupancyCell } from "../lib/simpleOccupancy.js";
+import {
+  canSelectObjectForMerge,
+  MERGE_ERROR,
+  mergeSameColorObjects,
+} from "../lib/simpleObjectMerge.js";
+
+const { t } = useI18n({ useScope: "global" });
 
 defineEmits(["back"]);
 
@@ -145,10 +154,10 @@ const colorOptions = computed(() => [
   { index: 2, label: "Color 2", value: normalizeColor(document.value?.color2, "#ff00ff") },
   { index: 3, label: "Color 3", value: normalizeColor(document.value?.color3, "#ffffff") },
 ]);
-const interactionModeOptions = [
-  { value: "add", label: "新增对象", icon: "+", title: "新增对象：点击空白格或拖拽框选创建对象；按 Q 快速切换" },
-  { value: "select-move", label: "选择/移动", icon: "↖", title: "选择/移动对象：点击对象选中并拖动；按 Q 快速切换" },
-];
+const interactionModeOptions = computed(() => [
+  { value: "add", label: t("simple.modeAdd"), icon: "+", title: t("simple.modeAddTitle") },
+  { value: "select-move", label: t("simple.modeSelectMove"), icon: "↖", title: t("simple.modeSelectTitle") },
+]);
 const matrixCells = computed(() => {
   matrixCacheRevision.value;
   const frame = previewFrame.value;
@@ -235,11 +244,6 @@ const occupancyIndex = computed(() => {
   matrixCacheRevision.value;
   return activeFrame.value ? getOrCreateFrameOccupancyIndex(activeFrame.value) : new Map();
 });
-const expandedCellMap = computed(() => {
-  matrixCacheRevision.value;
-  return activeFrame.value ? createExpandedCellMap(activeFrame.value) : new Map();
-});
-
 function createExpandedCellMap(frame) {
   const occupancy = getOrCreateFrameOccupancyIndex(frame);
   const map = new Map();
@@ -250,6 +254,14 @@ function createExpandedCellMap(frame) {
     }
   }
   return map;
+}
+
+function getExpandedCellAt(x, y) {
+  return resolveLiveOccupancyCell(
+    occupancyIndex.value,
+    createPointKey(x, y),
+    getTopOccupancyEntry,
+  );
 }
 const panoramaStatusText = computed(
   () =>
@@ -371,7 +383,7 @@ async function loadEditor() {
     selectedObjectId.value = "";
     stopSelectionMode();
     panoramaMode.value = false;
-    statusMessage.value = "simple 已加载";
+    statusMessage.value = t("simple.loaded");
     runtimeStatusMessage.value = "";
     runtimeErrorMessage.value = "";
     runtimeResult.value = null;
@@ -677,7 +689,7 @@ async function validateEditor() {
   await runEditorAction("validate", async () => {
     const result = await api.validateGameEditor(createEditorPayload());
     validationErrors.value = result?.data?.errors || [];
-    statusMessage.value = result?.data?.valid ? "校验通过" : "校验未通过";
+    statusMessage.value = result?.data?.valid ? t("simple.validationPassed") : t("simple.validationFailed");
   });
 }
 
@@ -688,7 +700,7 @@ async function saveEditor() {
   await runEditorAction("save", async () => {
     const payload = createEditorPayload();
     const result = await api.saveGameEditor(payload.id, payload);
-    statusMessage.value = result?.data?.saved ? "保存成功" : "保存完成";
+    statusMessage.value = result?.data?.saved ? t("simple.saveSuccess") : t("simple.saveComplete");
     validationErrors.value = [];
   });
 }
@@ -738,11 +750,11 @@ async function saveGlobalConfig(patch) {
     const detail = await api.getGameEditor(gameId);
     const base = detail?.data;
     if (!base) {
-      throw new Error("读取已保存文档失败");
+      throw new Error(t("simple.readSavedFailed"));
     }
     applyGlobalConfigPatch(base, patch);
     const result = await api.saveGameEditor(gameId, base);
-    statusMessage.value = result?.data?.saved ? "全局配置已保存" : "保存完成";
+    statusMessage.value = result?.data?.saved ? t("simple.globalSaved") : t("simple.saveComplete");
     validationErrors.value = [];
   });
   if (!errorMessage.value) {
@@ -759,14 +771,14 @@ async function exportCurrentLevelGif() {
   }
   busyAction.value = "gif-export";
   errorMessage.value = "";
-  gifExportProgress.value = "正在准备 GIF...";
+  gifExportProgress.value = t("simple.preparingGif");
   try {
     if (!api?.saveGif) {
-      throw new Error("Electron GIF 保存接口不可用");
+      throw new Error(t("simple.gifApiUnavailable"));
     }
     const prepared = prepareSimpleLevelGif(level, document.value);
     const bytes = await encodeSimpleGifInWorker(prepared, (completed, total) => {
-      gifExportProgress.value = `正在编码 GIF ${completed}/${total}`;
+      gifExportProgress.value = t("simple.encodingGif", { completed, total });
     });
     const levelName = String(level.label || `level-${activeLevelIndex.value + 1}`)
       .replace(/[\\/:*?"<>|]+/g, "-")
@@ -776,12 +788,17 @@ async function exportCurrentLevelGif() {
       defaultFileName: `${levelName || "simple-level"}.gif`,
     });
     if (result?.canceled) {
-      statusMessage.value = "已取消导出 GIF";
+      statusMessage.value = t("simple.gifCancelled");
     } else {
-      statusMessage.value = `GIF 已保存：${result?.fileName || "导出完成"}`;
+      statusMessage.value = t("simple.gifSaved", { file: result?.fileName || t("simple.exportComplete") });
     }
   } catch (error) {
-    errorMessage.value = error?.message || "导出 GIF 失败";
+    const messageKey = {
+      SIMPLE_GIF_EMPTY_LEVEL: "simple.gifEmptyLevel",
+      SIMPLE_GIF_ENCODING_FAILED: "simple.gifEncodingFailed",
+      SIMPLE_GIF_WORKER_FAILED: "simple.gifWorkerFailed",
+    }[error?.code];
+    errorMessage.value = messageKey ? t(messageKey) : error?.message || t("simple.gifFailed");
   } finally {
     gifExportProgress.value = "";
     busyAction.value = "";
@@ -794,7 +811,7 @@ async function startGame() {
     return;
   }
   busyAction.value = "start";
-  runtimeStatusMessage.value = "启动中...";
+  runtimeStatusMessage.value = t("simple.starting");
   runtimeErrorMessage.value = "";
   runtimeResult.value = null;
   try {
@@ -807,14 +824,14 @@ async function startGame() {
       launchMethod: "debug",
     });
     runtimeResult.value = result?.data || result;
-    runtimeStatusMessage.value = "启动成功";
-    previewStatusMessage.value = "可打开预览窗口观察运行帧";
+    runtimeStatusMessage.value = t("simple.startSuccess");
+    previewStatusMessage.value = t("simple.previewAvailable");
     // 启动成功后自动弹出/切换到 debug 面板；打开失败不影响已成功的启动。
     try {
       await api?.openDebugPanel?.();
-      previewStatusMessage.value = "预览窗口已打开";
+      previewStatusMessage.value = t("simple.previewOpened");
     } catch (openError) {
-      previewStatusMessage.value = "预览窗口未能自动打开，可点击「打开预览」";
+      previewStatusMessage.value = t("simple.previewAutoFailed");
     }
   } catch (error) {
     runtimeStatusMessage.value = "";
@@ -829,7 +846,7 @@ async function stopGame() {
     return;
   }
   busyAction.value = "stop";
-  runtimeStatusMessage.value = "停止中...";
+  runtimeStatusMessage.value = t("simple.stopping");
   runtimeErrorMessage.value = "";
   try {
     if (!api?.stopGame) {
@@ -837,8 +854,8 @@ async function stopGame() {
     }
     const result = await api.stopGame();
     runtimeResult.value = result?.data || result;
-    runtimeStatusMessage.value = "已停止";
-    previewStatusMessage.value = "可以继续编辑，保存后再次启动";
+    runtimeStatusMessage.value = t("simple.stopped");
+    previewStatusMessage.value = t("simple.editAfterStop");
   } catch (error) {
     runtimeStatusMessage.value = "";
     runtimeErrorMessage.value = error.message || String(error);
@@ -848,14 +865,14 @@ async function stopGame() {
 }
 
 async function openPreview() {
-  previewStatusMessage.value = "正在打开预览窗口...";
+  previewStatusMessage.value = t("simple.openingPreview");
   runtimeErrorMessage.value = "";
   try {
     if (!api?.openDebugPanel) {
       throw new Error("Electron preview API is unavailable");
     }
     await api.openDebugPanel();
-    previewStatusMessage.value = "预览窗口已打开";
+    previewStatusMessage.value = t("simple.previewOpened");
   } catch (error) {
     previewStatusMessage.value = "";
     runtimeErrorMessage.value = error.message || String(error);
@@ -867,12 +884,12 @@ async function exportCurrentFrame() {
   errorMessage.value = "";
   const frame = activeFrame.value;
   if (!frame) {
-    errorMessage.value = "当前没有可导出的帧";
+    errorMessage.value = t("simple.noExportFrame");
     return;
   }
   try {
     if (!api?.exportFrameJson) {
-      throw new Error("Electron 导出 API 不可用");
+      throw new Error(t("simple.exportApiUnavailable"));
     }
     const content = JSON.stringify(serializeActiveFrame(), null, 2);
     const defaultFileName = `led-frame-L${activeLevelIndex.value + 1}-F${activeFrameIndex.value + 1}.json`;
@@ -880,7 +897,9 @@ async function exportCurrentFrame() {
     if (result?.canceled) {
       return;
     }
-    statusMessage.value = `当前帧已导出到 ${result?.filePath || "文件"}`;
+    statusMessage.value = t("simple.frameExported", {
+      file: result?.filePath || t("simple.fileFallback"),
+    });
   } catch (error) {
     errorMessage.value = error.message || String(error);
   }
@@ -891,13 +910,13 @@ async function importFrame() {
   errorMessage.value = "";
   const frame = ensureActiveFrame();
   if (!frame) {
-    errorMessage.value = "当前没有可替换的帧";
+    errorMessage.value = t("simple.noReplaceFrame");
     return;
   }
   const frameIndex = activeFrameIndex.value;
   try {
     if (!api?.importFrameJson) {
-      throw new Error("Electron 导入 API 不可用");
+      throw new Error(t("simple.importApiUnavailable"));
     }
     const result = await api.importFrameJson();
     if (result?.canceled) {
@@ -906,7 +925,7 @@ async function importFrame() {
     const parsed = JSON.parse(result?.content || "");
     const matrixSource = Array.isArray(parsed) ? parsed : parsed?.matrix;
     if (!Array.isArray(matrixSource)) {
-      throw new Error("JSON 中未找到 matrix 数组");
+      throw new Error(t("simple.matrixMissing"));
     }
     const normalized = matrixSource
       .map((entry) => normalizeMatrixObject(entry, frame, frameIndex))
@@ -925,12 +944,11 @@ async function importFrame() {
     invalidateMatrixFrame(frame);
     syncSelectedObject();
     scheduleMatrixCacheWarmup(frameIndex);
-    statusMessage.value =
-      dropped > 0
-        ? `已导入 ${normalized.length} 个对象（丢弃 ${dropped} 个界外对象）`
-        : `已导入 ${normalized.length} 个对象`;
+    statusMessage.value = dropped > 0
+      ? t("simple.importedDropped", { count: normalized.length, dropped })
+      : t("simple.imported", { count: normalized.length });
   } catch (error) {
-    errorMessage.value = `导入帧失败：${error.message || String(error)}`;
+    errorMessage.value = t("simple.importFailed", { message: error.message || String(error) });
   }
 }
 
@@ -1341,7 +1359,7 @@ function moveActiveLevel(direction) {
   ensureActiveFrame();
   syncSelectedObject();
   scheduleMatrixCacheWarmup(activeFrameIndex.value);
-  statusMessage.value = direction < 0 ? "关卡已前移" : "关卡已后移";
+  statusMessage.value = t(direction < 0 ? "simple.levelMovedUp" : "simple.levelMovedDown");
 }
 
 function addFrame() {
@@ -1362,7 +1380,7 @@ function deleteCurrentFrame() {
   if (!level?.frameList?.length) {
     return;
   }
-  if (!confirmDestructiveAction(`确定删除第 ${activeFrameIndex.value + 1} 帧吗？`)) {
+  if (!confirmDestructiveAction(t("simple.deleteFrameConfirm", { number: activeFrameIndex.value + 1 }))) {
     return;
   }
   level.frameList.splice(activeFrameIndex.value, 1);
@@ -1390,7 +1408,7 @@ function applyCurrentRepeatTimesToAllFrames() {
     item.repeatTimes = repeatTimes;
   });
   frame.repeatTimes = repeatTimes;
-  statusMessage.value = `当前关卡所有帧重复次数已设为 ${repeatTimes}`;
+  statusMessage.value = t("simple.repeatApplied", { count: repeatTimes });
 }
 
 function selectColor(index) {
@@ -1407,14 +1425,12 @@ function setInteractionMode(mode) {
   hoveredObjectId.value = "";
   stopSelectionMode();
   stopAnchorEdit();
-  statusMessage.value = mode === "add"
-    ? "新增对象模式：点击空白格或拖拽框选创建对象"
-    : "选择/移动模式：点击对象选中并拖动";
+  statusMessage.value = t(mode === "add" ? "simple.addModeStatus" : "simple.selectModeStatus");
 }
 
 function handleCellClick(x, y) {
   const frame = ensureActiveFrame();
-  const existing = expandedCellMap.value.get(createPointKey(x, y));
+  const existing = getExpandedCellAt(x, y);
   if (anchorEditMode.value) {
     selectAnchorCandidate(existing);
     return;
@@ -1427,25 +1443,25 @@ function handleCellClick(x, y) {
   if (topObject?.id) {
     if (interactionMode.value === "select-move") {
       selectObject(topObject.id);
-      statusMessage.value = "已选中对象";
+      statusMessage.value = t("simple.objectSelected");
     } else {
-      statusMessage.value = "该格已有对象，新增模式不会重复创建";
+      statusMessage.value = t("simple.occupiedNoCreate");
     }
     return;
   }
   if (interactionMode.value !== "add") {
-    statusMessage.value = "当前没有对象，请切换到新增对象模式";
+    statusMessage.value = t("simple.switchToAdd");
     return;
   }
   if (!panoramaMode.value && !isRealCell(x, y)) {
-    statusMessage.value = "非全景模式下仅创建 RGB 区域内的格子";
+    statusMessage.value = t("simple.realCellsOnly");
     return;
   }
   const object = createMatrixObject(x, y, selectedColor.value, frame);
   frame.matrix.push(object);
   patchMatrixFrame(frame, object, "add");
   selectedObjectId.value = object.id;
-  statusMessage.value = isRealCell(x, y) ? "已创建单格对象" : "已创建虚拟单格对象";
+  statusMessage.value = t(isRealCell(x, y) ? "simple.singleCreated" : "simple.virtualCreated");
 }
 
 function handleCellRangeCreate(payload) {
@@ -1457,7 +1473,7 @@ function handleCellRangeCreate(payload) {
   if (!cells.length) {
     return;
   }
-  const hasOverlap = cells.some((cell) => expandedCellMap.value.has(createPointKey(cell.x, cell.y)));
+  const hasOverlap = cells.some((cell) => Boolean(getExpandedCellAt(cell.x, cell.y)));
   const requestedAnchorX = toInteger(payload?.anchorX, cells[0].x);
   const requestedAnchorY = toInteger(payload?.anchorY, cells[0].y);
   const anchorInsideRealMatrix = isRealCell(requestedAnchorX, requestedAnchorY);
@@ -1473,14 +1489,14 @@ function handleCellRangeCreate(payload) {
   frame.matrix.push(object);
   patchMatrixFrame(frame, object, "add");
   selectedObjectId.value = object.id;
-  statusMessage.value = hasOverlap ? "已创建重叠多格对象" : "已创建多格对象";
+  statusMessage.value = t(hasOverlap ? "simple.overlapMultiCreated" : "simple.multiCreated");
 }
 
 function handleObjectDragStart(cell) {
   if (interactionMode.value !== "select-move" || selectionMode.value || anchorEditMode.value) {
     return;
   }
-  const existing = expandedCellMap.value.get(createPointKey(cell?.x, cell?.y));
+  const existing = getExpandedCellAt(cell?.x, cell?.y);
   const selectedEntry = existing?.occupants?.find(
     (entry) => entry.object?.id === selectedObjectId.value,
   );
@@ -1505,7 +1521,7 @@ function handleObjectDragStart(cell) {
   };
   hoveredObjectId.value = "";
   objectDragPreview.value = null;
-  statusMessage.value = "已选中对象，可拖动移动";
+  statusMessage.value = t("simple.selectedCanDrag");
 }
 
 function handleCellHover(cell) {
@@ -1574,7 +1590,7 @@ function handleObjectDragEnd(payload) {
         y: anchorCandidate.value.y + toInteger(object.y, 0) - previousY,
       };
     }
-    statusMessage.value = "对象已移动";
+    statusMessage.value = t("simple.objectMoved");
   }
 }
 
@@ -1634,7 +1650,7 @@ function deleteSelectedObject() {
   if (index < 0) {
     return;
   }
-  if (!confirmDestructiveAction("确定删除当前选中的对象吗？")) {
+  if (!confirmDestructiveAction(t("simple.deleteObjectConfirm"))) {
     return;
   }
   const [removed] = frame.matrix.splice(index, 1);
@@ -1665,7 +1681,7 @@ function reorderSelectedObject(targetIndex) {
   const [object] = frame.matrix.splice(currentIndex, 1);
   frame.matrix.splice(boundedIndex, 0, object);
   invalidateMatrixFrame(frame);
-  statusMessage.value = "对象层级已调整";
+  statusMessage.value = t("simple.layerAdjusted");
 }
 
 function applySelectedObjectLayerToAllFrames() {
@@ -1693,7 +1709,7 @@ function applySelectedObjectLayerToAllFrames() {
     appliedCount++;
   }
 
-  statusMessage.value = `对象层级已应用到 ${appliedCount} 帧，跳过 ${skippedCount} 帧`;
+  statusMessage.value = t("simple.layerApplied", { applied: appliedCount, skipped: skippedCount });
 }
 
 function copySelectedObjectToPreviousFrame() {
@@ -1717,7 +1733,9 @@ function copySelectedObjectToAllFrames() {
     invalidateMatrixFrame(frame);
     copied += 1;
   });
-  statusMessage.value = copied ? `已更新 ${copied} 帧` : "没有可复制的目标帧";
+  statusMessage.value = copied
+    ? t("simple.framesUpdated", { count: copied })
+    : t("simple.noTargetFrames");
 }
 
 function copyColorObjectsToAllFrames(colorIndex) {
@@ -1727,7 +1745,7 @@ function copyColorObjectsToAllFrames(colorIndex) {
     (object) => clampColorIndex(object.color) === normalizedColor,
   );
   if (!sourceObjects.length) {
-    statusMessage.value = `当前帧没有 Color ${normalizedColor} 对象`;
+    statusMessage.value = t("simple.noColorObjects", { color: normalizedColor });
     return;
   }
   let copiedFrames = 0;
@@ -1743,8 +1761,12 @@ function copyColorObjectsToAllFrames(colorIndex) {
     copiedFrames += 1;
   }
   statusMessage.value = copiedFrames
-    ? `已将本帧 ${sourceObjects.length} 个 Color ${normalizedColor} 对象复制到 ${copiedFrames} 帧`
-    : "没有可复制的目标帧";
+    ? t("simple.colorCopied", {
+      objects: sourceObjects.length,
+      color: normalizedColor,
+      frames: copiedFrames,
+    })
+    : t("simple.noTargetFrames");
 }
 
 function copySelectedObjectToFrame(frameIndex) {
@@ -1753,7 +1775,7 @@ function copySelectedObjectToFrame(frameIndex) {
   }
   upsertObjectInFrame(selectedObject.value, frames.value[frameIndex]);
   invalidateMatrixFrame(frames.value[frameIndex]);
-  statusMessage.value = `已更新第 ${frameIndex + 1} 帧`;
+  statusMessage.value = t("simple.frameUpdated", { number: frameIndex + 1 });
 }
 
 function upsertObjectInFrame(object, frame) {
@@ -1792,7 +1814,7 @@ function copyCurrentFrameToNextFrame() {
   replaceFrameObjects(sourceFrame, targetFrame);
   invalidateMatrixFrame(targetFrame);
   selectFrame(targetIndex);
-  statusMessage.value = `当前帧已复制到第 ${targetIndex + 1} 帧`;
+  statusMessage.value = t("simple.frameCopied", { number: targetIndex + 1 });
 }
 
 function copyCurrentFrameToAllFrames() {
@@ -1806,7 +1828,9 @@ function copyCurrentFrameToAllFrames() {
     invalidateMatrixFrame(frame);
     copied += 1;
   });
-  statusMessage.value = copied ? `当前帧已复制到 ${copied} 帧` : "没有可复制的目标帧";
+  statusMessage.value = copied
+    ? t("simple.frameCopiedMany", { count: copied })
+    : t("simple.noTargetFrames");
 }
 
 function copyCurrentFrameToFrame(frameIndex) {
@@ -1815,7 +1839,7 @@ function copyCurrentFrameToFrame(frameIndex) {
   }
   replaceFrameObjects(ensureActiveFrame(), frames.value[frameIndex]);
   invalidateMatrixFrame(frames.value[frameIndex]);
-  statusMessage.value = `当前帧已复制到第 ${frameIndex + 1} 帧`;
+  statusMessage.value = t("simple.frameCopied", { number: frameIndex + 1 });
 }
 
 function replaceFrameObjects(sourceFrame, targetFrame) {
@@ -1943,13 +1967,22 @@ function toggleMergeSelection(cell) {
   if (!object) {
     return;
   }
-  if (!isSingleCellObject(object)) {
-    statusMessage.value = "只能合并单格对象";
-    return;
-  }
   const id = object.id;
   if (mergeSelectionIds.value.includes(id)) {
     mergeSelectionIds.value = mergeSelectionIds.value.filter((item) => item !== id);
+    return;
+  }
+  const selection = canSelectObjectForMerge(
+    activeFrame.value?.matrix,
+    mergeSelectionIds.value,
+    id,
+  );
+  if (!selection.ok) {
+    statusMessage.value = t(
+      selection.code === MERGE_ERROR.MIXED_COLOR
+        ? "merge.sameColorOnly"
+        : "merge.staleSelection",
+    );
     return;
   }
   mergeSelectionIds.value = [...mergeSelectionIds.value, id];
@@ -1957,35 +1990,26 @@ function toggleMergeSelection(cell) {
 
 function mergeSelectedObjects() {
   const frame = ensureActiveFrame();
-  const selectedObjects = mergeSelectionIds.value
-    .map((id) => frame.matrix.find((object) => object.id === id))
-    .filter(Boolean);
-  const mergeableObjects = selectedObjects.filter(isSingleCellObject);
-  if (mergeableObjects.length !== selectedObjects.length) {
-    statusMessage.value = "已跳过不可合并的多格对象";
-  }
-  if (mergeableObjects.length < 2) {
-    statusMessage.value = "至少选择两个单格对象才能合并";
+  const result = mergeSameColorObjects(
+    frame.matrix,
+    mergeSelectionIds.value,
+    () => createUniqueObjectId(frame, activeFrameIndex.value),
+  );
+  if (!result.ok) {
+    const messageKey = {
+      [MERGE_ERROR.NOT_ENOUGH]: "merge.atLeastTwo",
+      [MERGE_ERROR.MISSING_OBJECT]: "merge.staleSelectionLong",
+      [MERGE_ERROR.MIXED_COLOR]: "merge.sameColorOnly",
+    }[result.code] || "merge.unavailable";
+    statusMessage.value = t(messageKey);
     return;
   }
-  const anchorCell = getObjectCells(mergeableObjects[0])[0];
-  const nextObject = {
-    id: createUniqueObjectId(frame, activeFrameIndex.value),
-    x: anchorCell.x,
-    y: anchorCell.y,
-    color: clampColorIndex(mergeableObjects[0].color),
-    points: mergeableObjects.map((object) => {
-      const cell = getObjectCells(object)[0];
-      return [cell.x - anchorCell.x, cell.y - anchorCell.y];
-    }),
-  };
-  const removeIds = new Set(mergeableObjects.map((object) => object.id));
-  frame.matrix = frame.matrix.filter((object) => !removeIds.has(object.id));
-  frame.matrix.push(nextObject);
+
+  frame.matrix = result.matrix;
   invalidateMatrixFrame(frame);
-  selectedObjectId.value = nextObject.id;
+  selectedObjectId.value = result.object.id;
   stopSelectionMode();
-  statusMessage.value = "合并完成";
+  statusMessage.value = t("merge.complete");
 }
 
 function openContextMenu(event) {
@@ -2111,7 +2135,9 @@ function createCellTitle(x, y, occupants) {
     return `x ${x}, y ${y}`;
   }
   const topObjectId = getTopOccupancyEntry(occupants)?.object?.id || "";
-  const overlapText = occupants.length > 1 ? `, 重叠 ${occupants.length} 层` : "";
+  const overlapText = occupants.length > 1
+    ? t("simple.overlapLayers", { count: occupants.length })
+    : "";
   return `x ${x}, y ${y}, ${topObjectId}${overlapText}`;
 }
 
@@ -2228,10 +2254,6 @@ function rotatePointsAroundAnchor(points, direction) {
     return points.map(([dx, dy]) => [-dy, dx]);
   }
   return points.map(([dx, dy]) => [dy, -dx]);
-}
-
-function isSingleCellObject(object) {
-  return getObjectPoints(object).length === 1;
 }
 
 function isRealCell(x, y) {
@@ -2411,12 +2433,12 @@ function formatRuntimeSummary(value) {
   }
   const summary = [];
   const fields = [
-    ["状态", value.engineState || value.state],
-    ["玩法", value.gameName || value.name],
-    ["ID", value.gameId || value.id],
-    ["起始关卡", value.startLevelIndex],
-    ["启动方式", value.launchMethod],
-    ["尺寸", value.width && value.height ? `${value.width} x ${value.height}` : ""],
+    [t("simple.summaryState"), value.engineState || value.state],
+    [t("simple.summaryGame"), value.gameName || value.name],
+    [t("simple.summaryGameId"), value.gameId || value.id],
+    [t("simple.summaryStartLevel"), value.startLevelIndex],
+    [t("simple.summaryLaunch"), value.launchMethod],
+    [t("simple.summarySize"), value.width && value.height ? `${value.width} x ${value.height}` : ""],
   ];
   for (const [label, fieldValue] of fields) {
     if (fieldValue !== undefined && fieldValue !== null && fieldValue !== "") {
@@ -2439,11 +2461,11 @@ function formatRuntimeSummary(value) {
         :style="editorFitContentStyle"
       >
     <div class="editor-topbar">
-      <button class="soft-button editor-back-button" type="button" @click="$emit('back')">返回列表</button>
+      <button class="soft-button editor-back-button" type="button" @click="$emit('back')">{{ t("simple.backToList") }}</button>
       <div v-if="document" class="sequence-block frame-sequence-header">
         <div class="sequence-head">
-          <h2>帧</h2>
-          <p>{{ frames.length }} frames · A/D 切换帧</p>
+          <h2>{{ t("simple.frames") }}</h2>
+          <p>{{ t("simple.frameCountHint", { count: frames.length }) }}</p>
         </div>
         <div class="frame-progress-row">
           <div class="frame-progress-shell">
@@ -2479,14 +2501,14 @@ function formatRuntimeSummary(value) {
             </div>
           </div>
           <div class="frame-icon-actions">
-            <button class="icon-add-button" type="button" aria-label="添加帧" data-tip="添加帧" @click="addFrame">
+            <button class="icon-add-button" type="button" :aria-label="t('simple.addFrame')" :data-tip="t('simple.addFrame')" @click="addFrame">
               +
             </button>
             <button
               class="icon-add-button"
               type="button"
-              aria-label="复制当前帧到前一帧"
-              data-tip="复制当前帧到前一帧"
+              :aria-label="t('simple.copyPreviousFrame')"
+              :data-tip="t('simple.copyPreviousFrame')"
               :disabled="activeFrameIndex <= 0"
               @click="copyCurrentFrameToPreviousFrame"
             >
@@ -2495,8 +2517,8 @@ function formatRuntimeSummary(value) {
             <button
               class="icon-add-button"
               type="button"
-              aria-label="复制当前帧到后一帧"
-              data-tip="复制当前帧到后一帧"
+              :aria-label="t('simple.copyNextFrame')"
+              :data-tip="t('simple.copyNextFrame')"
               @click="copyCurrentFrameToNextFrame"
             >
               N
@@ -2504,8 +2526,8 @@ function formatRuntimeSummary(value) {
             <button
               class="icon-add-button"
               type="button"
-              aria-label="复制当前帧到所有帧"
-              data-tip="复制当前帧到所有帧"
+              :aria-label="t('simple.copyAllFrames')"
+              :data-tip="t('simple.copyAllFrames')"
               :disabled="frames.length <= 1"
               @click="copyCurrentFrameToAllFrames"
             >
@@ -2514,8 +2536,8 @@ function formatRuntimeSummary(value) {
             <button
               class="icon-add-button icon-danger-button"
               type="button"
-              aria-label="删除当前帧"
-              data-tip="删除当前帧"
+              :aria-label="t('simple.deleteCurrentFrame')"
+              :data-tip="t('simple.deleteCurrentFrame')"
               :disabled="frames.length <= 1"
               @click="deleteCurrentFrame"
             >
@@ -2524,8 +2546,8 @@ function formatRuntimeSummary(value) {
             <button
               class="icon-add-button"
               type="button"
-              aria-label="导出当前帧"
-              data-tip="导出当前帧（JSON）"
+              :aria-label="t('simple.exportCurrentFrame')"
+              :data-tip="t('simple.exportCurrentFrameJson')"
               @click="exportCurrentFrame"
             >
               ⬇
@@ -2533,8 +2555,8 @@ function formatRuntimeSummary(value) {
             <button
               class="icon-add-button"
               type="button"
-              aria-label="导入帧替换当前帧"
-              data-tip="导入帧替换当前帧（JSON）"
+              :aria-label="t('simple.importReplaceFrame')"
+              :data-tip="t('simple.importReplaceFrameJson')"
               @click="importFrame"
             >
               ⬆
@@ -2547,57 +2569,57 @@ function formatRuntimeSummary(value) {
     <p v-if="errorMessage" class="error-line">{{ errorMessage }}</p>
     <p v-if="statusMessage" class="status-line">{{ statusMessage }}</p>
 
-    <div v-if="!document && !errorMessage" class="editor-loading">正在读取 simple-demo...</div>
+    <div v-if="!document && !errorMessage" class="editor-loading">{{ t("simple.loading") }}</div>
 
     <div v-if="document" class="simple-editor-layout">
       <aside class="editor-panel editor-left">
-        <h2>基础信息</h2>
+        <h2>{{ t("simple.basicInfo") }}</h2>
         <label>
-          <span>名称</span>
+          <span>{{ t("simple.name") }}</span>
           <input v-model="document.name" type="text" />
         </label>
         <label>
-          <span>描述</span>
+          <span>{{ t("simple.description") }}</span>
           <input v-model="document.description" type="text" />
         </label>
         <label>
-          <span>备注</span>
+          <span>{{ t("simple.remark") }}</span>
           <input v-model="document.remark" type="text" />
         </label>
         <div class="two-column-fields">
           <label>
-            <span>宽度</span>
+            <span>{{ t("simple.width") }}</span>
             <input v-model.number="document.siteSizeWidth" min="1" type="number" />
           </label>
           <label>
-            <span>高度</span>
+            <span>{{ t("simple.height") }}</span>
             <input v-model.number="document.siteSizeHeight" min="1" type="number" />
           </label>
         </div>
         <div class="two-column-fields">
           <label>
-            <span>周期</span>
+            <span>{{ t("simple.period") }}</span>
             <input v-model.number="document.period" min="1" type="number" />
           </label>
           <label>
-            <span>难度</span>
+            <span>{{ t("simple.difficulty") }}</span>
             <input v-model.number="document.difficulty" min="0" type="number" />
           </label>
         </div>
-        <button class="soft-button" type="button" :disabled="Boolean(busyAction)" @click="openGlobalConfig">全局配置</button>
+        <button class="soft-button" type="button" :disabled="Boolean(busyAction)" @click="openGlobalConfig">{{ t("simple.globalConfig") }}</button>
       </aside>
 
       <main class="editor-panel editor-center">
         <div class="level-sequence-row">
-          <button class="icon-add-button" type="button" aria-label="添加关卡" title="添加关卡" @click="addLevel">
+          <button class="icon-add-button" type="button" :aria-label="t('simple.addLevel')" :title="t('simple.addLevel')" @click="addLevel">
             +
           </button>
-          <div class="level-reorder-actions" aria-label="调整关卡顺序">
+          <div class="level-reorder-actions" :aria-label="t('simple.reorderLevels')">
             <button
               class="icon-add-button"
               type="button"
-              aria-label="关卡前移"
-              data-tip="关卡前移"
+              :aria-label="t('simple.moveLevelUp')"
+              :data-tip="t('simple.moveLevelUp')"
               :disabled="!canMoveActiveLevelUp"
               @click="moveActiveLevelUp"
             >
@@ -2606,8 +2628,8 @@ function formatRuntimeSummary(value) {
             <button
               class="icon-add-button"
               type="button"
-              aria-label="关卡后移"
-              data-tip="关卡后移"
+              :aria-label="t('simple.moveLevelDown')"
+              :data-tip="t('simple.moveLevelDown')"
               :disabled="!canMoveActiveLevelDown"
               @click="moveActiveLevelDown"
             >
@@ -2631,10 +2653,10 @@ function formatRuntimeSummary(value) {
         <div class="matrix-status-bar" :class="{ active: panoramaMode || selectionMode || anchorEditMode }">
           <div class="matrix-status-main">
             <div class="matrix-status-title">
-              <strong>{{ anchorEditMode ? "修改基准" : panoramaMode ? "全景编辑" : "矩阵编辑" }}</strong>
+              <strong>{{ t(anchorEditMode ? "simple.editAnchor" : panoramaMode ? "simple.panoramaEdit" : "simple.matrixEdit") }}</strong>
               <span>{{
                 anchorEditMode
-                  ? "点击对象内部格子作为新基准"
+                  ? t("simple.chooseAnchor")
                   : panoramaMode
                     ? panoramaStatusText
                     : `${matrixWidth} x ${matrixHeight}`
@@ -2642,18 +2664,18 @@ function formatRuntimeSummary(value) {
             </div>
             <div class="matrix-inline-fields">
               <label>
-                <span>关卡</span>
+                <span>{{ t("simple.level") }}</span>
                 <input v-model="activeLevel.label" type="text" />
               </label>
               <label class="matrix-repeat-field">
-                <span>重复</span>
+                <span>{{ t("simple.repeat") }}</span>
                 <div class="repeat-times-control">
                   <input v-model.number="activeFrame.repeatTimes" min="1" type="number" />
                   <button
                     class="inline-symbol-button"
                     type="button"
-                    title="应用当前重复次数到当前关卡所有帧"
-                    aria-label="应用当前重复次数到当前关卡所有帧"
+                    :title="t('simple.applyRepeat')"
+                    :aria-label="t('simple.applyRepeat')"
                     @click="applyCurrentRepeatTimesToAllFrames"
                   >
                     *
@@ -2664,7 +2686,7 @@ function formatRuntimeSummary(value) {
           </div>
           <div class="matrix-status-actions">
             <button class="soft-button compact-button" type="button" @click="togglePanoramaMode">
-              {{ panoramaMode ? "退出全景" : "全景" }}
+              {{ t(panoramaMode ? "simple.exitPanorama" : "simple.panorama") }}
             </button>
             <button
               v-if="panoramaMode && !selectionMode && !anchorEditMode"
@@ -2672,15 +2694,15 @@ function formatRuntimeSummary(value) {
               type="button"
               @click="enterSelectionMode"
             >
-              选择
+              {{ t("simple.select") }}
             </button>
             <template v-if="selectionMode">
-              <span class="selection-count">已选 {{ mergeSelectionIds.length }}</span>
+              <span class="selection-count">{{ t("simple.selectedCount", { count: mergeSelectionIds.length }) }}</span>
               <button class="soft-button compact-button" type="button" @click="mergeSelectedObjects">
-                合并
+                {{ t("simple.merge") }}
               </button>
               <button class="soft-button compact-button" type="button" @click="stopSelectionMode">
-                取消
+                {{ t("simple.cancel") }}
               </button>
             </template>
           </div>
@@ -2715,24 +2737,24 @@ function formatRuntimeSummary(value) {
           :style="{ left: `${contextMenu.x}px`, top: `${contextMenu.y}px` }"
           @click.stop
         >
-          <button v-if="!selectionMode" type="button" @click="enterSelectionMode">选择</button>
+          <button v-if="!selectionMode" type="button" @click="enterSelectionMode">{{ t("simple.select") }}</button>
           <template v-else>
-            <button type="button" @click="mergeSelectedObjects">合并</button>
-            <button type="button" @click="stopSelectionMode">取消</button>
+            <button type="button" @click="mergeSelectedObjects">{{ t("simple.merge") }}</button>
+            <button type="button" @click="stopSelectionMode">{{ t("simple.cancel") }}</button>
           </template>
         </div>
       </main>
 
       <aside class="editor-panel editor-right">
         <div class="side-panel-heading">
-          <h2>对象编辑</h2>
-          <p>{{ selectedObject ? selectedObject.id : "未选中对象" }}</p>
+          <h2>{{ t("simple.objectEditor") }}</h2>
+          <p>{{ selectedObject ? selectedObject.id : t("simple.noObjectSelected") }}</p>
         </div>
         <div class="editor-right-main">
           <div class="object-panel">
             <div class="object-panel-head">
-              <h2>对象</h2>
-              <p>{{ frameObjects.length }} items</p>
+              <h2>{{ t("simple.objects") }}</h2>
+              <p>{{ t("simple.itemCount", { count: frameObjects.length }) }}</p>
             </div>
             <div class="object-actions">
               <template v-if="anchorEditMode">
@@ -2741,14 +2763,14 @@ function formatRuntimeSummary(value) {
                   type="button"
                   @click="confirmAnchorEdit"
                 >
-                  确认
+                  {{ t("simple.confirm") }}
                 </button>
                 <button
                   class="soft-button compact-button"
                   type="button"
                   @click="stopAnchorEdit"
                 >
-                  取消
+                  {{ t("simple.cancel") }}
                 </button>
               </template>
               <template v-else>
@@ -2758,7 +2780,7 @@ function formatRuntimeSummary(value) {
                   type="button"
                   @click="rotateSelectedObjectCounterClockwise"
                 >
-                  左转90
+                  {{ t("simple.rotateLeft") }}
                 </button>
                 <button
                   class="soft-button compact-button"
@@ -2766,7 +2788,7 @@ function formatRuntimeSummary(value) {
                   type="button"
                   @click="rotateSelectedObjectClockwise"
                 >
-                  右转90
+                  {{ t("simple.rotateRight") }}
                 </button>
                 <button
                   class="soft-button compact-button"
@@ -2774,14 +2796,14 @@ function formatRuntimeSummary(value) {
                   type="button"
                   @click="startAnchorEdit"
                 >
-                  修改基准
+                  {{ t("simple.editAnchor") }}
                 </button>
                 <button
                   class="soft-button compact-button layer-symbol-button"
                   :disabled="!selectedObjectCanMoveUp"
                   type="button"
-                  title="层级 +1（绿色对象仍优先）"
-                  aria-label="层级加一"
+                  :title="t('simple.layerUpTitle')"
+                  :aria-label="t('simple.layerUp')"
                   @click="moveSelectedObjectLayerUp"
                 >
                   +
@@ -2790,8 +2812,8 @@ function formatRuntimeSummary(value) {
                   class="soft-button compact-button layer-symbol-button"
                   :disabled="!selectedObjectCanMoveDown"
                   type="button"
-                  title="层级 -1（绿色对象仍优先）"
-                  aria-label="层级减一"
+                  :title="t('simple.layerDownTitle')"
+                  :aria-label="t('simple.layerDown')"
                   @click="moveSelectedObjectLayerDown"
                 >
                   -
@@ -2800,8 +2822,8 @@ function formatRuntimeSummary(value) {
                   class="soft-button compact-button layer-symbol-button"
                   :disabled="!selectedObject"
                   type="button"
-                  title="应用当前层级到当前关卡所有帧"
-                  aria-label="应用当前层级到当前关卡所有帧"
+                  :title="t('simple.applyLayer')"
+                  :aria-label="t('simple.applyLayer')"
                   @click="applySelectedObjectLayerToAllFrames"
                 >
                   ⇅
@@ -2812,7 +2834,7 @@ function formatRuntimeSummary(value) {
                   type="button"
                   @click="applyBrushColorToSelectedObject"
                 >
-                  改色
+                  {{ t("simple.recolor") }}
                 </button>
                 <button
                   class="soft-button compact-button"
@@ -2820,7 +2842,7 @@ function formatRuntimeSummary(value) {
                   type="button"
                   @click="copySelectedObjectToPreviousFrame"
                 >
-                  复制前帧
+                  {{ t("simple.copyPrevious") }}
                 </button>
                 <button
                   class="soft-button compact-button"
@@ -2828,7 +2850,7 @@ function formatRuntimeSummary(value) {
                   type="button"
                   @click="copySelectedObjectToNextFrame"
                 >
-                  复制后帧
+                  {{ t("simple.copyNext") }}
                 </button>
                 <button
                   class="soft-button compact-button"
@@ -2836,7 +2858,7 @@ function formatRuntimeSummary(value) {
                   type="button"
                   @click="copySelectedObjectToAllFrames"
                 >
-                  复制全帧
+                  {{ t("simple.copyAll") }}
                 </button>
                 <button
                   class="soft-button compact-button"
@@ -2844,35 +2866,35 @@ function formatRuntimeSummary(value) {
                   type="button"
                   @click="deleteSelectedObject"
                 >
-                  删除
+                  {{ t("simple.delete") }}
                 </button>
               </template>
               <button
                 class="soft-button compact-button color-copy-button"
                 :disabled="frames.length <= 1 || frameColorObjectCounts[0] === 0"
                 type="button"
-                title="复制本帧所有绿色对象到当前关卡所有帧"
+                :title="t('simple.greenCopyTitle')"
                 @click="copyColorObjectsToAllFrames(0)"
               >
-                绿色到全帧
+                {{ t("simple.greenToAll") }}
               </button>
               <button
                 class="soft-button compact-button color-copy-button"
                 :disabled="frames.length <= 1 || frameColorObjectCounts[1] === 0"
                 type="button"
-                title="复制本帧所有蓝色对象到当前关卡所有帧"
+                :title="t('simple.blueCopyTitle')"
                 @click="copyColorObjectsToAllFrames(1)"
               >
-                蓝色到全帧
+                {{ t("simple.blueToAll") }}
               </button>
               <button
                 class="soft-button compact-button color-copy-button"
                 :disabled="frames.length <= 1 || frameColorObjectCounts[3] === 0"
                 type="button"
-                title="复制本帧所有粉色对象到当前关卡所有帧"
+                :title="t('simple.pinkCopyTitle')"
                 @click="copyColorObjectsToAllFrames(3)"
               >
-                粉色到全帧
+                {{ t("simple.pinkToAll") }}
               </button>
             </div>
             <div class="object-list">
@@ -2887,18 +2909,22 @@ function formatRuntimeSummary(value) {
                 <span class="object-color" :style="{ backgroundColor: colorOptions[object.color]?.value }"></span>
                 <span class="object-main">
                   <strong>{{ object.id }}</strong>
-                  <small>
-                    层 {{ object.index + 1 }}/{{ frameObjects.length }} · 基准 {{ object.x }},{{ object.y }} ·
-                    Color {{ object.color }}<template v-if="object.color === 0">（绿色优先）</template> ·
-                    {{ object.occupiedCount }} 格
-                  </small>
+                  <small>{{ t("simple.objectMeta", {
+                    layer: object.index + 1,
+                    total: frameObjects.length,
+                    x: object.x,
+                    y: object.y,
+                    color: object.color,
+                    priority: object.color === 0 ? t("simple.greenPriority") : "",
+                    cells: object.occupiedCount,
+                  }) }}</small>
                 </span>
               </button>
             </div>
           </div>
           <div class="editor-side-rail">
             <div class="editor-side-section">
-              <h2>画笔</h2>
+              <h2>{{ t("simple.brush") }}</h2>
               <EditorInteractionModeSwitch
                 :model-value="interactionMode"
                 :options="interactionModeOptions"
@@ -2918,10 +2944,10 @@ function formatRuntimeSummary(value) {
                 </button>
               </div>
               <div class="editor-meta">
-                <p>当前画笔：Color {{ selectedColor }}</p>
-                <p>矩阵：{{ matrixWidth }} x {{ matrixHeight }}</p>
-                <p>缩放：{{ Math.round(matrixZoom * 100) }}%</p>
-                <p>对象：{{ frameObjects.length }}</p>
+                <p>{{ t("simple.currentBrush", { color: selectedColor }) }}</p>
+                <p>{{ t("simple.matrix", { width: matrixWidth, height: matrixHeight }) }}</p>
+                <p>{{ t("simple.zoom", { value: Math.round(matrixZoom * 100) }) }}</p>
+                <p>{{ t("simple.objectCount", { count: frameObjects.length }) }}</p>
               </div>
             </div>
             <div class="runtime-panel">
@@ -2931,7 +2957,7 @@ function formatRuntimeSummary(value) {
                 type="button"
                 @click="startGame"
               >
-                {{ busyAction === "start" ? "启动中" : "启动游戏" }}
+                {{ t(busyAction === "start" ? "simple.starting" : "simple.startGame") }}
               </button>
               <button
                 class="soft-button runtime-start-button"
@@ -2939,7 +2965,7 @@ function formatRuntimeSummary(value) {
                 type="button"
                 @click="stopGame"
               >
-                {{ busyAction === "stop" ? "停止中" : "停止游戏" }}
+                {{ t(busyAction === "stop" ? "simple.stopping" : "simple.stopGame") }}
               </button>
               <button
                 class="soft-button runtime-start-button"
@@ -2947,7 +2973,7 @@ function formatRuntimeSummary(value) {
                 type="button"
                 @click="openPreview"
               >
-                打开预览
+                {{ t("simple.openPreview") }}
               </button>
               <button
                 class="soft-button runtime-start-button"
@@ -2955,7 +2981,7 @@ function formatRuntimeSummary(value) {
                 type="button"
                 @click="validateEditor"
               >
-                校验
+                {{ t("simple.validate") }}
               </button>
               <button
                 class="soft-button runtime-start-button"
@@ -2963,7 +2989,7 @@ function formatRuntimeSummary(value) {
                 type="button"
                 @click="saveEditor"
               >
-                保存
+                {{ t("simple.save") }}
               </button>
               <button
                 class="soft-button runtime-start-button"
@@ -2971,7 +2997,7 @@ function formatRuntimeSummary(value) {
                 type="button"
                 @click="exportCurrentLevelGif"
               >
-                {{ busyAction === "gif-export" ? "导出中" : "导出 GIF" }}
+                {{ t(busyAction === "gif-export" ? "simple.exporting" : "simple.exportGif") }}
               </button>
               <p v-if="gifExportProgress" class="status-line">{{ gifExportProgress }}</p>
               <p v-if="runtimeStatusMessage" class="status-line">{{ runtimeStatusMessage }}</p>

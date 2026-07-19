@@ -1,5 +1,8 @@
 <script setup>
-import { computed, onMounted, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref } from "vue";
+import { useI18n } from "vue-i18n";
+
+const { t } = useI18n({ useScope: "global" });
 
 const mediaTree = ref([]);
 const expandedPaths = ref(new Set());
@@ -9,6 +12,7 @@ const isLoading = ref(false);
 const errorMessage = ref("");
 const noticeMessage = ref("");
 const rootExists = ref(true);
+const audioElement = ref(null);
 
 const mediaApi = computed(() => window.mediaLibrary);
 
@@ -30,9 +34,9 @@ const visibleRows = computed(() => {
 
 const emptyMessage = computed(() => {
   if (!rootExists.value) {
-    return "项目目录下还没有 media 文件夹";
+    return t("media.missingRoot");
   }
-  return "media 目录中暂无可展示内容";
+  return t("media.emptyRoot");
 });
 
 function iconFor(node) {
@@ -45,17 +49,20 @@ function iconFor(node) {
   if (node.mediaType === "video") {
     return "VID";
   }
+  if (node.mediaType === "audio") {
+    return "AUD";
+  }
   return "FILE";
 }
 
 function nodeTitle(node) {
   if (node.kind === "directory") {
-    return "打开文件夹";
+    return t("media.openFolder");
   }
   if (node.previewable) {
-    return "预览文件";
+    return t("media.previewFile");
   }
-  return "该文件暂不支持预览";
+  return t("media.unsupportedTitle");
 }
 
 function toggleFolder(node) {
@@ -69,6 +76,7 @@ function toggleFolder(node) {
 }
 
 async function selectNode(node) {
+  stopAudioPreview();
   selectedPath.value = node.relativePath;
   noticeMessage.value = "";
 
@@ -100,12 +108,13 @@ async function selectNode(node) {
       kind: "error",
       name: node.name,
       relativePath: node.relativePath,
-      message: error?.message || "无法打开该媒体文件",
+      message: error?.message || t("media.openFailed"),
     };
   }
 }
 
 async function loadMedia() {
+  stopAudioPreview();
   errorMessage.value = "";
   noticeMessage.value = "";
   preview.value = null;
@@ -113,7 +122,7 @@ async function loadMedia() {
   if (!mediaApi.value?.list || !mediaApi.value?.getPreviewUrl) {
     mediaTree.value = [];
     rootExists.value = false;
-    errorMessage.value = "当前运行环境未提供媒体库接口";
+    errorMessage.value = t("media.apiUnavailable");
     return;
   }
 
@@ -125,19 +134,45 @@ async function loadMedia() {
     selectedPath.value = "";
     expandedPaths.value = new Set();
     if (mediaTree.value.length > 0) {
-      noticeMessage.value = "媒体列表已刷新";
+      noticeMessage.value = t("media.refreshed");
     }
   } catch (error) {
     mediaTree.value = [];
     rootExists.value = true;
-    errorMessage.value = error?.message || "读取媒体库失败";
+    errorMessage.value = error?.message || t("media.readFailed");
   } finally {
     isLoading.value = false;
   }
 }
 
+function stopAudioPreview() {
+  const player = audioElement.value;
+  if (!player) {
+    return;
+  }
+  player.pause();
+  player.removeAttribute("src");
+  player.load();
+}
+
+function handleAudioError() {
+  const current = preview.value;
+  if (!current || current.kind !== "audio") {
+    return;
+  }
+  preview.value = {
+    ...current,
+    kind: "error",
+    message: t("media.audioFailed"),
+  };
+}
+
 onMounted(() => {
   loadMedia();
+});
+
+onBeforeUnmount(() => {
+  stopAudioPreview();
 });
 </script>
 
@@ -145,23 +180,23 @@ onMounted(() => {
   <section class="workspace media-view">
     <div class="page-heading media-heading">
       <div>
-        <h1>媒体库</h1>
-        <p>Media Library</p>
+        <h1>{{ t("media.title") }}</h1>
+        <p>{{ t("media.subtitle") }}</p>
       </div>
       <button class="soft-button media-refresh-button" type="button" :disabled="isLoading" @click="loadMedia">
-        {{ isLoading ? "刷新中" : "刷新" }}
+        {{ isLoading ? t("common.refreshing") : t("common.refresh") }}
       </button>
     </div>
 
     <div class="media-library-layout">
-      <aside class="media-tree-panel" aria-label="media file tree">
+      <aside class="media-tree-panel" :aria-label="t('media.treeLabel')">
         <div class="media-panel-header">
           <strong>media</strong>
-          <span>{{ visibleRows.length }} 项</span>
+          <span>{{ t("common.itemCount", { count: visibleRows.length }) }}</span>
         </div>
 
         <div v-if="isLoading" class="media-state-panel">
-          <p>正在读取媒体目录</p>
+          <p>{{ t("media.reading") }}</p>
         </div>
 
         <div v-else-if="errorMessage" class="media-state-panel error">
@@ -193,10 +228,10 @@ onMounted(() => {
         </div>
       </aside>
 
-      <section class="media-preview-panel" aria-label="media preview">
+      <section class="media-preview-panel" :aria-label="t('media.previewLabel')">
         <div v-if="!preview" class="media-preview-empty">
           <div class="empty-glyph" aria-hidden="true"></div>
-          <p>选择图片、GIF 或视频进行预览</p>
+          <p>{{ t("media.choosePreview") }}</p>
           <span v-if="noticeMessage">{{ noticeMessage }}</span>
         </div>
 
@@ -216,13 +251,26 @@ onMounted(() => {
             <video :src="preview.url" controls playsinline />
           </div>
 
+          <div v-else-if="preview.kind === 'audio'" class="media-preview-stage audio">
+            <div class="media-audio-player">
+              <strong>{{ preview.name }}</strong>
+              <audio
+                ref="audioElement"
+                :src="preview.url"
+                controls
+                preload="metadata"
+                @error="handleAudioError"
+              ></audio>
+            </div>
+          </div>
+
           <div v-else-if="preview.kind === 'unsupported'" class="media-preview-message">
-            <strong>暂不支持预览</strong>
-            <p>当前文件类型不能在媒体库中直接打开。</p>
+            <strong>{{ t("media.unsupported") }}</strong>
+            <p>{{ t("media.unsupportedBody") }}</p>
           </div>
 
           <div v-else class="media-preview-message error">
-            <strong>无法打开预览</strong>
+            <strong>{{ t("media.previewFailed") }}</strong>
             <p>{{ preview.message }}</p>
           </div>
         </div>

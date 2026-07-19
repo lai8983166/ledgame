@@ -9,6 +9,9 @@ const {
   preparationRequest,
   shouldInitializeSystemIdle,
 } = require('./game-flow.cjs')
+const {
+  createLanguagePreferenceStore,
+} = require('./language-settings.cjs')
 
 const isDev = Boolean(process.env.VITE_DEV_SERVER_URL)
 const shouldUseEmbeddedBackend = !isDev && !process.env.LED_BACKEND_URL
@@ -36,6 +39,11 @@ protocol.registerSchemesAsPrivileged([
 if (process.env.LED_USER_DATA_DIR) {
   app.setPath('userData', path.resolve(process.env.LED_USER_DATA_DIR))
 }
+
+const languagePreferences = createLanguagePreferenceStore({
+  fs,
+  settingsPath: path.join(app.getPath('userData'), 'settings', 'language.json'),
+})
 
 try {
   const earlyLogDir = path.join(app.getPath('userData'), 'logs')
@@ -75,6 +83,20 @@ function appendStartupLog(message) {
   } catch (_error) {
     // Logging must never make startup fail.
   }
+}
+
+function broadcastApplicationLanguage(locale) {
+  BrowserWindow.getAllWindows().forEach((window) => {
+    if (!window.isDestroyed()) {
+      window.webContents.send('app-language-changed', locale)
+    }
+  })
+}
+
+async function setApplicationLanguage(locale) {
+  const savedLocale = await languagePreferences.set(locale)
+  broadcastApplicationLanguage(savedLocale)
+  return savedLocale
 }
 
 function defaultRuntimeStateStreamUrl(baseUrl) {
@@ -1093,6 +1115,8 @@ ipcMain.handle('spirit:update', (_event, spiritId, payload) => {
 })
 ipcMain.handle('media:list', () => listMediaLibrary())
 ipcMain.handle('media:get-preview-url', (_event, relativePath) => getMediaPreviewUrl(relativePath))
+ipcMain.handle('app-language:get', () => languagePreferences.get())
+ipcMain.handle('app-language:set', (_event, locale) => setApplicationLanguage(locale))
 ipcMain.on('diagnostic:editor-layout', (event, snapshot) => {
   if (!mainWindow || mainWindow.isDestroyed() || event.sender !== mainWindow.webContents) {
     return

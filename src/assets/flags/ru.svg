@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 32" role="img" aria-label="Russia">
+  <rect width="48" height="32" rx="2" fill="#fff"/>
+  <path fill="#0039a6" d="M0 10.67h48v10.66H0z"/>
+  <path fill="#d52b1e" d="M0 21.33h48V32H0z"/>
+</svg>

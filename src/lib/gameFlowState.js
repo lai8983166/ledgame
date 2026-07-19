@@ -102,7 +102,7 @@ export function hasTermination(value) {
   return state.terminationReason !== null || state.success !== null;
 }
 
-export function extractErrorMessage(error, fallback = "操作失败") {
+export function extractErrorMessage(error, fallback = "Operation failed") {
   if (typeof error === "string" && error.trim()) {
     return error.trim();
   }

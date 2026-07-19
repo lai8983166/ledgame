@@ -8,6 +8,10 @@ self.onmessage = (event) => {
     });
     self.postMessage({ type: "complete", bytes: bytes.buffer }, [bytes.buffer]);
   } catch (error) {
-    self.postMessage({ type: "error", message: error?.message || String(error) });
+    self.postMessage({
+      type: "error",
+      code: error?.code || "SIMPLE_GIF_ENCODING_FAILED",
+      message: error?.message || String(error),
+    });
   }
 };

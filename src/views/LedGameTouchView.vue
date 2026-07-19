@@ -1,5 +1,6 @@
 <script setup>
 import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from "vue";
+import { useI18n } from "vue-i18n";
 import TouchMatrixCanvas from "../components/TouchMatrixCanvas.vue";
 import {
   extractErrorMessage,
@@ -11,6 +12,7 @@ import {
 
 const api = window.ledGame;
 const mediaApi = window.mediaLibrary;
+const { t } = useI18n();
 const TOUCH_IDLE_VIDEO_ASSET = "dashboard/idle.mp4";
 const runtimeState = ref(normalizeRuntimeState(null));
 const games = ref([]);
@@ -110,7 +112,7 @@ async function loadIdleVideo() {
 async function refreshState() {
   if (!api?.touchGameState) {
     loadingState.value = false;
-    errorMessage.value = "Touch runtime API 不可用";
+    errorMessage.value = t("touch.apiUnavailable");
     return;
   }
   const versionBeforeRequest = stateBroadcastVersion.value;
@@ -122,7 +124,7 @@ async function refreshState() {
       applyRuntimeState(result?.data ?? result);
     }
   } catch (error) {
-    errorMessage.value = extractErrorMessage(error, "读取游戏状态失败");
+    errorMessage.value = extractErrorMessage(error, t("touch.stateReadFailed"));
   } finally {
     loadingState.value = false;
   }
@@ -154,7 +156,7 @@ async function runAction(name, action, { refreshOnError = false } = {}) {
     }
     return result;
   } catch (error) {
-    errorMessage.value = extractErrorMessage(error);
+    errorMessage.value = extractErrorMessage(error, t("common.operationFailed"));
     if (refreshOnError) {
       await refreshState();
     }
@@ -181,7 +183,7 @@ async function loadGames() {
     games.value = normalizeGameList(result);
     await loadCoverUrls(games.value);
   } catch (error) {
-    errorMessage.value = extractErrorMessage(error, "加载游戏列表失败");
+    errorMessage.value = extractErrorMessage(error, t("touch.gamesLoadFailed"));
   } finally {
     loadingGames.value = false;
   }
@@ -244,7 +246,7 @@ async function confirmPreparation() {
     const confirmed = await api.confirmPreparation(sessionId);
     applyRuntimeState(confirmed?.data ?? confirmed);
   } catch (error) {
-    errorMessage.value = extractErrorMessage(error);
+    errorMessage.value = extractErrorMessage(error, t("common.operationFailed"));
     await refreshState();
   } finally {
     busyAction.value = "";
@@ -266,7 +268,7 @@ async function returnToIdle() {
 }
 
 async function stopGame() {
-  if (!window.confirm("确定停止当前游戏吗？")) return;
+  if (!window.confirm(t("touch.stopConfirm"))) return;
   await runAction("stop", () => api.stopTouchGame());
 }
 </script>
@@ -294,7 +296,7 @@ async function stopGame() {
 
     <section v-if="loadingState" class="touch-center touch-status-panel" aria-live="polite">
       <span class="touch-kicker">LED GAME TOUCH</span>
-      <h1>正在连接游戏系统</h1>
+      <h1>{{ t("touch.connecting") }}</h1>
     </section>
 
     <button
@@ -305,27 +307,27 @@ async function stopGame() {
       @click="wakeTouch"
     >
       <span class="touch-kicker">LED GAME TOUCH</span>
-      <strong>{{ busyAction === "wake" ? "正在唤醒" : "触摸屏幕开始" }}</strong>
-      <small>选择游戏并配置本局</small>
+      <strong>{{ t(busyAction === "wake" ? "touch.waking" : "touch.tapToStart") }}</strong>
+      <small>{{ t("touch.idleHint") }}</small>
     </button>
 
     <section v-else-if="view === 'PREPARING'" class="touch-preparing">
       <header class="touch-preparing-header">
         <div>
           <span class="touch-kicker">PREPARING</span>
-          <h1>选择游戏</h1>
+          <h1>{{ t("touch.chooseGame") }}</h1>
         </div>
         <button class="touch-text-button" type="button" :disabled="Boolean(busyAction)" @click="cancelPreparation">
-          返回待机
+          {{ t("touch.returnIdle") }}
         </button>
       </header>
 
       <div class="touch-preparing-body">
-        <section class="touch-game-browser" aria-label="游戏列表">
-          <div v-if="loadingGames" class="touch-empty">正在加载游戏...</div>
+        <section class="touch-game-browser" :aria-label="t('touch.gameList')">
+          <div v-if="loadingGames" class="touch-empty">{{ t("touch.loadingGames") }}...</div>
           <div v-else-if="!games.length" class="touch-empty">
-            <strong>还没有可用游戏</strong>
-            <button class="touch-secondary-button" type="button" @click="loadGames">重新加载</button>
+            <strong>{{ t("touch.noGames") }}</strong>
+            <button class="touch-secondary-button" type="button" @click="loadGames">{{ t("touch.reload") }}</button>
           </div>
           <div v-else class="touch-game-grid">
             <button
@@ -347,36 +349,36 @@ async function stopGame() {
           </div>
         </section>
 
-        <aside class="touch-config" aria-label="本局设置">
+        <aside class="touch-config" :aria-label="t('touch.sessionSettings')">
           <div class="touch-config-heading">
             <span class="touch-kicker">SESSION OPTIONS</span>
-            <h2>{{ selectedGame?.name || "请先选择游戏" }}</h2>
+            <h2>{{ selectedGame?.name || t("touch.chooseGameFirst") }}</h2>
           </div>
 
           <label class="touch-field">
-            <span>游戏人数</span>
+            <span>{{ t("touch.playerCount") }}</span>
             <input v-model.number="draft.userCount" type="number" min="1" max="32" :disabled="!selectedGameId || Boolean(busyAction)" />
           </label>
 
           <label class="touch-field">
-            <span>起始关卡</span>
+            <span>{{ t("touch.startLevel") }}</span>
             <input v-model.number="draft.startLevelIndex" type="number" min="0" :disabled="!selectedGameId || Boolean(busyAction)" />
           </label>
 
           <fieldset class="touch-fieldset" :disabled="!selectedGameId || Boolean(busyAction)">
-            <legend>关卡失败后</legend>
+            <legend>{{ t("touch.afterFailure") }}</legend>
             <div class="touch-segmented">
-              <button type="button" :class="{ active: draft.stageFailurePolicy === 'END_GAME' }" @click="draft.stageFailurePolicy = 'END_GAME'">结束本局</button>
-              <button type="button" :class="{ active: draft.stageFailurePolicy === 'RETRY' }" @click="draft.stageFailurePolicy = 'RETRY'">重试关卡</button>
+              <button type="button" :class="{ active: draft.stageFailurePolicy === 'END_GAME' }" @click="draft.stageFailurePolicy = 'END_GAME'">{{ t("touch.endGame") }}</button>
+              <button type="button" :class="{ active: draft.stageFailurePolicy === 'RETRY' }" @click="draft.stageFailurePolicy = 'RETRY'">{{ t("touch.retryLevel") }}</button>
             </div>
           </fieldset>
 
           <div class="touch-config-actions">
             <button class="touch-secondary-button" type="button" :disabled="!canConfirm || Boolean(busyAction)" @click="savePreparation">
-              保存配置
+              {{ t("touch.saveConfig") }}
             </button>
             <button class="touch-primary-button" type="button" :disabled="!canConfirm || Boolean(busyAction)" @click="confirmPreparation">
-              {{ busyAction === "confirm" ? "正在启动" : "开始游戏" }}
+              {{ t(busyAction === "confirm" ? "touch.starting" : "touch.startGame") }}
             </button>
           </div>
         </aside>
@@ -385,45 +387,45 @@ async function stopGame() {
 
     <section v-else-if="view === 'STARTING'" class="touch-center touch-status-panel">
       <span class="touch-kicker">STARTING</span>
-      <h1>{{ runtimeState.gameName || "游戏" }} 正在启动</h1>
-      <p>请站到灯光场地边缘</p>
+      <h1>{{ t("touch.gameStarting", { game: runtimeState.gameName || t("touch.gameFallback") }) }}</h1>
+      <p>{{ t("touch.startingHint") }}</p>
     </section>
 
     <section v-else-if="view === 'RUNNING'" class="touch-center touch-status-panel">
       <span class="touch-kicker">RUNNING</span>
-      <h1>{{ runtimeState.gameName || "游戏进行中" }}</h1>
+      <h1>{{ runtimeState.gameName || t("touch.gameRunning") }}</h1>
       <div class="touch-live-stats">
-        <span>得分 <strong>{{ gameplay.score ?? 0 }}</strong></span>
-        <span>生命 <strong>{{ gameplay.life ?? "-" }}</strong></span>
+        <span>{{ t("touch.score") }} <strong>{{ gameplay.score ?? 0 }}</strong></span>
+        <span>{{ t("touch.life") }} <strong>{{ gameplay.life ?? "-" }}</strong></span>
       </div>
-      <button class="touch-danger-button" type="button" :disabled="Boolean(busyAction)" @click="stopGame">停止游戏</button>
+      <button class="touch-danger-button" type="button" :disabled="Boolean(busyAction)" @click="stopGame">{{ t("touch.stopGame") }}</button>
     </section>
 
     <section v-else-if="view === 'SETTLING'" class="touch-center touch-status-panel">
       <span class="touch-kicker">SETTLING</span>
-      <h1>正在结算</h1>
-      <p>请稍候</p>
+      <h1>{{ t("touch.settling") }}</h1>
+      <p>{{ t("touch.pleaseWait") }}</p>
     </section>
 
     <section v-else-if="view === 'STOPPED'" class="touch-center touch-status-panel">
       <span class="touch-kicker">GAME OVER</span>
-      <h1 v-if="terminated">{{ resultSucceeded ? "挑战完成" : "本局结束" }}</h1>
-      <h1 v-else>准备进入游戏</h1>
+      <h1 v-if="terminated">{{ t(resultSucceeded ? "touch.challengeComplete" : "touch.gameEnded") }}</h1>
+      <h1 v-else>{{ t("touch.readyForGame") }}</h1>
       <div v-if="terminated" class="touch-result-score">{{ gameplay.score ?? 0 }}</div>
       <button class="touch-primary-button" type="button" :disabled="Boolean(busyAction)" @click="returnToIdle">
-        {{ busyAction === "idle" ? "正在返回" : "返回待机" }}
+        {{ t(busyAction === "idle" ? "touch.returning" : "touch.returnIdle") }}
       </button>
     </section>
 
     <section v-else class="touch-center touch-status-panel">
       <span class="touch-kicker">CONNECTION</span>
-      <h1>等待游戏状态</h1>
-      <button class="touch-secondary-button" type="button" @click="refreshState">重新连接</button>
+      <h1>{{ t("touch.waitingState") }}</h1>
+      <button class="touch-secondary-button" type="button" @click="refreshState">{{ t("touch.reconnect") }}</button>
     </section>
 
     <div v-if="errorMessage" class="touch-error" role="alert">
       <span>{{ errorMessage }}</span>
-      <button type="button" @click="errorMessage = ''">关闭</button>
+      <button type="button" @click="errorMessage = ''">{{ t("common.close") }}</button>
     </div>
   </main>
 </template>

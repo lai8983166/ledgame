@@ -1,4 +1,7 @@
 <script setup>
+import { useI18n } from "vue-i18n";
+
+const { t } = useI18n({ useScope: "global" });
 defineEmits(["open"]);
 </script>
 
@@ -7,7 +10,7 @@ defineEmits(["open"]);
     <div class="game-card-mark" aria-hidden="true"></div>
     <div>
       <h2>simple</h2>
-      <p>Simple editor demo</p>
+      <p>{{ t("games.simpleDescription") }}</p>
     </div>
   </button>
 </template>

@@ -340,6 +340,11 @@ button:disabled {
   background: #e8e0f3;
 }
 
+.media-row-icon.audio {
+  color: #765d26;
+  background: #f1e8cf;
+}
+
 .media-row-name {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -428,6 +433,36 @@ button:disabled {
   background: #151a22;
 }
 
+.media-preview-stage.audio {
+  width: 990px;
+  height: 180px;
+  min-height: 180px;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.media-audio-player {
+  width: min(880px, 100%);
+  display: grid;
+  grid-template-columns: minmax(160px, 1fr) minmax(460px, 2.4fr);
+  align-items: center;
+  gap: 24px;
+  padding: 20px 24px;
+  border: 1px solid rgba(190, 199, 212, 0.72);
+  border-radius: 6px;
+  background: #f5f7fa;
+  box-shadow: 0 18px 42px rgba(85, 95, 110, 0.18);
+}
+
+.media-audio-player strong {
+  overflow-wrap: anywhere;
+}
+
+.media-audio-player audio {
+  width: 100%;
+}
+
 .media-preview-empty {
   align-self: center;
   color: #818b98;
@@ -436,6 +471,68 @@ button:disabled {
 .media-preview-empty span {
   color: #6b7582;
   font-size: 13px;
+}
+
+.language-settings {
+  max-width: 760px;
+  display: grid;
+  gap: 24px;
+  padding: 28px;
+  border: 1px solid rgba(190, 199, 212, 0.72);
+  border-radius: 6px;
+  background: #f5f7fa;
+}
+
+.language-settings p {
+  margin: 8px 0 0;
+  color: #697482;
+}
+
+.language-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.language-option {
+  display: grid;
+  grid-template-columns: auto auto 1fr;
+  gap: 4px 12px;
+  align-items: center;
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid #c4ccd7;
+  border-radius: 6px;
+  cursor: pointer;
+  background: #edf1f6;
+}
+
+.language-option:has(input:checked) {
+  border-color: #55728f;
+  background: #e3ebf3;
+  box-shadow: inset 0 0 0 1px #55728f;
+}
+
+.language-option input {
+  grid-row: 1 / span 2;
+}
+
+.language-option-flag {
+  width: 36px;
+  height: 24px;
+  grid-row: 1 / span 2;
+  border: 1px solid rgba(80, 94, 110, 0.24);
+  border-radius: 3px;
+  object-fit: cover;
+  box-shadow: 0 2px 5px rgba(54, 65, 78, 0.16);
+}
+
+.language-option span {
+  font-weight: 700;
+}
+
+.language-option small {
+  color: #77818d;
 }
 
 .media-preview-message {
@@ -2356,11 +2453,13 @@ button:disabled {
 
   .nav-tabs {
     width: 100%;
+    justify-content: flex-start;
+    overflow-x: auto;
   }
 
   .nav-tab {
-    flex: 1;
-    min-width: 0;
+    flex: 0 0 auto;
+    min-width: 96px;
   }
 
   .workspace {

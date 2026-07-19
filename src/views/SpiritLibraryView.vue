@@ -1,8 +1,10 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { useI18n } from "vue-i18n";
 import SpiritPointEditorDialog from "../components/SpiritPointEditorDialog.vue";
 
 const DEFAULT_PREVIEW_GAP = 2;
+const { t } = useI18n();
 
 const spirits = ref([]);
 const selectedSpiritId = ref("");
@@ -107,7 +109,7 @@ function sizeLabel(spirit) {
 
 function pointsSummary(points) {
   if (!points) {
-    return "无点阵数据";
+    return t("spirits.noPointData");
   }
   const normalized = String(points).replace(/\s+/g, " ").trim();
   if (normalized.length <= 96) {
@@ -117,7 +119,7 @@ function pointsSummary(points) {
 }
 
 function spiritName(spirit) {
-  return spirit?.name || spirit?.id || "未命名精灵";
+  return spirit?.name || spirit?.id || t("spirits.unnamed");
 }
 
 function selectSpirit(spirit) {
@@ -158,9 +160,9 @@ function closeSpiritEditor() {
 async function saveSpirit(payload) {
   const saveRequest = creatingSpirit.value ? spiritApi.value?.create : spiritApi.value?.update;
   if (!editingSpirit.value || !saveRequest) {
-    editErrorMessage.value = creatingSpirit.value
-      ? "当前运行环境未提供精灵创建接口"
-      : "当前运行环境未提供精灵更新接口";
+    editErrorMessage.value = t(
+      creatingSpirit.value ? "spirits.createApiUnavailable" : "spirits.updateApiUnavailable",
+    );
     return;
   }
   isSavingSpirit.value = true;
@@ -171,7 +173,7 @@ async function saveSpirit(payload) {
       : await saveRequest(editingSpirit.value.id, payload);
     const updated = result?.data;
     if (!updated?.id) {
-      throw new Error("后端未返回更新后的精灵数据");
+      throw new Error(t("spirits.invalidSaveResponse"));
     }
     const index = spirits.value.findIndex((spirit) => spirit.id === updated.id);
     if (index >= 0) {
@@ -182,9 +184,11 @@ async function saveSpirit(payload) {
     selectedSpiritId.value = updated.id;
     editingSpirit.value = null;
     creatingSpirit.value = false;
-    noticeMessage.value = `已${index >= 0 ? "保存" : "新增"} ${spiritName(updated)}`;
+    noticeMessage.value = t(index >= 0 ? "spirits.saved" : "spirits.created", {
+      name: spiritName(updated),
+    });
   } catch (error) {
-    editErrorMessage.value = error?.message || "保存精灵失败";
+    editErrorMessage.value = error?.message || t("spirits.saveFailed");
   } finally {
     isSavingSpirit.value = false;
   }
@@ -243,7 +247,7 @@ async function loadSpirits() {
 
   if (!spiritApi.value?.list) {
     spirits.value = [];
-    errorMessage.value = "当前运行环境未提供精灵库接口";
+    errorMessage.value = t("spirits.apiUnavailable");
     return;
   }
 
@@ -255,11 +259,11 @@ async function loadSpirits() {
       selectedSpiritId.value = sortedSpirits.value[0]?.id || "";
     }
     if (spirits.value.length > 0) {
-      noticeMessage.value = "精灵列表已刷新";
+      noticeMessage.value = t("spirits.refreshed");
     }
   } catch (error) {
     spirits.value = [];
-    errorMessage.value = error?.message || "读取精灵库失败";
+    errorMessage.value = error?.message || t("spirits.readFailed");
   } finally {
     isLoading.value = false;
   }
@@ -280,19 +284,19 @@ onBeforeUnmount(() => {
   <section class="workspace spirit-library-view">
     <div class="page-heading spirit-heading">
       <div>
-        <h1>精灵库</h1>
+        <h1>{{ t("spirits.title") }}</h1>
         <p>Spirit Library</p>
       </div>
       <div class="spirit-heading-actions">
-        <button class="icon-add-button" type="button" title="新增精灵" @click="openSpiritCreator">+</button>
+        <button class="icon-add-button" type="button" :title="t('spirits.add')" @click="openSpiritCreator">+</button>
         <button class="soft-button spirit-refresh-button" type="button" :disabled="isLoading" @click="loadSpirits">
-          {{ isLoading ? "刷新中" : "刷新" }}
+          {{ t(isLoading ? "common.refreshing" : "common.refresh") }}
         </button>
       </div>
     </div>
 
     <div v-if="isLoading" class="spirit-state-panel">
-      <p>正在读取精灵库</p>
+      <p>{{ t("spirits.reading") }}</p>
     </div>
 
     <div v-else-if="errorMessage" class="spirit-state-panel error">
@@ -300,14 +304,14 @@ onBeforeUnmount(() => {
     </div>
 
     <div v-else-if="sortedSpirits.length === 0" class="spirit-state-panel">
-      <p>当前数据库中暂无精灵数据</p>
+      <p>{{ t("spirits.empty") }}</p>
     </div>
 
     <section v-else class="spirit-library-layout">
       <aside class="spirit-list-panel" aria-label="spirit list">
         <div class="spirit-panel-header">
-          <strong>精灵模板</strong>
-          <span>{{ sortedSpirits.length }} 项</span>
+          <strong>{{ t("spirits.templates") }}</strong>
+          <span>{{ t("common.itemCount", { count: sortedSpirits.length }) }}</span>
         </div>
 
         <div class="spirit-list">
@@ -334,9 +338,9 @@ onBeforeUnmount(() => {
             </div>
             <div class="spirit-preview-actions">
               <span class="spirit-badge" :class="{ basic: selectedSpirit.basic }">
-                {{ selectedSpirit.basic ? "基础" : "自定义" }}
+                {{ t(selectedSpirit.basic ? "spirits.basic" : "spirits.custom") }}
               </span>
-              <button class="soft-button" type="button" @click="openSpiritEditor">修改</button>
+              <button class="soft-button" type="button" @click="openSpiritEditor">{{ t("spirits.edit") }}</button>
             </div>
           </div>
 
@@ -363,15 +367,15 @@ onBeforeUnmount(() => {
 
             <dl class="spirit-meta">
               <div>
-                <dt>颜色</dt>
+                <dt>{{ t("spirits.color") }}</dt>
                 <dd>{{ colorLabel(selectedSpirit.color) }}</dd>
               </div>
               <div>
-                <dt>尺寸</dt>
+                <dt>{{ t("spirits.size") }}</dt>
                 <dd>{{ sizeLabel(selectedSpirit) }}</dd>
               </div>
               <div>
-                <dt>点位</dt>
+                <dt>{{ t("spirits.points") }}</dt>
                 <dd>{{ previewPoints.length }}</dd>
               </div>
             </dl>

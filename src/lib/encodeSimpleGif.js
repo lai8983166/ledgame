@@ -16,12 +16,16 @@ export function encodeSimpleGifInWorker(prepared, onProgress) {
       if (event.data?.type === "complete") {
         resolve(new Uint8Array(event.data.bytes));
       } else {
-        reject(new Error(event.data?.message || "GIF 编码失败"));
+        const error = new Error(event.data?.message || "SIMPLE_GIF_ENCODING_FAILED");
+        error.code = event.data?.code || "SIMPLE_GIF_ENCODING_FAILED";
+        reject(error);
       }
     };
     worker.onerror = (event) => {
       worker.terminate();
-      reject(new Error(event.message || "GIF Worker 运行失败"));
+      const error = new Error(event.message || "SIMPLE_GIF_WORKER_FAILED");
+      error.code = "SIMPLE_GIF_WORKER_FAILED";
+      reject(error);
     };
     worker.postMessage(
       {

@@ -57,6 +57,16 @@ contextBridge.exposeInMainWorld('mediaLibrary', {
   getPreviewUrl: (relativePath) => ipcRenderer.invoke('media:get-preview-url', relativePath),
 })
 
+contextBridge.exposeInMainWorld('appLanguage', {
+  get: () => ipcRenderer.invoke('app-language:get'),
+  set: (locale) => ipcRenderer.invoke('app-language:set', locale),
+  onChanged: (callback) => {
+    const listener = (_event, locale) => callback(locale)
+    ipcRenderer.on('app-language-changed', listener)
+    return () => ipcRenderer.removeListener('app-language-changed', listener)
+  },
+})
+
 contextBridge.exposeInMainWorld('spiritLibrary', {
   list: () => ipcRenderer.invoke('spirit:list'),
   create: (payload) => ipcRenderer.invoke('spirit:create', payload),

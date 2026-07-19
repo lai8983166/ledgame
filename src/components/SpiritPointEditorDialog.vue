@@ -1,5 +1,6 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { useI18n } from "vue-i18n";
 import {
   MAX_SPIRIT_DIMENSION,
   clampSpiritDimension,
@@ -16,6 +17,7 @@ const props = defineProps({
   error: { type: String, default: "" },
 });
 const emit = defineEmits(["cancel", "save"]);
+const { t } = useI18n();
 
 const dialogRef = ref(null);
 const canvasRef = ref(null);
@@ -225,20 +227,23 @@ onBeforeUnmount(() => {
     >
       <header class="spirit-editor-header">
         <div>
-          <h2 id="spirit-editor-title">{{ creating ? "新增精灵" : `编辑 ${spirit.name || spirit.id}` }}</h2>
-          <p>固定画笔 · {{ pointCount }} 个点位</p>
+          <h2 id="spirit-editor-title">{{ creating
+            ? t("spiritEditor.create")
+            : t("spiritEditor.edit", { name: spirit.name || spirit.id })
+          }}</h2>
+          <p>{{ t("spiritEditor.pointCount", { count: pointCount }) }}</p>
         </div>
-        <button class="inline-symbol-button" type="button" title="关闭" :disabled="saving" @click="emit('cancel')">×</button>
+        <button class="inline-symbol-button" type="button" :title="t('common.close')" :disabled="saving" @click="emit('cancel')">×</button>
       </header>
 
       <label v-if="creating" class="spirit-editor-name">
-        名称
+        {{ t("spiritEditor.name") }}
         <input v-model="name" type="text" maxlength="255" :disabled="saving" autofocus />
       </label>
 
       <div class="spirit-editor-size-controls">
-        <label>宽度 <input v-model.number="width" type="number" min="1" :max="MAX_SPIRIT_DIMENSION" :disabled="saving" /></label>
-        <label>高度 <input v-model.number="height" type="number" min="1" :max="MAX_SPIRIT_DIMENSION" :disabled="saving" /></label>
+        <label>{{ t("spiritEditor.width") }} <input v-model.number="width" type="number" min="1" :max="MAX_SPIRIT_DIMENSION" :disabled="saving" /></label>
+        <label>{{ t("spiritEditor.height") }} <input v-model.number="height" type="number" min="1" :max="MAX_SPIRIT_DIMENSION" :disabled="saving" /></label>
         <span>{{ width }} × {{ height }}</span>
       </div>
 
@@ -246,7 +251,7 @@ onBeforeUnmount(() => {
         <canvas
           ref="canvasRef"
           class="spirit-editor-canvas"
-          aria-label="精灵点阵编辑区"
+          :aria-label="t('spiritEditor.canvasLabel')"
           @pointerdown="handlePointerDown"
           @pointermove="handlePointerMove"
           @pointerup="handlePointerUp"
@@ -257,9 +262,9 @@ onBeforeUnmount(() => {
 
       <p v-if="error" class="spirit-editor-error">{{ error }}</p>
       <footer class="spirit-editor-actions">
-        <button class="soft-button" type="button" :disabled="saving" @click="emit('cancel')">取消</button>
+        <button class="soft-button" type="button" :disabled="saving" @click="emit('cancel')">{{ t("common.cancel") }}</button>
         <button class="action-button primary" type="button" :disabled="!canSave" @click="handleSave">
-          {{ saving ? "保存中" : "保存" }}
+          {{ t(saving ? "globalConfig.saving" : "common.save") }}
         </button>
       </footer>
     </section>

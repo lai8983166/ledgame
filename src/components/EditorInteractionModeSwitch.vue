@@ -1,4 +1,6 @@
 <script setup>
+import { useI18n } from "vue-i18n";
+
 defineProps({
   modelValue: {
     type: String,
@@ -15,6 +17,7 @@ defineProps({
 });
 
 const emit = defineEmits(["update:modelValue"]);
+const { t } = useI18n();
 let pointerActivation = false;
 
 function selectOption(value) {
@@ -60,7 +63,7 @@ function handleKeydown(event, index, option) {
 </script>
 
 <template>
-  <div class="editor-mode-switch" role="radiogroup" aria-label="对象编辑模式">
+  <div class="editor-mode-switch" role="radiogroup" :aria-label="t('simple.editorModeLabel')">
     <label
       v-for="(option, index) in options"
       :key="option.value"

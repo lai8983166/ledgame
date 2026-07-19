@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 32" role="img" aria-label="South Korea">
+  <rect width="48" height="32" rx="2" fill="#fff"/>
+  <g transform="translate(24 16) rotate(-34)">
+    <path fill="#cd2e3a" d="M0-7a7 7 0 1 1 0 14A3.5 3.5 0 1 0 0 0 3.5 3.5 0 1 1 0-7z"/>
+    <path fill="#0047a0" d="M0 7A7 7 0 0 1 0-7 3.5 3.5 0 1 0 0 0 3.5 3.5 0 1 1 0 7z"/>
+  </g>
+  <g stroke="#111" stroke-width="1.5">
+    <path d="m7 7 7 4m-5-7 7 4m-7 20 7-4m-9 1 7-4"/>
+    <path d="m32 8 7-4m-5 7 7-4m-7 17 7 4m-9-7 7 4"/>
+  </g>
+</svg>

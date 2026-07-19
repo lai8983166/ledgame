@@ -1,5 +1,8 @@
 <script setup>
 import SimpleGameCard from "../components/SimpleGameCard.vue";
+import { useI18n } from "vue-i18n";
+
+const { t } = useI18n({ useScope: "global" });
 
 defineEmits(["open-simple"]);
 </script>
@@ -8,8 +11,8 @@ defineEmits(["open-simple"]);
   <section class="workspace game-list-view">
     <div class="page-heading">
       <div>
-        <h1>游戏列表</h1>
-        <p>Game List</p>
+        <h1>{{ t("games.title") }}</h1>
+        <p>{{ t("games.subtitle") }}</p>
       </div>
     </div>
 

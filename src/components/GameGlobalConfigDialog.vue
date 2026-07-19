@@ -1,5 +1,6 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { useI18n } from "vue-i18n";
 import MediaPickerDialog from "./MediaPickerDialog.vue";
 
 const props = defineProps({
@@ -8,62 +9,63 @@ const props = defineProps({
   error: { type: String, default: "" },
 });
 const emit = defineEmits(["cancel", "save"]);
+const { t } = useI18n();
 
 const dialogRef = ref(null);
 const draft = ref({});
 const picker = ref(null); // { path, accept, title } when a media picker is open
 const audioPlayer = ref(null); // { name, url } when the audio player modal is open
 
-const sections = [
+const sections = computed(() => [
   {
-    title: "基本信息",
+    title: t("globalConfig.basicInfo"),
     columns: 1,
     fields: [
-      { label: "游戏封面", path: "cover", kind: "media", accept: "image" },
-      { label: "类型", path: "type", kind: "text" },
-      { label: "模式", path: "mode", kind: "text" },
-      { label: "名称", path: "name", kind: "text" },
-      { label: "一级菜单", path: "firstCatalog", kind: "text" },
+      { label: t("globalConfig.cover"), path: "cover", kind: "media", accept: "image" },
+      { label: t("globalConfig.type"), path: "type", kind: "text" },
+      { label: t("globalConfig.mode"), path: "mode", kind: "text" },
+      { label: t("globalConfig.name"), path: "name", kind: "text" },
+      { label: t("globalConfig.firstCatalog"), path: "firstCatalog", kind: "text" },
     ],
   },
   {
-    title: "全局时间限制",
+    title: t("globalConfig.timeLimit"),
     fields: [
-      { label: "启用全局时间限制", path: "globalTimeLimit", kind: "checkbox" },
-      { label: "时间限制（秒）", path: "globalTimeLimitValue", kind: "number" },
+      { label: t("globalConfig.enableTimeLimit"), path: "globalTimeLimit", kind: "checkbox" },
+      { label: t("globalConfig.timeLimitSeconds"), path: "globalTimeLimitValue", kind: "number" },
     ],
   },
   {
-    title: "音效",
+    title: t("globalConfig.soundEffects"),
     fields: [
-      { label: "空闲状态背景音乐", path: "audio.globalBackgroundSound", kind: "media", accept: "audio" },
-      { label: "得分音效", path: "audio.scoreSound", kind: "media", accept: "audio" },
-      { label: "受伤音效", path: "audio.injurySound", kind: "media", accept: "audio" },
-      { label: "double 音效", path: "audio.purpleSound", kind: "media", accept: "audio" },
+      { label: t("globalConfig.idleBgm"), path: "audio.globalBackgroundSound", kind: "media", accept: "audio" },
+      { label: t("globalConfig.scoreSound"), path: "audio.scoreSound", kind: "media", accept: "audio" },
+      { label: t("globalConfig.injurySound"), path: "audio.injurySound", kind: "media", accept: "audio" },
+      { label: t("globalConfig.doubleSound"), path: "audio.purpleSound", kind: "media", accept: "audio" },
     ],
   },
   {
-    title: "语音",
+    title: t("globalConfig.voice"),
     fields: [
-      { label: "游戏开始语音", path: "commonConfig.gameStartAudio", kind: "media", accept: "audio" },
-      { label: "游戏成功语音", path: "commonConfig.gameEndSuccessAudio", kind: "media", accept: "audio" },
-      { label: "游戏失败语音", path: "commonConfig.gameEndFailAudio", kind: "media", accept: "audio" },
-      { label: "关卡通过语音", path: "commonConfig.levelPassAudio", kind: "media", accept: "audio" },
-      { label: "关卡重启语音", path: "commonConfig.levelRestartAudio", kind: "media", accept: "audio" },
+      { label: t("globalConfig.gameStartVoice"), path: "commonConfig.gameStartAudio", kind: "media", accept: "audio" },
+      { label: t("globalConfig.gameSuccessVoice"), path: "commonConfig.gameEndSuccessAudio", kind: "media", accept: "audio" },
+      { label: t("globalConfig.gameFailureVoice"), path: "commonConfig.gameEndFailAudio", kind: "media", accept: "audio" },
+      { label: t("globalConfig.levelPassVoice"), path: "commonConfig.levelPassAudio", kind: "media", accept: "audio" },
+      { label: t("globalConfig.levelRestartVoice"), path: "commonConfig.levelRestartAudio", kind: "media", accept: "audio" },
     ],
   },
   {
-    title: "动画",
+    title: t("globalConfig.animations"),
     columns: 3,
     fields: [
-      { label: "待机动画", path: "gif.standby", kind: "media", accept: "image" },
-      { label: "关卡结算动画", path: "gif.levelSettlement", kind: "media", accept: "image" },
-      { label: "关卡失败动画", path: "gif.levelFailure", kind: "media", accept: "image" },
-      { label: "游戏失败动画", path: "gif.gameFailure", kind: "media", accept: "image" },
-      { label: "游戏完成动画", path: "gif.gameOver", kind: "media", accept: "image" },
+      { label: t("globalConfig.idleAnimation"), path: "gif.standby", kind: "media", accept: "image" },
+      { label: t("globalConfig.levelSettlementAnimation"), path: "gif.levelSettlement", kind: "media", accept: "image" },
+      { label: t("globalConfig.levelFailureAnimation"), path: "gif.levelFailure", kind: "media", accept: "image" },
+      { label: t("globalConfig.gameFailureAnimation"), path: "gif.gameFailure", kind: "media", accept: "image" },
+      { label: t("globalConfig.gameCompleteAnimation"), path: "gif.gameOver", kind: "media", accept: "image" },
     ],
   },
-];
+]);
 
 function gridStyle(section) {
   const columns = Number(section?.columns) > 0 ? section.columns : 2;
@@ -205,10 +207,10 @@ onBeforeUnmount(() => {
     >
       <header class="global-config-header">
         <div>
-          <h2 id="global-config-title">全局配置</h2>
-          <p>游戏级封面、时间限制、音频与动画</p>
+          <h2 id="global-config-title">{{ t("globalConfig.title") }}</h2>
+          <p>{{ t("globalConfig.subtitle") }}</p>
         </div>
-        <button class="inline-symbol-button" type="button" title="关闭" :disabled="saving" @click="emit('cancel')">×</button>
+        <button class="inline-symbol-button" type="button" :title="t('common.close')" :disabled="saving" @click="emit('cancel')">×</button>
       </header>
 
       <div class="global-config-body">
@@ -246,7 +248,7 @@ onBeforeUnmount(() => {
                   :disabled="saving"
                   @change="setPath(field.path, $event.target.checked)"
                 />
-                <span>{{ getPath(field.path) ? '已启用' : '未启用' }}</span>
+                <span>{{ t(getPath(field.path) ? "globalConfig.enabled" : "globalConfig.disabled") }}</span>
               </label>
 
               <template v-else-if="field.kind === 'media'">
@@ -255,34 +257,34 @@ onBeforeUnmount(() => {
                     type="text"
                     class="global-config-media-value"
                     :value="getPath(field.path) || ''"
-                    placeholder="未选择"
+                    :placeholder="t('globalConfig.notSelected')"
                     readonly
                     :disabled="saving"
                   />
-                  <button class="soft-button compact-button" type="button" :disabled="saving" @click="openPicker(field)">选择</button>
+                  <button class="soft-button compact-button" type="button" :disabled="saving" @click="openPicker(field)">{{ t("globalConfig.choose") }}</button>
                   <button
                     class="soft-button compact-button"
                     type="button"
                     :disabled="saving || !getPath(field.path)"
-                    title="清除"
+                    :title="t('globalConfig.clear')"
                     @click="clearMedia(field)"
-                  >清除</button>
+                  >{{ t("globalConfig.clear") }}</button>
                   <button
                     v-if="field.accept === 'audio'"
                     class="soft-button compact-button"
                     type="button"
-                    title="试听"
+                    :title="t('globalConfig.previewAudio')"
                     :disabled="saving || !getPath(field.path)"
                     @click="openAudioPlayer(field)"
-                  >▶ 试听</button>
+                  >▶ {{ t("globalConfig.previewAudio") }}</button>
                 </div>
                 <div v-if="field.accept === 'image' && field.path === 'cover'" class="global-config-cover-preview">
                   <img v-if="getPath(field.path)" :src="buildMediaPreviewUrl(getPath(field.path))" :alt="getPath(field.path)" />
-                  <span v-else class="global-config-inline-preview-placeholder">未选择</span>
+                  <span v-else class="global-config-inline-preview-placeholder">{{ t("globalConfig.notSelected") }}</span>
                 </div>
                 <div v-else-if="field.accept === 'image'" class="global-config-inline-preview">
                   <img v-if="getPath(field.path)" :src="buildMediaPreviewUrl(getPath(field.path))" :alt="getPath(field.path)" />
-                  <span v-else class="global-config-inline-preview-placeholder">未选择</span>
+                  <span v-else class="global-config-inline-preview-placeholder">{{ t("globalConfig.notSelected") }}</span>
                 </div>
               </template>
             </label>
@@ -293,9 +295,9 @@ onBeforeUnmount(() => {
       <p v-if="error" class="global-config-error">{{ error }}</p>
 
       <footer class="global-config-actions">
-        <button class="soft-button" type="button" :disabled="saving" @click="emit('cancel')">取消</button>
+        <button class="soft-button" type="button" :disabled="saving" @click="emit('cancel')">{{ t("common.cancel") }}</button>
         <button class="action-button primary" type="button" :disabled="!canSave" @click="handleSave">
-          {{ saving ? "保存中" : "保存" }}
+          {{ t(saving ? "globalConfig.saving" : "common.save") }}
         </button>
       </footer>
     </section>
@@ -316,7 +318,7 @@ onBeforeUnmount(() => {
             <h3>{{ audioPlayer.label }}</h3>
             <p>{{ audioPlayer.name }}</p>
           </div>
-          <button class="inline-symbol-button" type="button" title="关闭" @click="audioPlayer = null">×</button>
+          <button class="inline-symbol-button" type="button" :title="t('common.close')" @click="audioPlayer = null">×</button>
         </header>
         <audio :src="audioPlayer.url" controls autoplay></audio>
       </section>

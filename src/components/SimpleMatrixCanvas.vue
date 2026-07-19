@@ -1,5 +1,6 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { useI18n } from "vue-i18n";
 
 const props = defineProps({
   cells: {
@@ -61,6 +62,7 @@ const emit = defineEmits([
   "cell-hover",
   "matrix-contextmenu",
 ]);
+const { t } = useI18n();
 
 const baseCanvasRef = ref(null);
 const overlayCanvasRef = ref(null);
@@ -533,14 +535,14 @@ function updateHoverCell(cell) {
 
 function buildCellTitle(cell) {
   if (!cell) {
-    return "矩阵编辑区";
+    return t("simple.matrixCanvasLabel");
   }
   const parts = [`x ${cell.x}`, `y ${cell.y}`];
   if (cell.objectId) {
     parts.push(cell.objectId);
   }
   if (cell.overlapCount > 1) {
-    parts.push(`重叠 ${cell.overlapCount} 层`);
+    parts.push(t("simple.overlapLayersPlain", { count: cell.overlapCount }));
   }
   return parts.join(", ");
 }
@@ -551,7 +553,7 @@ function clearHover() {
   }
   hoverCell = null;
   emit("cell-hover", null);
-  updateCanvasTitle("矩阵编辑区");
+  updateCanvasTitle(t("simple.matrixCanvasLabel"));
   scheduleOverlayDraw();
 }
 
@@ -799,8 +801,8 @@ function dedupePatchCells(cells) {
       class="matrix-canvas-surface matrix-overlay-canvas"
       :class="{ 'matrix-object-drag-enabled': objectDragEnabled }"
       :style="overlayCanvasStyle"
-      title="矩阵编辑区"
-      aria-label="矩阵编辑区"
+      :title="t('simple.matrixCanvasLabel')"
+      :aria-label="t('simple.matrixCanvasLabel')"
       @contextmenu.prevent.stop="handleContextMenu"
       @pointerdown="handlePointerDown"
       @pointermove="handlePointerMove"
