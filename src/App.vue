@@ -8,6 +8,7 @@ import SimpleGameEditorView from "./views/SimpleGameEditorView.vue";
 import SpiritLibraryView from "./views/SpiritLibraryView.vue";
 import LedGameTouchView from "./views/LedGameTouchView.vue";
 import LanguageView from "./views/LanguageView.vue";
+import Elc408DebugAssistantView from "./views/Elc408DebugAssistantView.vue";
 
 const { t } = useI18n({ useScope: "global" });
 
@@ -22,6 +23,10 @@ const frameState = ref(createFrameState());
 const hoverCell = ref(null);
 const gameRuntimeState = ref(null);
 const activeView = ref("demo");
+const helpMenuOpen = ref(false);
+const helpButtonRef = ref(null);
+const helpMenuRef = ref(null);
+let removeHelpMenuListeners = null;
 let removeLedFrameListener = null;
 let removeEngineStateListener = null;
 
@@ -87,14 +92,69 @@ onMounted(async () => {
     }
   }
 
+  attachHelpMenuListeners();
   await refreshState();
 });
 
 onUnmounted(() => {
   removeLedFrameListener?.();
   removeEngineStateListener?.();
+  removeHelpMenuListeners?.();
   hoverCell.value = null;
 });
+
+function attachHelpMenuListeners() {
+  function onDocumentClick(event) {
+    if (!helpMenuOpen.value) {
+      return;
+    }
+    const menu = helpMenuRef.value;
+    const button = helpButtonRef.value;
+    if (menu && event.target instanceof Node && menu.contains(event.target)) {
+      return;
+    }
+    if (button && event.target instanceof Node && button.contains(event.target)) {
+      return;
+    }
+    closeHelpMenu();
+  }
+  function onKeydown(event) {
+    if (event.key === "Escape" && helpMenuOpen.value) {
+      closeHelpMenu();
+      helpButtonRef.value?.focus();
+    }
+  }
+  document.addEventListener("click", onDocumentClick);
+  document.addEventListener("keydown", onKeydown);
+  removeHelpMenuListeners = () => {
+    document.removeEventListener("click", onDocumentClick);
+    document.removeEventListener("keydown", onKeydown);
+  };
+}
+
+function toggleHelpMenu() {
+  helpMenuOpen.value ? closeHelpMenu() : openHelpMenu();
+}
+
+function openHelpMenu() {
+  helpMenuOpen.value = true;
+}
+
+function closeHelpMenu() {
+  helpMenuOpen.value = false;
+}
+
+function selectHelpItem(view) {
+  activeView.value = view;
+  closeHelpMenu();
+}
+
+function onHelpButtonKeydown(event) {
+  if (!helpMenuOpen.value && (event.key === "Enter" || event.key === " " || event.key === "ArrowDown")) {
+    event.preventDefault();
+    openHelpMenu();
+  }
+}
 
 async function runAction(name, action) {
   busyAction.value = name;
@@ -364,6 +424,37 @@ function formatRuntimeValue(value, fallback = "-") {
         >
           {{ t("nav.language") }}
         </button>
+        <div class="nav-help-wrapper">
+          <button
+            ref="helpButtonRef"
+            class="nav-tab nav-help-button"
+            :class="{ active: activeView === 'debug-assistant' }"
+            type="button"
+            :aria-haspopup="'menu'"
+            :aria-expanded="helpMenuOpen"
+            @click="toggleHelpMenu"
+            @keydown="onHelpButtonKeydown"
+          >
+            {{ t("nav.help") }}
+            <span class="nav-help-chevron" aria-hidden="true">▾</span>
+          </button>
+          <div
+            v-if="helpMenuOpen"
+            ref="helpMenuRef"
+            class="nav-help-menu"
+            role="menu"
+          >
+            <button
+              class="nav-help-item"
+              type="button"
+              role="menuitem"
+              :class="{ active: activeView === 'debug-assistant' }"
+              @click="selectHelpItem('debug-assistant')"
+            >
+              {{ t("nav.debugAssistant") }}
+            </button>
+          </div>
+        </div>
       </nav>
     </header>
 
@@ -390,6 +481,8 @@ function formatRuntimeValue(value, fallback = "-") {
     <MediaLibraryView v-else-if="activeView === 'media'" />
 
     <SpiritLibraryView v-else-if="activeView === 'spirits'" />
+
+    <Elc408DebugAssistantView v-else-if="activeView === 'debug-assistant'" />
 
     <LanguageView v-else />
   </main>

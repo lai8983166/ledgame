@@ -1,6 +1,32 @@
 import { additionalMessages } from "./additional-messages.js";
+import { elc408Messages } from "./elc408-messages.js";
 
-export const messages = {
+function deepMergeMessages(base, addition) {
+  const result = { ...base };
+  for (const [locale, additionCatalog] of Object.entries(addition)) {
+    const baseCatalog = result[locale];
+    if (baseCatalog && typeof baseCatalog === "object") {
+      result[locale] = mergeCatalog(baseCatalog, additionCatalog);
+    } else {
+      result[locale] = additionCatalog;
+    }
+  }
+  return result;
+}
+
+function mergeCatalog(base, addition) {
+  const result = { ...base };
+  for (const [key, value] of Object.entries(addition)) {
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+      result[key] = mergeCatalog(base[key] || {}, value);
+    } else {
+      result[key] = value;
+    }
+  }
+  return result;
+}
+
+const baseMessages = {
   "zh-CN": {
     nav: {
       enterGame: "进入游戏",
@@ -760,4 +786,6 @@ export const messages = {
     },
   },
   ...additionalMessages,
-}
+};
+
+export const messages = deepMergeMessages(baseMessages, elc408Messages);

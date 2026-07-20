@@ -116,6 +116,99 @@ button {
     -7px -7px 14px rgba(255, 255, 255, 0.96);
 }
 
+.nav-help-wrapper {
+  position: relative;
+}
+
+.nav-help-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+}
+
+.nav-help-chevron {
+  color: #8a95a3;
+  font-size: 10px;
+  transition: transform 140ms ease;
+}
+
+.nav-help-button[aria-expanded="true"] .nav-help-chevron {
+  transform: rotate(180deg);
+}
+
+.nav-help-menu {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  z-index: 40;
+  min-width: 176px;
+  padding: 6px;
+  border: 1px solid #d4dce6;
+  border-radius: 8px;
+  background: #f8fafc;
+  box-shadow: 0 12px 28px rgba(73, 87, 105, 0.2);
+}
+
+.nav-help-item {
+  width: 100%;
+  min-height: 38px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 6px;
+  color: #596575;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  font-size: 13px;
+  font-weight: 620;
+}
+
+.nav-help-item:hover,
+.nav-help-item:focus-visible {
+  outline: none;
+  color: #315d91;
+  background: #e7eef7;
+}
+
+.nav-help-item.active {
+  color: #315d91;
+  background: #dfe8f4;
+}
+
+@media (max-width: 900px) {
+  .app-shell:has(.elc408-assistant) {
+    padding: 14px;
+  }
+
+  .app-shell:has(.elc408-assistant) .app-nav {
+    min-width: 0;
+    align-items: stretch;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .app-shell:has(.elc408-assistant) .brand-mark {
+    display: none;
+  }
+
+  .app-shell:has(.elc408-assistant) .nav-tabs {
+    width: 100%;
+    min-width: 0;
+    justify-content: flex-start;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .app-shell:has(.elc408-assistant) .nav-tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  .app-shell:has(.elc408-assistant) .nav-tab {
+    flex: 0 0 auto;
+  }
+}
+
 .workspace {
   width: min(1040px, 100%);
   margin: 0 auto;

@@ -72,3 +72,17 @@ contextBridge.exposeInMainWorld('spiritLibrary', {
   create: (payload) => ipcRenderer.invoke('spirit:create', payload),
   update: (spiritId, payload) => ipcRenderer.invoke('spirit:update', spiritId, payload),
 })
+
+contextBridge.exposeInMainWorld('elc408Tools', {
+  networkInterfaces: () => ipcRenderer.invoke('elc408:network-interfaces'),
+  generateConfig: (draft) => ipcRenderer.invoke('elc408:generate-config', draft),
+  generateWiring: (document) => ipcRenderer.invoke('elc408:generate-wiring', document),
+  reload: () => ipcRenderer.invoke('elc408:reload'),
+  debugState: () => ipcRenderer.invoke('elc408:debug-state'),
+  search: (request) => ipcRenderer.invoke('elc408:debug-search', request),
+  start: (request) => ipcRenderer.invoke('elc408:debug-start', request),
+  stop: () => ipcRenderer.invoke('elc408:debug-stop'),
+  logs: (after, limit) => ipcRenderer.invoke('elc408:debug-logs', after, limit),
+  clearLogs: () => ipcRenderer.invoke('elc408:debug-clear-logs'),
+  saveGeneratedFile: (payload) => ipcRenderer.invoke('elc408:save-generated-file', payload),
+})

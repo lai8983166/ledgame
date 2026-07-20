@@ -12,6 +12,13 @@ const {
 const {
   createLanguagePreferenceStore,
 } = require('./language-settings.cjs')
+const {
+  normalizeConfigDraft,
+  normalizeWiringDraft,
+  normalizeSearchRequest,
+  normalizeDebugStartRequest,
+  normalizeSaveFilePayload,
+} = require('./elc408Ipc.cjs')
 
 const isDev = Boolean(process.env.VITE_DEV_SERVER_URL)
 const shouldUseEmbeddedBackend = !isDev && !process.env.LED_BACKEND_URL
@@ -627,6 +634,14 @@ function getUserDatabaseFilePath() {
   return `${getUserDatabaseBasePath()}.mv.db`
 }
 
+function getEmbeddedBackendWorkingDirectory() {
+  return app.isPackaged ? path.dirname(app.getPath('exe')) : app.getAppPath()
+}
+
+function getElc408ConfigDirectory() {
+  return path.join(getEmbeddedBackendWorkingDirectory(), 'elc408')
+}
+
 function getPackagedMediaRoot() {
   return path.join(getResourcesPath(), mediaRootName)
 }
@@ -716,20 +731,28 @@ async function startEmbeddedBackend() {
   const backendPort = await findAvailablePort(preferredBackendPort)
   const selectedBackendBaseUrl = `http://127.0.0.1:${backendPort}`
   const mediaRoot = getPackagedMediaRoot()
+  const elc408ConfigDirectory = getElc408ConfigDirectory()
+  const hasElc408Config =
+    nodeFs.existsSync(path.join(elc408ConfigDirectory, 'conf.json')) &&
+    nodeFs.existsSync(path.join(elc408ConfigDirectory, 'wiring.json'))
   setBackendBaseUrl(selectedBackendBaseUrl)
   appendStartupLog(`Embedded backend selected port ${backendPort}`)
+  appendStartupLog(`ELC-408 configuration ${hasElc408Config ? 'found' : 'not found'} at ${elc408ConfigDirectory}`)
 
   const logsDir = path.join(app.getPath('userData'), 'logs')
   await fs.mkdir(logsDir, { recursive: true })
   embeddedBackendLogFd = nodeFs.openSync(path.join(logsDir, 'backend.log'), 'a')
 
   embeddedBackendProcess = childProcess.spawn(javaPath, ['-jar', backendJarPath], {
-    cwd: app.getPath('userData'),
+    // Spring resolves ${user.dir}/elc408 against the portable app directory.
+    cwd: getEmbeddedBackendWorkingDirectory(),
     windowsHide: true,
     stdio: ['ignore', embeddedBackendLogFd, embeddedBackendLogFd],
     env: {
       ...process.env,
       SERVER_PORT: String(backendPort),
+      // Allow the packaged app to start before the first conf/wiring files are generated.
+      ELC408_ENABLED: process.env.ELC408_ENABLED ?? String(hasElc408Config),
       SPRING_DATASOURCE_URL: `jdbc:h2:file:${getUserDatabaseBasePath()};MODE=MySQL;DATABASE_TO_LOWER=TRUE`,
       LED_MEDIA_ROOT: mediaRoot,
       LED_BRIDGE_ENABLED: process.env.LED_BRIDGE_ENABLED || 'false',
@@ -1117,6 +1140,83 @@ ipcMain.handle('media:list', () => listMediaLibrary())
 ipcMain.handle('media:get-preview-url', (_event, relativePath) => getMediaPreviewUrl(relativePath))
 ipcMain.handle('app-language:get', () => languagePreferences.get())
 ipcMain.handle('app-language:set', (_event, locale) => setApplicationLanguage(locale))
+
+// ELC-408 SDK debug assistant IPC. The renderer can only call fixed actions;
+// the main process validates body shape and refuses arbitrary URLs/paths/bytes.
+ipcMain.handle('elc408:network-interfaces', () =>
+  backendRequest('/hardware/elc408/network-interfaces'),
+)
+ipcMain.handle('elc408:generate-config', (_event, draft) =>
+  backendRequest('/hardware/elc408/files/config', {
+    method: 'POST',
+    body: JSON.stringify(normalizeConfigDraft(draft)),
+  }),
+)
+ipcMain.handle('elc408:generate-wiring', (_event, document) =>
+  backendRequest('/hardware/elc408/files/wiring', {
+    method: 'POST',
+    body: JSON.stringify(normalizeWiringDraft(document)),
+  }),
+)
+ipcMain.handle('elc408:reload', () =>
+  backendRequest('/hardware/elc408/reload', { method: 'POST' }),
+)
+ipcMain.handle('elc408:debug-state', () =>
+  backendRequest('/hardware/elc408/debug/state'),
+)
+ipcMain.handle('elc408:debug-search', (_event, request) =>
+  backendRequest('/hardware/elc408/debug/search', {
+    method: 'POST',
+    body: JSON.stringify(normalizeSearchRequest(request)),
+  }),
+)
+ipcMain.handle('elc408:debug-start', (_event, request) => {
+  const normalized = normalizeDebugStartRequest(request)
+  if (!normalized) {
+    throw new Error('Invalid debug start request')
+  }
+  return backendRequest('/hardware/elc408/debug/start', {
+    method: 'POST',
+    body: JSON.stringify(normalized),
+  })
+})
+ipcMain.handle('elc408:debug-stop', () =>
+  backendRequest('/hardware/elc408/debug/stop', { method: 'POST' }),
+)
+ipcMain.handle('elc408:debug-logs', (_event, after, limit) =>
+  backendRequest(
+    `/hardware/elc408/debug/logs?after=${encodeURIComponent(Number(after) || 0)}&limit=${encodeURIComponent(
+      Math.min(1024, Math.max(1, Number(limit) || 256)),
+    )}`,
+  ),
+)
+ipcMain.handle('elc408:debug-clear-logs', () =>
+  backendRequest('/hardware/elc408/debug/logs', { method: 'DELETE' }),
+)
+ipcMain.handle('elc408:save-generated-file', async (_event, payload) => {
+  const result = normalizeSaveFilePayload(payload)
+  if (!result.ok) {
+    throw new Error(result.error)
+  }
+  const { kind, suggestedFileName, content } = result
+  const configDirectory = getElc408ConfigDirectory()
+  await fs.mkdir(configDirectory, { recursive: true })
+  const dialogResult = await dialog.showSaveDialog({
+    title: kind === 'wiring' ? '保存 wiring.json' : '保存 conf.json',
+    defaultPath: path.join(configDirectory, suggestedFileName),
+    filters: [{ name: 'JSON', extensions: ['json'] }],
+  })
+  if (dialogResult.canceled || !dialogResult.filePath) {
+    return { canceled: true }
+  }
+  await fs.writeFile(dialogResult.filePath, content, 'utf8')
+  return {
+    canceled: false,
+    kind,
+    filePath: dialogResult.filePath,
+    fileName: path.basename(dialogResult.filePath),
+  }
+})
 ipcMain.on('diagnostic:editor-layout', (event, snapshot) => {
   if (!mainWindow || mainWindow.isDestroyed() || event.sender !== mainWindow.webContents) {
     return
