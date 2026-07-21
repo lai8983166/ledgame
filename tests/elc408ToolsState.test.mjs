@@ -128,6 +128,11 @@ test("normalizeLogEntry falls back to SEND direction", () => {
   assert.equal(fallback.direction, "SEND");
 });
 
+test("normalizeLogEntry preserves bounded-payload truncation state", () => {
+  const result = normalizeLogEntry({ seq: 9, direction: "RECEIVE", truncated: true });
+  assert.equal(result.truncated, true);
+});
+
 test("normalizeLogList preserves previous cursor on missing nextCursor", () => {
   const result = normalizeLogList({ data: { entries: [] } }, 42);
   assert.equal(result.nextCursor, 42);

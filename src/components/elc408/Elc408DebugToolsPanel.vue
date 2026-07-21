@@ -1,5 +1,5 @@
 <script setup>
-import { onMounted, onUnmounted, reactive, ref, computed } from "vue";
+import { onMounted, onUnmounted, reactive, ref, computed, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import {
   DEFAULT_DEBUG_DRAFT,
@@ -18,6 +18,12 @@ import {
 
 const { t } = useI18n({ useScope: "global" });
 const api = window.elc408Tools;
+const props = defineProps({
+  active: {
+    type: Boolean,
+    default: false,
+  },
+});
 
 const draft = reactive({ ...DEFAULT_DEBUG_DRAFT });
 const networkInterfaces = ref([]);
@@ -35,14 +41,18 @@ const searchBusy = ref(false);
 const startBusy = ref(false);
 const stopBusy = ref(false);
 const clearBusy = ref(false);
+const captureStatus = ref("inactive");
 const errorMessage = ref("");
 const successMessage = ref("");
 
 let pollTimer = null;
 let pollInFlight = false;
 let lastPollToken = 0;
+let captureToken = 0;
+let mounted = false;
 
 const isRunning = computed(() => Boolean(state.value?.debugRunning));
+const captureStatusLabel = computed(() => t(`elc408.debug.capture.${captureStatus.value}`));
 const ownerLabel = computed(() => {
   if (!state.value) {
     return "";
@@ -53,19 +63,33 @@ const ownerLabel = computed(() => {
 });
 
 onMounted(async () => {
+  mounted = true;
+  if (typeof document !== "undefined") {
+    document.addEventListener("visibilitychange", onVisibilityChange);
+  }
   await Promise.all([loadInterfaces(), refreshState()]);
-  startPolling();
+  await reconcileLogCapture();
 });
 
 onUnmounted(() => {
+  mounted = false;
+  if (typeof document !== "undefined") {
+    document.removeEventListener("visibilitychange", onVisibilityChange);
+  }
   stopPolling();
+  captureToken += 1;
+  void setLogCapture(false);
+});
+
+watch(() => props.active, () => {
+  if (mounted) {
+    void reconcileLogCapture();
+  }
 });
 
 function startPolling() {
   stopPolling();
-  if (typeof document !== "undefined") {
-    document.addEventListener("visibilitychange", onVisibilityChange);
-  }
+  void pollLogs();
   pollTimer = setInterval(pollLogs, 250);
 }
 
@@ -74,16 +98,63 @@ function stopPolling() {
     clearInterval(pollTimer);
     pollTimer = null;
   }
-  if (typeof document !== "undefined") {
-    document.removeEventListener("visibilitychange", onVisibilityChange);
-  }
   lastPollToken += 1; // invalidate in-flight responses
   pollInFlight = false;
 }
 
 function onVisibilityChange() {
-  if (typeof document !== "undefined" && document.visibilityState === "visible") {
-    pollLogs();
+  void reconcileLogCapture();
+}
+
+function shouldCaptureLogs() {
+  return mounted
+    && props.active
+    && (typeof document === "undefined" || document.visibilityState === "visible");
+}
+
+async function setLogCapture(enabled) {
+  if (typeof api?.setLogCapture !== "function") {
+    return false;
+  }
+  const response = await api.setLogCapture(enabled);
+  const data = response?.data ?? response;
+  return data?.enabled === enabled;
+}
+
+async function reconcileLogCapture() {
+  const token = ++captureToken;
+  stopPolling();
+
+  if (!shouldCaptureLogs()) {
+    captureStatus.value = "inactive";
+    try {
+      await setLogCapture(false);
+    } catch (_error) {
+      if (token === captureToken && mounted && props.active) {
+        captureStatus.value = "failed";
+      }
+    }
+    return;
+  }
+
+  captureStatus.value = "starting";
+  try {
+    const enabled = await setLogCapture(true);
+    if (token !== captureToken || !shouldCaptureLogs()) {
+      if (!shouldCaptureLogs()) {
+        void setLogCapture(false);
+      }
+      return;
+    }
+    if (!enabled) {
+      throw new Error("Backend did not confirm protocol log capture");
+    }
+    captureStatus.value = "active";
+    startPolling();
+  } catch (_error) {
+    if (token === captureToken) {
+      captureStatus.value = "failed";
+    }
   }
 }
 
@@ -112,7 +183,7 @@ async function refreshState() {
 }
 
 async function pollLogs() {
-  if (pollInFlight) {
+  if (captureStatus.value !== "active" || !shouldCaptureLogs() || pollInFlight) {
     return;
   }
   if (typeof document !== "undefined" && document.visibilityState !== "visible") {
@@ -366,7 +437,12 @@ function logHexPreview(entry) {
     </aside>
     <section class="elc408-debug-log">
       <header>
-        <h2>{{ t("elc408.debug.logs") }}</h2>
+        <div class="elc408-log-heading">
+          <h2>{{ t("elc408.debug.logs") }}</h2>
+          <span :class="['elc408-capture-state', captureStatus]">
+            {{ captureStatusLabel }}
+          </span>
+        </div>
         <button
           type="button"
           :disabled="clearBusy"
@@ -402,6 +478,9 @@ function logHexPreview(entry) {
                     :class="{ expanded: isLogExpanded(entry.seq) }"
                   >
                     {{ isLogExpanded(entry.seq) ? entry.hex : logHexPreview(entry) }}
+                    <small v-if="entry.truncated" class="elc408-log-truncated">
+                      {{ t("elc408.debug.logTruncated") }}
+                    </small>
                   </span>
                   <button
                     v-if="entry.hex"
@@ -565,6 +644,33 @@ function logHexPreview(entry) {
   color: #3b4655;
   font-size: 0.95rem;
   font-weight: 700;
+}
+.elc408-log-heading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.elc408-capture-state {
+  padding: 3px 7px;
+  border-radius: 999px;
+  color: #687586;
+  background: #e7ecf2;
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+.elc408-capture-state.active {
+  color: #286346;
+  background: #dcefe5;
+}
+.elc408-capture-state.failed {
+  color: #9a3f3f;
+  background: #f6dfdf;
+}
+.elc408-log-truncated {
+  margin-left: 6px;
+  color: #8a6570;
+  font-family: inherit;
+  font-size: 0.68rem;
 }
 .elc408-debug-log header button {
   min-height: 32px;

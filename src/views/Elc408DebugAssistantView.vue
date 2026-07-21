@@ -38,7 +38,10 @@ const panels = [
     <div class="elc408-panels">
       <Elc408ConfigurationPanel v-show="activePanel === 'configuration'" />
       <Elc408WiringPanel v-show="activePanel === 'wiringTools'" />
-      <Elc408DebugToolsPanel v-show="activePanel === 'debugTools'" />
+      <Elc408DebugToolsPanel
+        v-show="activePanel === 'debugTools'"
+        :active="activePanel === 'debugTools'"
+      />
     </div>
   </section>
 </template>

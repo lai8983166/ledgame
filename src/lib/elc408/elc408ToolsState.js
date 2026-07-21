@@ -122,6 +122,7 @@ export function normalizeLogEntry(entry) {
     type: String(entry.type ?? ""),
     hex: String(entry.hex ?? ""),
     byteLength: Number.isFinite(entry.byteLength) ? entry.byteLength : 0,
+    truncated: Boolean(entry.truncated),
   };
 }
 

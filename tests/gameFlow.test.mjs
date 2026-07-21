@@ -141,6 +141,15 @@ test("Touch window is reusable, reconstructable, and closing it does not stop ga
   assert.doesNotMatch(createTouchWindow, /engine\/game\/stop|stopTouchGame/);
 });
 
+test("packaged windows keep stable content bounds when first activated", async () => {
+  const source = await readFile(new URL("../electron/main.cjs", import.meta.url), "utf8");
+
+  assert.match(source, /Menu\.setApplicationMenu\(null\)/);
+  assert.equal((source.match(/autoHideMenuBar:\s*false/g) || []).length, 3);
+  assert.equal((source.match(/\.setMenuBarVisibility\(false\)/g) || []).length, 3);
+  assert.doesNotMatch(source, /setAutoHideMenuBar\(true\)/);
+});
+
 test("full game entry keeps the Touch idle video active across auxiliary windows", async () => {
   const mainSource = await readFile(new URL("../electron/main.cjs", import.meta.url), "utf8");
   const touchSource = await readFile(

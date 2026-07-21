@@ -38,7 +38,9 @@ contextBridge.exposeInMainWorld('ledGame', {
   exportFrameJson: (payload) => ipcRenderer.invoke('frame:export-json', payload),
   importFrameJson: () => ipcRenderer.invoke('frame:import-json'),
   saveGif: (payload) => ipcRenderer.invoke('level:save-gif', payload),
-  reportEditorLayout: (snapshot) => ipcRenderer.send('diagnostic:editor-layout', snapshot),
+  ...(process.env.LED_LAYOUT_DIAGNOSTICS === 'true'
+    ? { reportEditorLayout: (snapshot) => ipcRenderer.send('diagnostic:editor-layout', snapshot) }
+    : {}),
   latestFrame: () => ipcRenderer.invoke('frame:latest'),
   onLedFrame: (callback) => {
     const listener = (_event, frame) => callback(frame)
@@ -82,6 +84,7 @@ contextBridge.exposeInMainWorld('elc408Tools', {
   search: (request) => ipcRenderer.invoke('elc408:debug-search', request),
   start: (request) => ipcRenderer.invoke('elc408:debug-start', request),
   stop: () => ipcRenderer.invoke('elc408:debug-stop'),
+  setLogCapture: (enabled) => ipcRenderer.invoke('elc408:debug-log-capture', enabled),
   logs: (after, limit) => ipcRenderer.invoke('elc408:debug-logs', after, limit),
   clearLogs: () => ipcRenderer.invoke('elc408:debug-clear-logs'),
   saveGeneratedFile: (payload) => ipcRenderer.invoke('elc408:save-generated-file', payload),

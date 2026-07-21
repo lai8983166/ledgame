@@ -89,7 +89,14 @@ export const elc408Messages = {
         ownerDebug: "调试画面",
         clearLogs: "清空日志",
         logs: "协议日志",
+        capture: {
+          inactive: "采集已关闭",
+          starting: "正在开启采集",
+          active: "采集中",
+          failed: "采集不可用",
+        },
         logEmpty: "暂无日志",
+        logTruncated: "报文已截断",
         expandLog: "展开报文",
         collapseLog: "收起报文",
         logColumns: {
@@ -201,7 +208,14 @@ export const elc408Messages = {
         ownerDebug: "Debug frame",
         clearLogs: "Clear log",
         logs: "Protocol log",
+        capture: {
+          inactive: "Capture off",
+          starting: "Starting capture",
+          active: "Capturing",
+          failed: "Capture unavailable",
+        },
         logEmpty: "No log entries",
+        logTruncated: "Packet truncated",
         expandLog: "Expand packet",
         collapseLog: "Collapse packet",
         logColumns: {
@@ -313,7 +327,14 @@ export const elc408Messages = {
         ownerDebug: "Кадр отладки",
         clearLogs: "Очистить лог",
         logs: "Лог протокола",
+        capture: {
+          inactive: "Захват выключен",
+          starting: "Запуск захвата",
+          active: "Идёт захват",
+          failed: "Захват недоступен",
+        },
         logEmpty: "Лог пуст",
+        logTruncated: "Пакет обрезан",
         expandLog: "Развернуть пакет",
         collapseLog: "Свернуть пакет",
         logColumns: {
@@ -425,7 +446,14 @@ export const elc408Messages = {
         ownerDebug: "디버그 프레임",
         clearLogs: "로그 지우기",
         logs: "프로토콜 로그",
+        capture: {
+          inactive: "캡처 꺼짐",
+          starting: "캡처 시작 중",
+          active: "캡처 중",
+          failed: "캡처 사용 불가",
+        },
         logEmpty: "로그 없음",
+        logTruncated: "패킷이 잘렸습니다",
         expandLog: "패킷 펼치기",
         collapseLog: "패킷 접기",
         logColumns: {
@@ -537,7 +565,14 @@ export const elc408Messages = {
         ownerDebug: "デバッグ",
         clearLogs: "ログ消去",
         logs: "プロトコルログ",
+        capture: {
+          inactive: "キャプチャ停止",
+          starting: "キャプチャ開始中",
+          active: "キャプチャ中",
+          failed: "キャプチャ利用不可",
+        },
         logEmpty: "ログなし",
+        logTruncated: "パケットは切り詰められました",
         expandLog: "パケットを展開",
         collapseLog: "パケットを折りたたむ",
         logColumns: {

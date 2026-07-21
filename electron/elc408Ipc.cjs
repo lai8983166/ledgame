@@ -113,6 +113,13 @@ function normalizeDebugStartRequest(request) {
   }
 }
 
+function normalizeLogCaptureRequest(enabled) {
+  if (typeof enabled !== 'boolean') {
+    return { ok: false, error: 'Protocol log capture requires a boolean enabled value' }
+  }
+  return { ok: true, value: { enabled } }
+}
+
 function normalizeSaveFilePayload(payload) {
   if (!payload || typeof payload !== 'object') {
     return { ok: false, error: 'Invalid save payload' }
@@ -144,5 +151,6 @@ module.exports = {
   normalizeWiringDraft,
   normalizeSearchRequest,
   normalizeDebugStartRequest,
+  normalizeLogCaptureRequest,
   normalizeSaveFilePayload,
 }

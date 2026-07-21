@@ -154,10 +154,18 @@ function mapFieldErrors(message) {
             {{ networkInterfaceLabel(entry) }}
           </option>
         </select>
-        <small v-if="loadingInterfaces">{{ t("elc408.configuration.networkInterfaceLoading") }}</small>
-        <small v-else-if="networkInterfaces.length === 0">{{ t("elc408.configuration.networkInterfaceEmpty") }}</small>
-        <small v-else-if="interfacesError" class="elc408-error">{{ interfacesError }}</small>
-        <small v-else-if="fieldErrors.networkInterface" class="elc408-error">{{ fieldErrors.networkInterface }}</small>
+        <small
+          class="elc408-field-hint"
+          :class="{ 'elc408-error': interfacesError || fieldErrors.networkInterface }"
+          aria-live="polite"
+        >
+          {{
+            loadingInterfaces
+              ? t("elc408.configuration.networkInterfaceLoading")
+              : interfacesError || fieldErrors.networkInterface ||
+                (networkInterfaces.length === 0 ? t("elc408.configuration.networkInterfaceEmpty") : "\u00a0")
+          }}
+        </small>
       </label>
       <label class="elc408-field">
         <span>{{ t("elc408.configuration.controllerModel") }}</span>
@@ -243,6 +251,11 @@ function mapFieldErrors(message) {
 .elc408-field small {
   color: #7a8694;
   font-weight: 500;
+}
+.elc408-field-hint {
+  display: block;
+  min-height: 1.2em;
+  line-height: 1.2;
 }
 .elc408-checkbox {
   align-self: end;

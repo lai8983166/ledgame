@@ -4,7 +4,7 @@ const nodeNet = require('node:net')
 const nodeFs = require('node:fs')
 const fs = require('node:fs/promises')
 const { pathToFileURL } = require('node:url')
-const { app, BrowserWindow, dialog, ipcMain, protocol, net: electronNet, screen } = require('electron')
+const { app, BrowserWindow, dialog, ipcMain, Menu, protocol, net: electronNet, screen } = require('electron')
 const {
   preparationRequest,
   shouldInitializeSystemIdle,
@@ -13,10 +13,16 @@ const {
   createLanguagePreferenceStore,
 } = require('./language-settings.cjs')
 const {
+  appendBoundedLogSync,
+  createBoundedLogSink,
+  resolveRuntimeLogOptions,
+} = require('./runtime-logs.cjs')
+const {
   normalizeConfigDraft,
   normalizeWiringDraft,
   normalizeSearchRequest,
   normalizeDebugStartRequest,
+  normalizeLogCaptureRequest,
   normalizeSaveFilePayload,
 } = require('./elc408Ipc.cjs')
 
@@ -30,6 +36,8 @@ const mediaRootName = 'media'
 const imageExtensions = new Set(['.apng', '.avif', '.bmp', '.gif', '.jpeg', '.jpg', '.png', '.svg', '.webp'])
 const videoExtensions = new Set(['.m4v', '.mov', '.mp4', '.ogg', '.ogv', '.webm'])
 const audioExtensions = new Set(['.mp3', '.wav', '.ogg', '.m4a', '.aac', '.flac'])
+const runtimeLogOptions = resolveRuntimeLogOptions(process.env)
+const layoutDiagnosticsEnabled = process.env.LED_LAYOUT_DIAGNOSTICS === 'true'
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -52,13 +60,7 @@ const languagePreferences = createLanguagePreferenceStore({
   settingsPath: path.join(app.getPath('userData'), 'settings', 'language.json'),
 })
 
-try {
-  const earlyLogDir = path.join(app.getPath('userData'), 'logs')
-  nodeFs.mkdirSync(earlyLogDir, { recursive: true })
-  nodeFs.appendFileSync(path.join(earlyLogDir, 'startup.log'), `[${new Date().toISOString()}] Electron main loaded\n`, 'utf8')
-} catch (_error) {
-  // Best-effort startup marker only.
-}
+appendStartupLog('Electron main loaded')
 
 let mainWindow
 let debugWindow
@@ -75,21 +77,21 @@ let runtimeStateStreamStopped = false
 let pendingRuntimeState = null
 let runtimeStatePublishTimer = null
 let embeddedBackendProcess = null
-let embeddedBackendLogFd = null
+let embeddedBackendLogSink = null
 let NodeWebSocket = null
+let quitCleanupStarted = false
 
 function appendStartupLog(message) {
-  try {
-    const logsDir = path.join(app.getPath('userData'), 'logs')
-    nodeFs.mkdirSync(logsDir, { recursive: true })
-    nodeFs.appendFileSync(
-      path.join(logsDir, 'startup.log'),
-      `[${new Date().toISOString()}] ${message}\n`,
-      'utf8',
-    )
-  } catch (_error) {
-    // Logging must never make startup fail.
-  }
+  const logsDir = path.join(app.getPath('userData'), 'logs')
+  appendBoundedLogSync(
+    path.join(logsDir, 'startup.log'),
+    `[${new Date().toISOString()}] ${message}\n`,
+    {
+      maxBytes: runtimeLogOptions.startupMaxBytes,
+      history: runtimeLogOptions.startupHistory,
+      onWarning: (error) => console.warn(`Startup log write failed: ${error.message || String(error)}`),
+    },
+  )
 }
 
 function broadcastApplicationLanguage(locale) {
@@ -191,6 +193,7 @@ function createWindow() {
     // reported content area (100vh/clientHeight) beyond the visible work area, which makes
     // the simple editor's fit-scaling overflow bottom-right and clip the right edge.
     show: false,
+    autoHideMenuBar: false,
     backgroundColor: '#0f1115',
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
@@ -201,13 +204,17 @@ function createWindow() {
       zoomFactor: 1.0,
     },
   })
-  mainWindow.setAutoHideMenuBar(true)
+  mainWindow.setMenuBarVisibility(false)
   logWindowGeometry(mainWindow, 'main-window-created')
   mainWindow.once('maximize', () => logWindowGeometry(mainWindow, 'main-window-maximized'))
   mainWindow.maximize()
   mainWindow.once('ready-to-show', () => {
     logWindowGeometry(mainWindow, 'main-window-ready')
     mainWindow.show()
+  })
+  mainWindow.on('closed', () => {
+    void releaseElc408LogCapture()
+    mainWindow = null
   })
 
   if (isDev) {
@@ -242,6 +249,7 @@ function createDebugWindow() {
     center: true,
     title: 'LED Debug Panel',
     backgroundColor: '#0f1115',
+    autoHideMenuBar: false,
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
@@ -249,9 +257,10 @@ function createDebugWindow() {
       zoomFactor: 1.0,
     },
   })
-  debugWindow.setAutoHideMenuBar(true)
+  debugWindow.setMenuBarVisibility(false)
 
   debugWindow.on('closed', () => {
+    void releaseElc408LogCapture()
     debugWindow = null
   })
 
@@ -300,6 +309,7 @@ function createTouchWindow() {
     center: true,
     title: 'LED Game Touch',
     backgroundColor: '#071018',
+    autoHideMenuBar: false,
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
@@ -308,7 +318,7 @@ function createTouchWindow() {
       zoomFactor: 1.0,
     },
   })
-  touchWindow.setAutoHideMenuBar(true)
+  touchWindow.setMenuBarVisibility(false)
 
   touchWindow.on('closed', () => {
     touchWindow = null
@@ -698,10 +708,11 @@ async function waitForBackend(baseUrl, timeoutMs = 30000) {
   let lastError = null
   while (Date.now() - startedAt < timeoutMs) {
     try {
-      const response = await fetch(baseUrl)
-      if (response) {
+      const response = await fetch(new URL('/engine/demo/state', baseUrl))
+      if (response.ok) {
         return
       }
+      lastError = new Error(`HTTP ${response.status}`)
     } catch (error) {
       lastError = error
     }
@@ -741,13 +752,17 @@ async function startEmbeddedBackend() {
 
   const logsDir = path.join(app.getPath('userData'), 'logs')
   await fs.mkdir(logsDir, { recursive: true })
-  embeddedBackendLogFd = nodeFs.openSync(path.join(logsDir, 'backend.log'), 'a')
+  embeddedBackendLogSink = await createBoundedLogSink(path.join(logsDir, 'backend.log'), {
+    maxBytes: runtimeLogOptions.backendMaxBytes,
+    history: runtimeLogOptions.backendHistory,
+    onWarning: (error) => console.warn(`Backend log write failed: ${error.message || String(error)}`),
+  })
 
   embeddedBackendProcess = childProcess.spawn(javaPath, ['-jar', backendJarPath], {
     // Spring resolves ${user.dir}/elc408 against the portable app directory.
     cwd: getEmbeddedBackendWorkingDirectory(),
     windowsHide: true,
-    stdio: ['ignore', embeddedBackendLogFd, embeddedBackendLogFd],
+    stdio: ['ignore', 'pipe', 'pipe'],
     env: {
       ...process.env,
       SERVER_PORT: String(backendPort),
@@ -758,16 +773,18 @@ async function startEmbeddedBackend() {
       LED_BRIDGE_ENABLED: process.env.LED_BRIDGE_ENABLED || 'false',
     },
   })
+  const spawnedBackend = embeddedBackendProcess
+  spawnedBackend.stdout.pipe(embeddedBackendLogSink, { end: false })
+  spawnedBackend.stderr.pipe(embeddedBackendLogSink, { end: false })
 
-  embeddedBackendProcess.once('exit', (code, signal) => {
+  spawnedBackend.once('exit', (code, signal) => {
     const message = `Embedded backend exited: code=${code ?? 'null'} signal=${signal ?? 'null'}`
     console.warn(message)
     appendStartupLog(message)
-    embeddedBackendProcess = null
-    if (embeddedBackendLogFd !== null) {
-      nodeFs.closeSync(embeddedBackendLogFd)
-      embeddedBackendLogFd = null
+    if (embeddedBackendProcess === spawnedBackend) {
+      embeddedBackendProcess = null
     }
+    closeEmbeddedBackendLogSink(spawnedBackend)
   })
 
   await waitForBackend(selectedBackendBaseUrl)
@@ -775,15 +792,25 @@ async function startEmbeddedBackend() {
 }
 
 function stopEmbeddedBackend() {
-  if (!embeddedBackendProcess) {
+  if (embeddedBackendProcess) {
+    const processToStop = embeddedBackendProcess
+    embeddedBackendProcess = null
+    closeEmbeddedBackendLogSink(processToStop)
+    processToStop.kill()
     return
   }
-  const processToStop = embeddedBackendProcess
-  embeddedBackendProcess = null
-  processToStop.kill()
-  if (embeddedBackendLogFd !== null) {
-    nodeFs.closeSync(embeddedBackendLogFd)
-    embeddedBackendLogFd = null
+  closeEmbeddedBackendLogSink()
+}
+
+function closeEmbeddedBackendLogSink(sourceProcess) {
+  const sink = embeddedBackendLogSink
+  embeddedBackendLogSink = null
+  if (sink) {
+    sourceProcess?.stdout?.unpipe(sink)
+    sourceProcess?.stderr?.unpipe(sink)
+    sink.close().catch((error) => {
+      console.warn(`Backend log close failed: ${error.message || String(error)}`)
+    })
   }
 }
 
@@ -1183,6 +1210,16 @@ ipcMain.handle('elc408:debug-start', (_event, request) => {
 ipcMain.handle('elc408:debug-stop', () =>
   backendRequest('/hardware/elc408/debug/stop', { method: 'POST' }),
 )
+ipcMain.handle('elc408:debug-log-capture', (_event, enabled) => {
+  const normalized = normalizeLogCaptureRequest(enabled)
+  if (!normalized.ok) {
+    throw new Error(normalized.error)
+  }
+  return backendRequest('/hardware/elc408/debug/logging', {
+    method: 'PUT',
+    body: JSON.stringify(normalized.value),
+  })
+})
 ipcMain.handle('elc408:debug-logs', (_event, after, limit) =>
   backendRequest(
     `/hardware/elc408/debug/logs?after=${encodeURIComponent(Number(after) || 0)}&limit=${encodeURIComponent(
@@ -1217,19 +1254,24 @@ ipcMain.handle('elc408:save-generated-file', async (_event, payload) => {
     fileName: path.basename(dialogResult.filePath),
   }
 })
-ipcMain.on('diagnostic:editor-layout', (event, snapshot) => {
-  if (!mainWindow || mainWindow.isDestroyed() || event.sender !== mainWindow.webContents) {
-    return
-  }
-  try {
-    appendStartupLog(`editor-layout: ${JSON.stringify(snapshot).slice(0, 12000)}`)
-  } catch (_error) {
-    appendStartupLog('editor-layout: unable to serialize snapshot')
-  }
-})
+if (layoutDiagnosticsEnabled) {
+  ipcMain.on('diagnostic:editor-layout', (event, snapshot) => {
+    if (!mainWindow || mainWindow.isDestroyed() || event.sender !== mainWindow.webContents) {
+      return
+    }
+    try {
+      appendStartupLog(`editor-layout: ${JSON.stringify(snapshot).slice(0, 12000)}`)
+    } catch (_error) {
+      appendStartupLog('editor-layout: unable to serialize snapshot')
+    }
+  })
+}
 
 app.whenReady()
   .then(async () => {
+    // The app has no native menu. Removing it keeps the Windows content bounds
+    // stable instead of collapsing an auto-hidden menu on first input.
+    Menu.setApplicationMenu(null)
     registerMediaProtocol()
     await startEmbeddedBackend()
     startFrameServer()
@@ -1250,8 +1292,30 @@ app.on('window-all-closed', () => {
   }
 })
 
-app.on('before-quit', () => {
+app.on('before-quit', (event) => {
+  if (quitCleanupStarted) {
+    return
+  }
+  quitCleanupStarted = true
+  event.preventDefault()
   stopRuntimeStateStream()
   stopFrameServer()
-  stopEmbeddedBackend()
+  Promise.race([
+    releaseElc408LogCapture(),
+    new Promise((resolve) => setTimeout(resolve, 500)),
+  ]).finally(() => {
+    stopEmbeddedBackend()
+    app.quit()
+  })
 })
+
+async function releaseElc408LogCapture() {
+  try {
+    await backendRequest('/hardware/elc408/debug/logging', {
+      method: 'PUT',
+      body: JSON.stringify({ enabled: false }),
+    })
+  } catch (_error) {
+    // Best-effort cleanup; backend owner cleanup remains the final guard.
+  }
+}

@@ -6,6 +6,7 @@ import {
   normalizeWiringDraft,
   normalizeSearchRequest,
   normalizeDebugStartRequest,
+  normalizeLogCaptureRequest,
   normalizeSaveFilePayload,
 } from "../electron/elc408Ipc.cjs";
 
@@ -101,6 +102,20 @@ test("normalizeDebugStartRequest clamps displayColor", () => {
     displayColor: { r: 999, g: -5, b: 128 },
   });
   assert.deepEqual(result.displayColor, { r: 255, g: 0, b: 128 });
+});
+
+test("normalizeLogCaptureRequest accepts only a boolean enabled value", () => {
+  assert.deepEqual(normalizeLogCaptureRequest(true), {
+    ok: true,
+    value: { enabled: true },
+  });
+  assert.deepEqual(normalizeLogCaptureRequest(false), {
+    ok: true,
+    value: { enabled: false },
+  });
+  for (const invalid of ["true", 1, null, undefined, {}, { enabled: true }]) {
+    assert.equal(normalizeLogCaptureRequest(invalid).ok, false);
+  }
 });
 
 test("normalizeSaveFilePayload rejects unsupported kind", () => {
