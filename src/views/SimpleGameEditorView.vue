@@ -3,10 +3,13 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, toRaw, watch } fro
 import { useI18n } from "vue-i18n";
 import EditorInteractionModeSwitch from "../components/EditorInteractionModeSwitch.vue";
 import SimpleMatrixCanvas from "../components/SimpleMatrixCanvas.vue";
+import SimpleLevelPreviewDialog from "../components/SimpleLevelPreviewDialog.vue";
 import GameGlobalConfigDialog from "../components/GameGlobalConfigDialog.vue";
 import { encodeSimpleGifInWorker } from "../lib/encodeSimpleGif.js";
 import { prepareSimpleLevelGif, selectSimpleTopItem } from "../lib/simpleLevelGif.js";
 import { resolveLiveOccupancyCell } from "../lib/simpleOccupancy.js";
+import { createLevelPreviewSnapshot } from "../lib/simpleLevelPreview.js";
+import { createWholeFrameCopyPlan } from "../lib/simpleFrameCopyPlan.js";
 import {
   canSelectObjectForMerge,
   MERGE_ERROR,
@@ -27,6 +30,7 @@ const runtimeStatusMessage = ref("");
 const runtimeErrorMessage = ref("");
 const runtimeResult = ref(null);
 const previewStatusMessage = ref("");
+const levelPreviewSnapshot = ref(null);
 const validationErrors = ref([]);
 const gifExportProgress = ref("");
 const document = ref(null);
@@ -50,8 +54,8 @@ const fitViewportRef = ref(null);
 const fitContentRef = ref(null);
 const MIN_EDITOR_FIT_WIDTH = 1600;
 const MIN_EDITOR_FIT_HEIGHT = 860;
-const MIN_EDITOR_READABLE_SCALE = 0.65;
-const EDITOR_VIEWPORT_GUTTER = 24;
+const MIN_EDITOR_FIT_SCALE = 0.1;
+const EDITOR_VIEWPORT_GUTTER = 12;
 const editorFitScale = ref(1);
 const editorFitBaseWidth = ref(MIN_EDITOR_FIT_WIDTH);
 const editorFitBaseHeight = ref(MIN_EDITOR_FIT_HEIGHT);
@@ -350,6 +354,7 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+  levelPreviewSnapshot.value = null;
   window.removeEventListener("keydown", handleGlobalKeydown);
   window.removeEventListener("click", closeContextMenu);
   window.removeEventListener("resize", scheduleEditorFitMeasurement);
@@ -466,22 +471,22 @@ function measureEditorFit() {
   editorFitAvailableHeight.value = viewportHeight;
   const availableContentWidth = Math.max(1, viewportWidth - EDITOR_VIEWPORT_GUTTER * 2);
   const availableContentHeight = Math.max(1, viewportHeight - EDITOR_VIEWPORT_GUTTER * 2);
-  // Measure the complete unscaled content box so overflow from the actual editor
-  // layout is included in the scrollable shell. The stable scrollbar gutter and
-  // safe flex alignment prevent this from causing the old centering oscillation.
+  // Measure overflow beyond the currently pinned content box. Treating the
+  // pinned width itself as a new natural minimum makes the fit dimensions grow
+  // forever and leaves unused space below the editor after a resize.
   const naturalBounds = measureNaturalEditorBounds(content);
-  const naturalWidth = Math.max(
-    content.scrollWidth,
-    content.offsetWidth,
-    naturalBounds.width,
-    MIN_EDITOR_FIT_WIDTH,
+  const horizontalOverflow = Math.max(
+    0,
+    content.scrollWidth - content.clientWidth,
+    naturalBounds.width - content.offsetWidth,
   );
-  const naturalHeight = Math.max(
-    content.scrollHeight,
-    content.offsetHeight,
-    naturalBounds.height,
-    MIN_EDITOR_FIT_HEIGHT,
+  const verticalOverflow = Math.max(
+    0,
+    content.scrollHeight - content.clientHeight,
+    naturalBounds.height - content.offsetHeight,
   );
+  const naturalWidth = MIN_EDITOR_FIT_WIDTH + horizontalOverflow;
+  const naturalHeight = MIN_EDITOR_FIT_HEIGHT + verticalOverflow;
   const baseWidth = Math.max(availableContentWidth, naturalWidth);
   const baseHeight = Math.max(availableContentHeight, naturalHeight);
   editorFitBaseWidth.value = baseWidth;
@@ -491,7 +496,7 @@ function measureEditorFit() {
     availableContentHeight / baseHeight,
     1,
   );
-  editorFitScale.value = Number(Math.max(fitScale, MIN_EDITOR_READABLE_SCALE).toFixed(4));
+  editorFitScale.value = Number(Math.max(fitScale, MIN_EDITOR_FIT_SCALE).toFixed(4));
   scheduleEditorLayoutDiagnostic();
   if (errorMessage.value || (document.value && editorFitCanReveal)) {
     editorFitReady.value = true;
@@ -526,7 +531,7 @@ function applyInitialEditorFit() {
           approxContentHeight / MIN_EDITOR_FIT_HEIGHT,
           1,
         ),
-        MIN_EDITOR_READABLE_SCALE,
+        MIN_EDITOR_FIT_SCALE,
       ),
       1,
     ).toFixed(4),
@@ -864,19 +869,16 @@ async function stopGame() {
   }
 }
 
-async function openPreview() {
-  previewStatusMessage.value = t("simple.openingPreview");
-  runtimeErrorMessage.value = "";
-  try {
-    if (!api?.openDebugPanel) {
-      throw new Error("Electron preview API is unavailable");
-    }
-    await api.openDebugPanel();
-    previewStatusMessage.value = t("simple.previewOpened");
-  } catch (error) {
-    previewStatusMessage.value = "";
-    runtimeErrorMessage.value = error.message || String(error);
-  }
+function openPreview() {
+  levelPreviewSnapshot.value = createLevelPreviewSnapshot(activeLevel.value, {
+    width: matrixWidth.value,
+    height: matrixHeight.value,
+    colors: colorOptions.value.map((color) => color.value),
+  });
+}
+
+function closeLevelPreview() {
+  levelPreviewSnapshot.value = null;
 }
 
 async function exportCurrentFrame() {
@@ -1796,50 +1798,52 @@ function upsertObjectInFrame(object, frame) {
 }
 
 function copyCurrentFrameToPreviousFrame() {
-  copyCurrentFrameToFrame(activeFrameIndex.value - 1);
+  executeWholeFrameCopy("previous");
 }
 
 function copyCurrentFrameToNextFrame() {
+  executeWholeFrameCopy("next");
+}
+
+function copyCurrentFrameToAllFrames() {
+  executeWholeFrameCopy("all");
+}
+
+function executeWholeFrameCopy(mode) {
   const level = activeLevel.value;
   if (!level) {
     return;
   }
-  const targetIndex = activeFrameIndex.value + 1;
-  const sourceFrame = ensureActiveFrame();
-  let targetFrame = level.frameList[targetIndex];
-  if (!targetFrame) {
-    targetFrame = createBlankFrame();
-    level.frameList.splice(targetIndex, 0, targetFrame);
-  }
-  replaceFrameObjects(sourceFrame, targetFrame);
-  invalidateMatrixFrame(targetFrame);
-  selectFrame(targetIndex);
-  statusMessage.value = t("simple.frameCopied", { number: targetIndex + 1 });
-}
-
-function copyCurrentFrameToAllFrames() {
-  const sourceFrame = ensureActiveFrame();
-  let copied = 0;
-  frames.value.forEach((frame, frameIndex) => {
-    if (frameIndex === activeFrameIndex.value) {
-      return;
-    }
-    replaceFrameObjects(sourceFrame, frame);
-    invalidateMatrixFrame(frame);
-    copied += 1;
-  });
-  statusMessage.value = copied
-    ? t("simple.frameCopiedMany", { count: copied })
-    : t("simple.noTargetFrames");
-}
-
-function copyCurrentFrameToFrame(frameIndex) {
-  if (frameIndex < 0 || frameIndex >= frames.value.length) {
+  const plan = createWholeFrameCopyPlan(mode, activeFrameIndex.value, level.frameList.length);
+  if (!plan.targetIndices.length) {
+    statusMessage.value = t("simple.noTargetFrames");
     return;
   }
-  replaceFrameObjects(ensureActiveFrame(), frames.value[frameIndex]);
-  invalidateMatrixFrame(frames.value[frameIndex]);
-  statusMessage.value = t("simple.frameCopied", { number: frameIndex + 1 });
+  if (plan.overwriteIndices.length) {
+    const message = mode === "all"
+      ? t("simple.frameOverwriteManyConfirm", { count: plan.overwriteIndices.length })
+      : t("simple.frameOverwriteConfirm", { number: plan.overwriteIndices[0] + 1 });
+    if (!confirmDestructiveAction(message)) {
+      return;
+    }
+  }
+
+  const sourceFrame = ensureActiveFrame();
+  if (plan.createIndex !== null) {
+    level.frameList.splice(plan.createIndex, 0, createBlankFrame());
+  }
+  for (const targetIndex of plan.targetIndices) {
+    const targetFrame = level.frameList[targetIndex];
+    replaceFrameObjects(sourceFrame, targetFrame);
+    invalidateMatrixFrame(targetFrame);
+  }
+
+  if (mode === "next") {
+    selectFrame(plan.targetIndices[0]);
+  }
+  statusMessage.value = mode === "all"
+    ? t("simple.frameCopiedMany", { count: plan.targetIndices.length })
+    : t("simple.frameCopied", { number: plan.targetIndices[0] + 1 });
 }
 
 function replaceFrameObjects(sourceFrame, targetFrame) {
@@ -2969,7 +2973,7 @@ function formatRuntimeSummary(value) {
               </button>
               <button
                 class="soft-button runtime-start-button"
-                :disabled="Boolean(busyAction) || !runtimeResult"
+                :disabled="Boolean(busyAction) || !activeLevel"
                 type="button"
                 @click="openPreview"
               >
@@ -3025,6 +3029,11 @@ function formatRuntimeSummary(value) {
       :error="errorMessage"
       @cancel="globalConfigOpen = false"
       @save="saveGlobalConfig"
+    />
+    <SimpleLevelPreviewDialog
+      v-if="levelPreviewSnapshot"
+      :snapshot="levelPreviewSnapshot"
+      @close="closeLevelPreview"
     />
   </div>
 </template>

@@ -49,6 +49,7 @@ button {
   height: 100vh;
   min-height: 0;
   grid-template-rows: auto minmax(0, 1fr);
+  padding: 12px 16px 6px;
   overflow: hidden;
 }
 
@@ -1131,8 +1132,8 @@ button:disabled {
   min-width: 0;
   min-height: 0;
   margin: 0;
-  padding-top: 24px;
-  padding-bottom: 6px;
+  padding-top: 10px;
+  padding-bottom: 0;
   overflow: hidden;
 }
 
@@ -1144,10 +1145,8 @@ button:disabled {
   min-width: 0;
   min-height: 0;
   padding: 0;
-  overflow-x: hidden;
-  overflow-y: auto;
+  overflow: hidden;
   overscroll-behavior: contain;
-  scrollbar-gutter: stable both-edges;
 }
 
 .simple-editor-fit-shell {
@@ -1157,7 +1156,7 @@ button:disabled {
   justify-content: safe center;
   flex: 0 0 auto;
   margin: 0;
-  padding: 24px;
+  padding: 12px 12px 4px;
   min-width: 0;
   min-height: 0;
   overflow: visible;
@@ -2655,8 +2654,8 @@ button:disabled {
   grid-template-rows: auto auto auto minmax(0, 1fr);
   height: 100%;
   overflow: visible;
-  padding-top: 24px;
-  padding-bottom: 6px;
+  padding-top: 10px;
+  padding-bottom: 0;
 }
 
 .simple-editor-fit-content .simple-editor-layout {
