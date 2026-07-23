@@ -6,6 +6,7 @@ export const elc408Messages = {
     nav: {
       help: "帮助",
       debugAssistant: "调试助手",
+      dataUpdate: "数据更新",
     },
     elc408: {
       title: "ELC-408 调试助手",
@@ -125,6 +126,7 @@ export const elc408Messages = {
     nav: {
       help: "Help",
       debugAssistant: "Debug Assistant",
+      dataUpdate: "Data Update",
     },
     elc408: {
       title: "ELC-408 Debug Assistant",
@@ -244,6 +246,7 @@ export const elc408Messages = {
     nav: {
       help: "Справка",
       debugAssistant: "Помощник отладки",
+      dataUpdate: "Обновление данных",
     },
     elc408: {
       title: "ELC-408 Помощник отладки",
@@ -363,6 +366,7 @@ export const elc408Messages = {
     nav: {
       help: "도움말",
       debugAssistant: "디버그 도우미",
+      dataUpdate: "데이터 업데이트",
     },
     elc408: {
       title: "ELC-408 디버그 도우미",
@@ -482,6 +486,7 @@ export const elc408Messages = {
     nav: {
       help: "ヘルプ",
       debugAssistant: "デバッグアシスタント",
+      dataUpdate: "データ更新",
     },
     elc408: {
       title: "ELC-408 デバッグアシスタント",

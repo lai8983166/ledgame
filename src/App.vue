@@ -9,6 +9,7 @@ import SpiritLibraryView from "./views/SpiritLibraryView.vue";
 import LedGameTouchView from "./views/LedGameTouchView.vue";
 import LanguageView from "./views/LanguageView.vue";
 import Elc408DebugAssistantView from "./views/Elc408DebugAssistantView.vue";
+import DatabaseRefreshView from "./views/DatabaseRefreshView.vue";
 
 const { t } = useI18n({ useScope: "global" });
 
@@ -428,7 +429,7 @@ function formatRuntimeValue(value, fallback = "-") {
           <button
             ref="helpButtonRef"
             class="nav-tab nav-help-button"
-            :class="{ active: activeView === 'debug-assistant' }"
+            :class="{ active: activeView === 'debug-assistant' || activeView === 'database-refresh' }"
             type="button"
             :aria-haspopup="'menu'"
             :aria-expanded="helpMenuOpen"
@@ -452,6 +453,15 @@ function formatRuntimeValue(value, fallback = "-") {
               @click="selectHelpItem('debug-assistant')"
             >
               {{ t("nav.debugAssistant") }}
+            </button>
+            <button
+              class="nav-help-item"
+              type="button"
+              role="menuitem"
+              :class="{ active: activeView === 'database-refresh' }"
+              @click="selectHelpItem('database-refresh')"
+            >
+              {{ t("nav.dataUpdate") }}
             </button>
           </div>
         </div>
@@ -483,6 +493,8 @@ function formatRuntimeValue(value, fallback = "-") {
     <SpiritLibraryView v-else-if="activeView === 'spirits'" />
 
     <Elc408DebugAssistantView v-else-if="activeView === 'debug-assistant'" />
+
+    <DatabaseRefreshView v-else-if="activeView === 'database-refresh'" />
 
     <LanguageView v-else />
   </main>

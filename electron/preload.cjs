@@ -30,6 +30,8 @@ contextBridge.exposeInMainWorld('ledGame', {
   sendGameInput: (input) => ipcRenderer.invoke('engine:game-input', input),
   stop: () => ipcRenderer.invoke('engine:stop'),
   state: () => ipcRenderer.invoke('engine:state'),
+  databaseRefreshAvailability: () => ipcRenderer.invoke('database:refresh-availability'),
+  refreshDatabase: () => ipcRenderer.invoke('database:refresh'),
   sendInput: (input) => ipcRenderer.invoke('engine:input', input),
   seedSimpleDemo: () => ipcRenderer.invoke('dev:seed-simple-demo'),
   getGameEditor: (gameId) => ipcRenderer.invoke('game-editor:get', gameId),
@@ -51,6 +53,11 @@ contextBridge.exposeInMainWorld('ledGame', {
     const listener = (_event, state) => callback(state)
     ipcRenderer.on('engine-state', listener)
     return () => ipcRenderer.removeListener('engine-state', listener)
+  },
+  onDatabaseRefreshed: (callback) => {
+    const listener = (_event, result) => callback(result)
+    ipcRenderer.on('database-refreshed', listener)
+    return () => ipcRenderer.removeListener('database-refreshed', listener)
   },
 })
 

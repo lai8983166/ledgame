@@ -18,6 +18,10 @@ const {
   resolveRuntimeLogOptions,
 } = require('./runtime-logs.cjs')
 const {
+  refreshDatabaseFiles,
+  restoreDatabaseFiles,
+} = require('./database-refresh.cjs')
+const {
   normalizeConfigDraft,
   normalizeWiringDraft,
   normalizeSearchRequest,
@@ -78,6 +82,7 @@ let pendingRuntimeState = null
 let runtimeStatePublishTimer = null
 let embeddedBackendProcess = null
 let embeddedBackendLogSink = null
+let databaseRefreshPromise = null
 let NodeWebSocket = null
 let quitCleanupStarted = false
 
@@ -644,6 +649,10 @@ function getUserDatabaseFilePath() {
   return `${getUserDatabaseBasePath()}.mv.db`
 }
 
+function getDatabaseBackupRoot() {
+  return path.join(app.getPath('userData'), 'database', 'backups')
+}
+
 function getEmbeddedBackendWorkingDirectory() {
   return app.isPackaged ? path.dirname(app.getPath('exe')) : app.getAppPath()
 }
@@ -797,9 +806,43 @@ function stopEmbeddedBackend() {
     embeddedBackendProcess = null
     closeEmbeddedBackendLogSink(processToStop)
     processToStop.kill()
-    return
+    return processToStop
   }
   closeEmbeddedBackendLogSink()
+  return null
+}
+
+function waitForProcessExit(processToWait, timeoutMs = 10000) {
+  if (!processToWait || processToWait.exitCode !== null) {
+    return Promise.resolve()
+  }
+  return new Promise((resolve, reject) => {
+    let settled = false
+    const timer = setTimeout(() => {
+      if (settled) {
+        return
+      }
+      settled = true
+      reject(new Error('Embedded backend did not stop before the refresh timeout'))
+    }, timeoutMs)
+    const finish = () => {
+      if (settled) {
+        return
+      }
+      settled = true
+      clearTimeout(timer)
+      resolve()
+    }
+    processToWait.once('exit', finish)
+    if (processToWait.exitCode !== null) {
+      finish()
+    }
+  })
+}
+
+async function stopEmbeddedBackendAndWait() {
+  const processToStop = stopEmbeddedBackend()
+  await waitForProcessExit(processToStop)
 }
 
 function closeEmbeddedBackendLogSink(sourceProcess) {
@@ -832,6 +875,176 @@ function requestCurrentGameState() {
   return engineStateRequest('/engine/game/input', {
     method: 'POST',
     body: JSON.stringify({ type: 'state' }),
+  })
+}
+
+const ACTIVE_DATABASE_REFRESH_STATES = new Set(['PREPARING', 'STARTING', 'RUNNING', 'SETTLING'])
+
+function isRuntimeActiveForDatabaseRefresh() {
+  const state = latestEngineState || {}
+  const engineState = String(state.engineState || '').toUpperCase()
+  return state.running === true || ACTIVE_DATABASE_REFRESH_STATES.has(engineState)
+}
+
+function refreshResult(status, message, details = {}) {
+  return {
+    ok: status === 'SUCCESS',
+    status,
+    message,
+    ...details,
+  }
+}
+
+function refreshErrorDetails(error) {
+  return {
+    status: error?.code || 'REFRESH_FAILED',
+    message: error?.message || String(error),
+    backupDirectory: error?.backupDirectory || null,
+  }
+}
+
+function databaseRefreshAvailability() {
+  if (!shouldUseEmbeddedBackend) {
+    return {
+      available: false,
+      status: 'UNSUPPORTED_RUNTIME_MODE',
+      message: 'Database refresh is only available when the packaged embedded backend is active.',
+    }
+  }
+  if (isRuntimeActiveForDatabaseRefresh()) {
+    return {
+      available: false,
+      status: 'RUNTIME_ACTIVE',
+      message: 'Stop the game or demo before refreshing the database.',
+    }
+  }
+  if (!embeddedBackendProcess) {
+    return {
+      available: false,
+      status: 'BACKEND_NOT_READY',
+      message: 'The embedded backend is not ready for database refresh.',
+    }
+  }
+  return { available: true, status: 'AVAILABLE', message: '' }
+}
+
+async function restartEmbeddedBackend() {
+  try {
+    await startEmbeddedBackend()
+    return null
+  } catch (error) {
+    try {
+      await stopEmbeddedBackendAndWait()
+    } catch (stopError) {
+      error.restartCleanupError = stopError.message || String(stopError)
+    }
+    return error
+  }
+}
+
+async function performDatabaseRefresh() {
+  if (!shouldUseEmbeddedBackend) {
+    return refreshResult(
+      'UNSUPPORTED_RUNTIME_MODE',
+      'Database refresh is only available when the packaged embedded backend is active.',
+    )
+  }
+  if (isRuntimeActiveForDatabaseRefresh()) {
+    return refreshResult(
+      'RUNTIME_ACTIVE',
+      'Stop the game or demo before refreshing the database.',
+    )
+  }
+  if (!embeddedBackendProcess) {
+    return refreshResult('BACKEND_NOT_READY', 'The embedded backend is not ready for database refresh.')
+  }
+
+  let refreshData = null
+  try {
+    await stopEmbeddedBackendAndWait()
+  } catch (error) {
+    return refreshResult('BACKEND_STOP_FAILED', error.message || String(error))
+  }
+
+  try {
+    refreshData = await refreshDatabaseFiles({
+      userDatabaseRuntimeDir: getUserDatabaseRuntimeDir(),
+      seedDatabaseRuntimeDir: getSeedDatabaseRuntimeDir(),
+      backupRoot: getDatabaseBackupRoot(),
+    })
+  } catch (error) {
+    const restartError = await restartEmbeddedBackend()
+    const details = refreshErrorDetails(error)
+    if (restartError) {
+      return refreshResult(
+        'RESTART_FAILED',
+        `Database refresh failed and the backend could not be restarted: ${restartError.message || String(restartError)}`,
+        { ...details, restartError: restartError.message || String(restartError) },
+      )
+    }
+    return refreshResult(details.status, details.message, details)
+  }
+
+  const startError = await restartEmbeddedBackend()
+  if (!startError) {
+    latestEngineState = null
+    const result = refreshResult('SUCCESS', 'Database refreshed successfully.', {
+      backupDirectory: refreshData.backupDirectory,
+      replacedFiles: refreshData.replacedFiles,
+    })
+    BrowserWindow.getAllWindows().forEach((window) => {
+      if (!window.isDestroyed()) {
+        window.webContents.send('database-refreshed', result)
+      }
+    })
+    return result
+  }
+
+  let restoreError = null
+  try {
+    await restoreDatabaseFiles({
+      userDatabaseRuntimeDir: getUserDatabaseRuntimeDir(),
+      backupDirectory: refreshData.backupDirectory,
+    })
+  } catch (error) {
+    restoreError = error
+  }
+
+  if (!restoreError) {
+    const recoveryStartError = await restartEmbeddedBackend()
+    if (!recoveryStartError) {
+      return refreshResult(
+        'RESTART_FAILED_RECOVERED',
+        `Database was refreshed, but the new backend failed to start. The previous database was restored.`,
+        {
+          backupDirectory: refreshData.backupDirectory,
+          restartError: startError.message || String(startError),
+        },
+      )
+    }
+    restoreError = recoveryStartError
+  }
+
+  return refreshResult(
+    'RESTORE_FAILED',
+    `Database refresh failed and recovery was incomplete: ${restoreError.message || String(restoreError)}`,
+    {
+      backupDirectory: refreshData.backupDirectory,
+      restartError: startError.message || String(startError),
+      restoreError: restoreError.message || String(restoreError),
+    },
+  )
+}
+
+function refreshDatabase() {
+  if (databaseRefreshPromise) {
+    return Promise.resolve(
+      refreshResult('REFRESH_IN_PROGRESS', 'A database refresh is already in progress.'),
+    )
+  }
+  databaseRefreshPromise = performDatabaseRefresh()
+  return databaseRefreshPromise.finally(() => {
+    databaseRefreshPromise = null
   })
 }
 
@@ -1107,6 +1320,8 @@ ipcMain.handle('engine:game-input', (_event, input) =>
 ipcMain.handle('engine:stop', () => engineStateRequest('/engine/demo/stop', { method: 'POST' }))
 ipcMain.handle('engine:state', () => engineStateRequest('/engine/demo/state'))
 ipcMain.handle('game:list', () => backendRequest('/game'))
+ipcMain.handle('database:refresh-availability', () => databaseRefreshAvailability())
+ipcMain.handle('database:refresh', () => refreshDatabase())
 ipcMain.handle('game:state', () => requestCurrentGameState())
 ipcMain.handle('game:idle', () => engineStateRequest('/engine/game/idle', { method: 'POST' }))
 ipcMain.handle('game:stop', () => engineStateRequest('/engine/game/stop', { method: 'POST' }))
