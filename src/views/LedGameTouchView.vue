@@ -373,15 +373,15 @@ async function stopGame() {
 
           <label class="touch-field">
             <span>{{ t("touch.playerCount") }}</span>
-            <input v-model.number="draft.userCount" type="number" min="1" max="32" :disabled="!selectedGameId || Boolean(busyAction)" />
+            <input v-model.number="draft.userCount" type="number" inputmode="numeric" min="1" max="32" step="1" :disabled="!selectedGameId" />
           </label>
 
           <label class="touch-field">
             <span>{{ t("touch.startLevel") }}</span>
-            <input v-model.number="draft.startLevelIndex" type="number" min="0" :disabled="!selectedGameId || Boolean(busyAction)" />
+            <input v-model.number="draft.startLevelIndex" type="number" inputmode="numeric" min="0" step="1" :disabled="!selectedGameId" />
           </label>
 
-          <fieldset class="touch-fieldset" :disabled="!selectedGameId || Boolean(busyAction)">
+          <fieldset class="touch-fieldset" :disabled="!selectedGameId">
             <legend>{{ t("touch.afterFailure") }}</legend>
             <div class="touch-segmented">
               <button type="button" :class="{ active: draft.stageFailurePolicy === 'END_GAME' }" @click="draft.stageFailurePolicy = 'END_GAME'">{{ t("touch.endGame") }}</button>

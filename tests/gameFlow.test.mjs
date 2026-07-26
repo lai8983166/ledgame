@@ -132,13 +132,37 @@ test("sandboxed preload keeps window detection local and exposes the minimal Tou
 test("Touch window is reusable, reconstructable, and closing it does not stop gameplay", async () => {
   const source = await readFile(new URL("../electron/main.cjs", import.meta.url), "utf8");
   const createTouchWindow = source.slice(
-    source.indexOf("function createTouchWindow()"),
+    source.indexOf("function activateTouchWindow("),
     source.indexOf("function startFrameServer()"),
   );
-  assert.match(createTouchWindow, /touchWindow\.focus\(\)/);
+  assert.match(createTouchWindow, /show:\s*false/);
+  assert.match(createTouchWindow, /ready-to-show/);
+  assert.match(createTouchWindow, /targetWindow\.show\(\)/);
+  assert.match(createTouchWindow, /targetWindow\.focus\(\)/);
+  assert.match(createTouchWindow, /targetWindow\.webContents\.focus\(\)/);
+  assert.match(createTouchWindow, /setImmediate\(\(\)\s*=>\s*activateTouchWindow/);
   assert.match(createTouchWindow, /touchWindow\s*=\s*null/);
   assert.match(createTouchWindow, /window=touch/);
   assert.doesNotMatch(createTouchWindow, /engine\/game\/stop|stopTouchGame/);
+});
+
+test("Touch preparation options require a game but remain focusable during async actions", async () => {
+  const source = await readFile(
+    new URL("../src/views/LedGameTouchView.vue", import.meta.url),
+    "utf8",
+  );
+  const playerInput = source.match(/<input[^>]*v-model\.number="draft\.userCount"[^>]*>/)?.[0];
+  const startLevelInput = source.match(
+    /<input[^>]*v-model\.number="draft\.startLevelIndex"[^>]*>/,
+  )?.[0];
+
+  assert.ok(playerInput);
+  assert.ok(startLevelInput);
+  assert.match(playerInput, /:disabled="!selectedGameId"/);
+  assert.match(startLevelInput, /:disabled="!selectedGameId"/);
+  assert.doesNotMatch(playerInput, /busyAction/);
+  assert.doesNotMatch(startLevelInput, /busyAction/);
+  assert.match(source, /<fieldset class="touch-fieldset" :disabled="!selectedGameId">/);
 });
 
 test("packaged windows keep stable content bounds when first activated", async () => {

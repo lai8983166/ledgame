@@ -290,12 +290,25 @@ function createDebugWindow() {
   })
 }
 
+function activateTouchWindow(targetWindow = touchWindow) {
+  if (!targetWindow || targetWindow.isDestroyed() || targetWindow !== touchWindow) {
+    return
+  }
+  targetWindow.setFocusable(true)
+  if (targetWindow.isMinimized()) {
+    targetWindow.restore()
+  }
+  if (!targetWindow.isVisible()) {
+    targetWindow.show()
+  }
+  targetWindow.moveTop()
+  targetWindow.focus()
+  targetWindow.webContents.focus()
+}
+
 function createTouchWindow() {
   if (touchWindow && !touchWindow.isDestroyed()) {
-    if (touchWindow.isMinimized()) {
-      touchWindow.restore()
-    }
-    touchWindow.focus()
+    activateTouchWindow(touchWindow)
     return touchWindow
   }
 
@@ -318,6 +331,7 @@ function createTouchWindow() {
     title: 'LED Game Touch',
     backgroundColor: '#071018',
     autoHideMenuBar: false,
+    show: false,
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
@@ -327,9 +341,21 @@ function createTouchWindow() {
     },
   })
   touchWindow.setMenuBarVisibility(false)
+  const createdTouchWindow = touchWindow
+
+  touchWindow.once('ready-to-show', () => {
+    activateTouchWindow(createdTouchWindow)
+  })
+  touchWindow.on('focus', () => {
+    if (!createdTouchWindow.isDestroyed()) {
+      createdTouchWindow.webContents.focus()
+    }
+  })
 
   touchWindow.on('closed', () => {
-    touchWindow = null
+    if (touchWindow === createdTouchWindow) {
+      touchWindow = null
+    }
   })
 
   if (isDev) {
@@ -340,12 +366,13 @@ function createTouchWindow() {
     })
   }
 
-  touchWindow.webContents.once('did-finish-load', () => {
-    if (latestEngineState && touchWindow && !touchWindow.isDestroyed()) {
-      touchWindow.webContents.send('engine-state', latestEngineState)
+  createdTouchWindow.webContents.once('did-finish-load', () => {
+    if (latestEngineState && !createdTouchWindow.isDestroyed()) {
+      createdTouchWindow.webContents.send('engine-state', latestEngineState)
     }
+    setImmediate(() => activateTouchWindow(createdTouchWindow))
   })
-  return touchWindow
+  return createdTouchWindow
 }
 
 function startFrameServer() {
