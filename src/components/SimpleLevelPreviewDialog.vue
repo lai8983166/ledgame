@@ -44,9 +44,10 @@ watch(
   () => restartPlayback(),
 );
 
-watch([playbackState, () => props.snapshot], () => {
-  void nextTick(drawCurrentFrame);
-}, { deep: true });
+watch(
+  () => playbackState.value?.frameIndex,
+  () => void nextTick(drawCurrentFrame),
+);
 
 function restartPlayback() {
   stopPlayback();

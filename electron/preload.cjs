@@ -34,6 +34,7 @@ contextBridge.exposeInMainWorld('ledGame', {
   refreshDatabase: () => ipcRenderer.invoke('database:refresh'),
   sendInput: (input) => ipcRenderer.invoke('engine:input', input),
   seedSimpleDemo: () => ipcRenderer.invoke('dev:seed-simple-demo'),
+  seedSimpleVariants: () => ipcRenderer.invoke('dev:seed-simple-variants'),
   getGameEditor: (gameId) => ipcRenderer.invoke('game-editor:get', gameId),
   validateGameEditor: (document) => ipcRenderer.invoke('game-editor:validate', document),
   saveGameEditor: (gameId, document) => ipcRenderer.invoke('game-editor:save', gameId, document),

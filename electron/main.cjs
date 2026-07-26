@@ -29,6 +29,9 @@ const {
   normalizeLogCaptureRequest,
   normalizeSaveFilePayload,
 } = require('./elc408Ipc.cjs')
+const {
+  inferFrameSize,
+} = require('./frame-size.cjs')
 
 const isDev = Boolean(process.env.VITE_DEV_SERVER_URL)
 const shouldUseEmbeddedBackend = !isDev && !process.env.LED_BACKEND_URL
@@ -420,7 +423,7 @@ function parseFrames(buffer) {
 
 function publishFrame(payload) {
   const rgb = Array.from(payload)
-  const frameSize = inferFrameSize(rgb.length)
+  const frameSize = inferFrameSize(rgb.length, latestEngineState, latestFrame)
   latestFrame = {
     width: frameSize.width,
     height: frameSize.height,
@@ -433,21 +436,13 @@ function publishFrame(payload) {
   }
 }
 
-function inferFrameSize(byteLength) {
-  const pixelCount = Math.floor((Number(byteLength) || 0) / 3)
-  const squareSize = Math.sqrt(pixelCount)
-  if (Number.isInteger(squareSize) && squareSize > 0) {
-    return { width: squareSize, height: squareSize }
-  }
-  return { width: 16, height: 16 }
-}
-
 function publishEngineState(state) {
   if (!state) {
     return
   }
 
   latestEngineState = state
+  refreshLatestFrameSize(state)
 
   BrowserWindow.getAllWindows().forEach((window) => {
     if (!window.isDestroyed()) {
@@ -838,6 +833,24 @@ function waitForProcessExit(processToWait, timeoutMs = 10000) {
       finish()
     }
   })
+}
+
+function refreshLatestFrameSize(state) {
+  if (!latestFrame?.rgb) {
+    return
+  }
+  const frameSize = inferFrameSize(latestFrame.rgb.length, state, latestFrame)
+  if (frameSize.width === latestFrame.width && frameSize.height === latestFrame.height) {
+    return
+  }
+  latestFrame = {
+    ...latestFrame,
+    width: frameSize.width,
+    height: frameSize.height,
+  }
+  if (debugWindow && !debugWindow.isDestroyed()) {
+    debugWindow.webContents.send('led-frame', latestFrame)
+  }
 }
 
 async function stopEmbeddedBackendAndWait() {
@@ -1348,6 +1361,9 @@ ipcMain.handle('engine:input', (_event, input) =>
 )
 ipcMain.handle('dev:seed-simple-demo', () =>
   backendRequest('/dev/seed/simple-demo', { method: 'POST' }),
+)
+ipcMain.handle('dev:seed-simple-variants', () =>
+  backendRequest('/dev/seed/simple-variants', { method: 'POST' }),
 )
 ipcMain.handle('game-editor:get', (_event, gameId) =>
   backendRequest(`/game-editor/${gameId}`),

@@ -11,6 +11,7 @@ test("Simple editor quick start remains direct and does not save or open Touch",
 
   assert.match(startFunction, /api\.startGame\(/);
   assert.match(startFunction, /launchMethod:\s*["']debug["']/);
+  assert.match(startFunction, /startLevelIndex:\s*activeLevelIndex\.value/);
   assert.match(startFunction, /openDebugPanel/);
   assert.doesNotMatch(startFunction, /saveGameEditor/);
   assert.doesNotMatch(startFunction, /enterGameFlow|createPreparation/);

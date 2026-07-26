@@ -26,6 +26,9 @@ test("level preview is a read-only Canvas with bounded timer lifecycle", () => {
   assert.match(previewSource, /rasterizeLevelPreviewFrame\(frame, props\.snapshot\)/);
   assert.match(previewSource, /window\.setInterval[\s\S]*SIMPLE_TICK_MS/);
   assert.match(previewSource, /onBeforeUnmount[\s\S]*stopPlayback/);
+  assert.match(previewSource, /playbackState\.value\?\.frameIndex/);
+  assert.doesNotMatch(previewSource, /watch\(\[playbackState/);
+  assert.doesNotMatch(previewSource, /\{\s*deep:\s*true\s*\}/);
   assert.match(previewSource, /pointer-events:\s*none/);
   assert.doesNotMatch(previewSource, /game\/input|cell-click|pointerdown|mousedown/);
   assert.match(previewSource, /role="dialog"/);

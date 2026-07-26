@@ -5,10 +5,10 @@ import TouchMatrixCanvas from "../components/TouchMatrixCanvas.vue";
 import {
   extractErrorMessage,
   hasTermination,
-  normalizeGameList,
   normalizeRuntimeState,
   touchViewForState,
 } from "../lib/gameFlowState.js";
+import { loadSimpleGameVariants } from "../lib/simpleGameVariants.js";
 
 const api = window.ledGame;
 const mediaApi = window.mediaLibrary;
@@ -23,6 +23,7 @@ const idleVideoFailed = ref(false);
 const idleAwakeRequested = ref(false);
 const loadingState = ref(true);
 const loadingGames = ref(false);
+const gameInitializationWarning = ref("");
 const busyAction = ref("");
 const errorMessage = ref("");
 const stateBroadcastVersion = ref(0);
@@ -178,11 +179,22 @@ async function loadGames() {
   if (!api?.listGames || loadingGames.value) return;
   loadingGames.value = true;
   errorMessage.value = "";
+  gameInitializationWarning.value = "";
   try {
-    const result = await api.listGames();
-    games.value = normalizeGameList(result);
+    const result = await loadSimpleGameVariants(api);
+    games.value = result.games;
+    if (result.initializationError) {
+      gameInitializationWarning.value = t("games.seedWarning", {
+        message: extractErrorMessage(result.initializationError, t("games.seedFailed")),
+      });
+    }
+    if (!games.value.length && result.initializationError) {
+      errorMessage.value = gameInitializationWarning.value;
+      gameInitializationWarning.value = "";
+    }
     await loadCoverUrls(games.value);
   } catch (error) {
+    games.value = [];
     errorMessage.value = extractErrorMessage(error, t("touch.gamesLoadFailed"));
   } finally {
     loadingGames.value = false;
@@ -324,6 +336,9 @@ async function stopGame() {
 
       <div class="touch-preparing-body">
         <section class="touch-game-browser" :aria-label="t('touch.gameList')">
+          <p v-if="gameInitializationWarning" class="touch-inline-warning" role="status">
+            {{ gameInitializationWarning }}
+          </p>
           <div v-if="loadingGames" class="touch-empty">{{ t("touch.loadingGames") }}...</div>
           <div v-else-if="!games.length" class="touch-empty">
             <strong>{{ t("touch.noGames") }}</strong>
@@ -344,6 +359,7 @@ async function stopGame() {
               <span class="touch-game-copy">
                 <strong>{{ game.name }}</strong>
                 <small>{{ game.type || game.mode || "Game" }}</small>
+                <em v-if="game.name === 'simple-demo'">{{ t("games.testOnly") }}</em>
               </span>
             </button>
           </div>
@@ -607,6 +623,23 @@ async function stopGame() {
 .touch-game-copy small {
   margin-top: 7px;
   color: #9fb3c0;
+}
+
+.touch-game-copy em {
+  margin-top: 7px;
+  color: #ffd166;
+  font-size: 12px;
+  font-style: normal;
+}
+
+.touch-inline-warning {
+  margin: 0 0 14px;
+  padding: 10px 12px;
+  border: 1px solid #705822;
+  border-radius: 6px;
+  color: #ffe2a0;
+  background: #2c2413;
+  font-size: 13px;
 }
 
 .touch-config {

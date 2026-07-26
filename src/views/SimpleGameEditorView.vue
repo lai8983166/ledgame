@@ -10,6 +10,7 @@ import { prepareSimpleLevelGif, selectSimpleTopItem } from "../lib/simpleLevelGi
 import { resolveLiveOccupancyCell } from "../lib/simpleOccupancy.js";
 import { createLevelPreviewSnapshot } from "../lib/simpleLevelPreview.js";
 import { createWholeFrameCopyPlan } from "../lib/simpleFrameCopyPlan.js";
+import { normalizeLevelOption, validateLevelOption } from "../lib/simpleLevelOptions.js";
 import {
   canSelectObjectForMerge,
   MERGE_ERROR,
@@ -18,6 +19,16 @@ import {
 
 const { t } = useI18n({ useScope: "global" });
 
+const props = defineProps({
+  gameId: {
+    type: [Number, String],
+    default: null,
+  },
+  gameName: {
+    type: String,
+    default: "",
+  },
+});
 defineEmits(["back"]);
 
 const api = window.ledGame;
@@ -69,6 +80,7 @@ let fitMeasureFrame = 0;
 let editorFitCanReveal = false;
 let layoutDiagnosticFrame = 0;
 let lastLayoutDiagnostic = "";
+let editorMounted = false;
 
 const PANORAMA_PADDING = 8;
 
@@ -98,7 +110,15 @@ const MATRIX_CACHE_WARMUP_BATCH_SIZE = 2;
 const levels = computed(() => document.value?.levels || []);
 const activeLevel = computed(() => levels.value[activeLevelIndex.value] || null);
 const frames = computed(() => activeLevel.value?.frameList || []);
+const activeLevelOptionErrors = computed(
+  () => new Set(validateLevelOption(activeLevel.value?.option).map((error) => error.field)),
+);
 const activeFrame = computed(() => frames.value[activeFrameIndex.value] || null);
+const currentGameId = computed(() => {
+  const value = Number(props.gameId);
+  return Number.isFinite(value) && value > 0 ? Math.floor(value) : null;
+});
+const currentGameName = computed(() => props.gameName || document.value?.name || "Simple");
 const displayedFrameIndex = computed(() =>
   draggingFrameProgress.value && previewFrameIndex.value !== null
     ? previewFrameIndex.value
@@ -329,6 +349,7 @@ watch(
 );
 
 onMounted(() => {
+  editorMounted = true;
   applyInitialEditorFit();
   setupEditorFitMeasurement();
   setupMatrixContainerObserver();
@@ -354,6 +375,7 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+  editorMounted = false;
   levelPreviewSnapshot.value = null;
   window.removeEventListener("keydown", handleGlobalKeydown);
   window.removeEventListener("click", closeContextMenu);
@@ -369,17 +391,31 @@ onBeforeUnmount(() => {
   cancelMatrixCacheWarmup();
 });
 
+watch(
+  () => props.gameId,
+  (nextGameId, previousGameId) => {
+    if (!editorMounted || !nextGameId || String(nextGameId) === String(previousGameId)) {
+      return;
+    }
+    loadEditor();
+  },
+);
+
 async function loadEditor() {
   editorFitReady.value = false;
   editorFitCanReveal = false;
+  document.value = null;
   await runEditorAction("load", async () => {
-    const seeded = await api.seedSimpleDemo();
-    const gameId = seeded?.data?.id;
+    const gameId = currentGameId.value;
     if (!gameId) {
-      throw new Error("simple-demo seed did not return a game id");
+      throw new Error(t("simple.gameSelectionMissing"));
     }
     const detail = await api.getGameEditor(gameId);
-    document.value = ensureEditableShape(detail?.data);
+    const loaded = detail?.data ?? detail;
+    if (!loaded || Number(loaded.id) !== gameId) {
+      throw new Error(t("simple.editorGameMismatch", { game: currentGameName.value }));
+    }
+    document.value = ensureEditableShape({ ...loaded, id: gameId });
     resetMatrixFrameCache();
     activeLevelIndex.value = 0;
     activeFrameIndex.value = 0;
@@ -388,7 +424,7 @@ async function loadEditor() {
     selectedObjectId.value = "";
     stopSelectionMode();
     panoramaMode.value = false;
-    statusMessage.value = t("simple.loaded");
+    statusMessage.value = t("simple.loadedGame", { game: currentGameName.value });
     runtimeStatusMessage.value = "";
     runtimeErrorMessage.value = "";
     runtimeResult.value = null;
@@ -688,7 +724,18 @@ function setupMatrixContainerObserver() {
 }
 
 async function validateEditor() {
-  if (!document.value) {
+  if (!document.value || !currentGameId.value) {
+    return;
+  }
+  const localErrors = document.value.levels.flatMap((level, index) =>
+    validateLevelOption(level.option).map((error) => ({
+      path: "levels[" + index + "].option." + error.field,
+      message: t(error.messageKey),
+    })),
+  );
+  if (localErrors.length) {
+    validationErrors.value = localErrors;
+    statusMessage.value = t("simple.validationFailed");
     return;
   }
   await runEditorAction("validate", async () => {
@@ -699,12 +746,23 @@ async function validateEditor() {
 }
 
 async function saveEditor() {
-  if (!document.value?.id) {
+  if (!document.value || !currentGameId.value) {
+    return;
+  }
+  const localErrors = document.value.levels.flatMap((level, index) =>
+    validateLevelOption(level.option).map((error) => ({
+      path: "levels[" + index + "].option." + error.field,
+      message: t(error.messageKey),
+    })),
+  );
+  if (localErrors.length) {
+    validationErrors.value = localErrors;
+    statusMessage.value = t("simple.validationFailed");
     return;
   }
   await runEditorAction("save", async () => {
     const payload = createEditorPayload();
-    const result = await api.saveGameEditor(payload.id, payload);
+    const result = await api.saveGameEditor(currentGameId.value, payload);
     statusMessage.value = result?.data?.saved ? t("simple.saveSuccess") : t("simple.saveComplete");
     validationErrors.value = [];
   });
@@ -745,7 +803,7 @@ function applyGlobalConfigPatch(target, patch) {
 }
 
 async function saveGlobalConfig(patch) {
-  const gameId = document.value?.id;
+  const gameId = currentGameId.value;
   if (!gameId) {
     return;
   }
@@ -811,7 +869,7 @@ async function exportCurrentLevelGif() {
 }
 
 async function startGame() {
-  const gameId = document.value?.id;
+  const gameId = currentGameId.value;
   if (!gameId || busyAction.value === "start") {
     return;
   }
@@ -825,7 +883,7 @@ async function startGame() {
     }
     const result = await api.startGame({
       id: gameId,
-      startLevelIndex: 0,
+      startLevelIndex: activeLevelIndex.value,
       launchMethod: "debug",
     });
     runtimeResult.value = result?.data || result;
@@ -1327,6 +1385,7 @@ function addLevel() {
   const nextIndex = levels.value.length;
   document.value.levels.push({
     label: `Level ${nextIndex + 1}`,
+    option: normalizeLevelOption(),
     frameList: [createBlankFrame()],
   });
   activeLevelIndex.value = nextIndex;
@@ -1801,6 +1860,26 @@ function copyCurrentFrameToPreviousFrame() {
   executeWholeFrameCopy("previous");
 }
 
+function updateActiveLevelTimeMode(mode) {
+  if (!activeLevel.value) {
+    return;
+  }
+  activeLevel.value.option = normalizeLevelOption({
+    ...activeLevel.value.option,
+    timeLimitMode: mode,
+  });
+}
+
+function updateActiveLevelLifeMode(mode) {
+  if (!activeLevel.value) {
+    return;
+  }
+  activeLevel.value.option = normalizeLevelOption({
+    ...activeLevel.value.option,
+    lifeLimitMode: mode,
+  });
+}
+
 function copyCurrentFrameToNextFrame() {
   executeWholeFrameCopy("next");
 }
@@ -2040,7 +2119,8 @@ function ensureEditableShape(value) {
     next.levels[0] = { label: "Level 1", frameList: [] };
   }
   next.levels.forEach((level, index) => {
-    level.label ||= `Level ${index + 1}`;
+    level.label ||= "Level " + (index + 1);
+    level.option = normalizeLevelOption(level.option);
     level.frameList ||= [];
     if (!level.frameList[0]) {
       level.frameList[0] = { repeatTimes: 1, matrix: [] };
@@ -2091,7 +2171,11 @@ function cleanFrameMatrix(frame) {
 
 function createEditorPayload() {
   const payload = JSON.parse(JSON.stringify(toRaw(document.value)));
+  if (currentGameId.value) {
+    payload.id = currentGameId.value;
+  }
   payload.levels?.forEach((level) => {
+    level.option = normalizeLevelOption(level.option);
     level.frameList?.forEach((frame) => {
       frame.matrix = cleanFrameMatrix(frame);
       delete frame.__matrixVersion;
@@ -2573,7 +2657,9 @@ function formatRuntimeSummary(value) {
     <p v-if="errorMessage" class="error-line">{{ errorMessage }}</p>
     <p v-if="statusMessage" class="status-line">{{ statusMessage }}</p>
 
-    <div v-if="!document && !errorMessage" class="editor-loading">{{ t("simple.loading") }}</div>
+    <div v-if="!document && !errorMessage" class="editor-loading">
+      {{ t("simple.loading", { game: currentGameName }) }}
+    </div>
 
     <div v-if="document" class="simple-editor-layout">
       <aside class="editor-panel editor-left">
@@ -2608,6 +2694,54 @@ function formatRuntimeSummary(value) {
           <label>
             <span>{{ t("simple.difficulty") }}</span>
             <input v-model.number="document.difficulty" min="0" type="number" />
+          </label>
+        </div>
+        <div v-if="activeLevel" class="level-limit-fields">
+          <h3>{{ t("simple.levelLimits") }}</h3>
+          <label>
+            <span>{{ t("simple.levelTimeLimit") }}</span>
+            <select
+              :value="activeLevel.option.timeLimitMode"
+              @change="updateActiveLevelTimeMode($event.target.value)"
+            >
+              <option value="UNLIMITED">{{ t("simple.levelTimeUnlimited") }}</option>
+              <option value="CYCLE_COUNT">{{ t("simple.levelTimeCycleCount") }}</option>
+              <option value="CYCLE_SECONDS">{{ t("simple.levelTimeCycleSeconds") }}</option>
+            </select>
+          </label>
+          <label v-if="activeLevel.option.timeLimitMode !== 'UNLIMITED'">
+            <span>{{ t("simple.levelTimeValue") }}</span>
+            <input
+              v-model.number="activeLevel.option.timeLimitValue"
+              min="1"
+              type="number"
+              :class="{ invalid: activeLevelOptionErrors.has('timeLimitValue') }"
+            />
+            <small v-if="activeLevelOptionErrors.has('timeLimitValue')" class="field-error">
+              {{ t("simple.levelLimitPositive") }}
+            </small>
+          </label>
+          <label>
+            <span>{{ t("simple.levelLifeLimit") }}</span>
+            <select
+              :value="activeLevel.option.lifeLimitMode"
+              @change="updateActiveLevelLifeMode($event.target.value)"
+            >
+              <option value="UNLIMITED">{{ t("simple.levelLifeUnlimited") }}</option>
+              <option value="LIMITED">{{ t("simple.levelLifeLimited") }}</option>
+            </select>
+          </label>
+          <label v-if="activeLevel.option.lifeLimitMode === 'LIMITED'">
+            <span>{{ t("simple.levelLifeValue") }}</span>
+            <input
+              v-model.number="activeLevel.option.lifeLimitValue"
+              min="1"
+              type="number"
+              :class="{ invalid: activeLevelOptionErrors.has('lifeLimitValue') }"
+            />
+            <small v-if="activeLevelOptionErrors.has('lifeLimitValue')" class="field-error">
+              {{ t("simple.levelLimitPositive") }}
+            </small>
           </label>
         </div>
         <button class="soft-button" type="button" :disabled="Boolean(busyAction)" @click="openGlobalConfig">{{ t("simple.globalConfig") }}</button>

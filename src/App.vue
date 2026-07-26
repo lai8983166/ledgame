@@ -24,6 +24,7 @@ const frameState = ref(createFrameState());
 const hoverCell = ref(null);
 const gameRuntimeState = ref(null);
 const activeView = ref("demo");
+const selectedEditorGame = ref(null);
 const helpMenuOpen = ref(false);
 const helpButtonRef = ref(null);
 const helpMenuRef = ref(null);
@@ -215,11 +216,13 @@ function enterGameFlow() {
   return runAction("game-flow", () => api.enterGameFlow());
 }
 
-function openSimpleEditor() {
+function openSimpleEditor(game) {
+  selectedEditorGame.value = game ? { id: game.id, name: game.name } : null;
   activeView.value = "simple-editor";
 }
 
 function backToGameList() {
+  selectedEditorGame.value = null;
   activeView.value = "games";
 }
 
@@ -481,10 +484,12 @@ function formatRuntimeValue(value, fallback = "-") {
       @stop-engine="stopEngine"
     />
 
-    <GameListView v-else-if="activeView === 'games'" @open-simple="openSimpleEditor" />
+    <GameListView v-else-if="activeView === 'games'" @open-game="openSimpleEditor" />
 
     <SimpleGameEditorView
       v-else-if="activeView === 'simple-editor'"
+      :game-id="selectedEditorGame?.id"
+      :game-name="selectedEditorGame?.name"
       @back="backToGameList"
     />
 

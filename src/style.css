@@ -1100,6 +1100,14 @@ button:disabled {
   margin-top: 6px;
 }
 
+.game-card-badge {
+  display: inline-block;
+  margin-top: 8px;
+  color: #8b5e16;
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .game-card-mark {
   width: 52px;
   height: 52px;
@@ -1297,6 +1305,42 @@ button:disabled {
   box-shadow:
     inset 6px 6px 12px rgba(178, 187, 201, 0.38),
     inset -6px -6px 12px rgba(255, 255, 255, 0.9);
+}
+
+.editor-panel select {
+  width: 100%;
+  min-width: 0;
+  min-height: 42px;
+  padding: 0 12px;
+  border: 1px solid rgba(255, 255, 255, 0.72);
+  border-radius: 14px;
+  color: #343d4a;
+  background: #eef1f5;
+  box-shadow:
+    inset 6px 6px 12px rgba(178, 187, 201, 0.38),
+    inset -6px -6px 12px rgba(255, 255, 255, 0.9);
+}
+
+.level-limit-fields {
+  display: grid;
+  gap: 12px;
+  padding-top: 4px;
+}
+
+.level-limit-fields h3 {
+  margin: 0;
+  color: #596574;
+  font-size: 13px;
+}
+
+.editor-panel input.invalid {
+  border-color: #c97676;
+}
+
+.field-error {
+  color: #a45e68;
+  font-size: 11px;
+  font-weight: 600;
 }
 
 .sequence-block {
