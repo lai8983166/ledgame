@@ -23,6 +23,8 @@ export const DEFAULT_DEBUG_DRAFT = Object.freeze({
   maxPointsPerChannel: 64,
   displayColor: "RED",
   frameIntervalMs: 1000,
+  pointX: 0,
+  pointY: 0,
 });
 
 export function normalizeRgbMode(value) {
@@ -152,6 +154,23 @@ export function classifyBackendErrorCode(code) {
   switch (code) {
     case "UDP_PORT_IN_USE":
       return "udpPortInUse";
+    case "CONTROLLER_MODEL_MISMATCH":
+      return "controllerModelMismatch";
+    case "CONTROLLER_COUNT_MISMATCH":
+      return "controllerCountMismatch";
+    case "SEARCH_REQUIRED":
+      return "searchRequired";
+    case "SEARCH_CONTROLLER_COUNT_MISMATCH":
+      return "searchControllerCountMismatch";
+    case "SEARCH_MODEL_MISMATCH":
+      return "searchModelMismatch";
+    case "POINT_COORDINATE_REQUIRED":
+    case "POINT_OUT_OF_RANGE":
+      return "pointCoordinateInvalid";
+    case "POINT_NOT_WIRED":
+      return "pointNotWired";
+    case "POINT_TEST_CONFLICT":
+      return "pointTestConflict";
     case "MULTI_CONTROLLER_UNVERIFIED":
       return "multiControllerUnverified";
     case "NETWORK_INTERFACE_NOT_FOUND":

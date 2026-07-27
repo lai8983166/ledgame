@@ -35,6 +35,8 @@ test("DEFAULT_DEBUG_DRAFT has canonical values", () => {
   assert.equal(DEFAULT_DEBUG_DRAFT.maxPointsPerChannel, 64);
   assert.equal(DEFAULT_DEBUG_DRAFT.frameIntervalMs, 1000);
   assert.equal(DEFAULT_DEBUG_DRAFT.displayColor, "RED");
+  assert.equal(DEFAULT_DEBUG_DRAFT.pointX, 0);
+  assert.equal(DEFAULT_DEBUG_DRAFT.pointY, 0);
 });
 
 test("RGB_MODES exposes six permutations", () => {
@@ -146,6 +148,14 @@ test("extractBackendError pulls leading UPPER_CASE code", () => {
 
 test("classifyBackendErrorCode maps known codes", () => {
   assert.equal(classifyBackendErrorCode("UDP_PORT_IN_USE"), "udpPortInUse");
+  assert.equal(classifyBackendErrorCode("CONTROLLER_MODEL_MISMATCH"), "controllerModelMismatch");
+  assert.equal(classifyBackendErrorCode("CONTROLLER_COUNT_MISMATCH"), "controllerCountMismatch");
+  assert.equal(classifyBackendErrorCode("SEARCH_REQUIRED"), "searchRequired");
+  assert.equal(classifyBackendErrorCode("SEARCH_CONTROLLER_COUNT_MISMATCH"), "searchControllerCountMismatch");
+  assert.equal(classifyBackendErrorCode("SEARCH_MODEL_MISMATCH"), "searchModelMismatch");
+  assert.equal(classifyBackendErrorCode("POINT_OUT_OF_RANGE"), "pointCoordinateInvalid");
+  assert.equal(classifyBackendErrorCode("POINT_NOT_WIRED"), "pointNotWired");
+  assert.equal(classifyBackendErrorCode("POINT_TEST_CONFLICT"), "pointTestConflict");
   assert.equal(classifyBackendErrorCode("MULTI_CONTROLLER_UNVERIFIED"), "multiControllerUnverified");
   assert.equal(classifyBackendErrorCode("NETWORK_INTERFACE_NOT_FOUND"), "networkInterfaceUnavailable");
   assert.equal(classifyBackendErrorCode("HC04_UNAVAILABLE"), "hc04Unavailable");

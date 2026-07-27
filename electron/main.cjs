@@ -26,6 +26,7 @@ const {
   normalizeWiringDraft,
   normalizeSearchRequest,
   normalizeDebugStartRequest,
+  normalizePointTestRequest,
   normalizeLogCaptureRequest,
   normalizeSaveFilePayload,
 } = require('./elc408Ipc.cjs')
@@ -1467,6 +1468,12 @@ ipcMain.handle('elc408:debug-start', (_event, request) => {
 })
 ipcMain.handle('elc408:debug-stop', () =>
   backendRequest('/hardware/elc408/debug/stop', { method: 'POST' }),
+)
+ipcMain.handle('elc408:debug-test-point', (_event, request) =>
+  backendRequest('/hardware/elc408/debug/test-point', {
+    method: 'POST',
+    body: JSON.stringify(normalizePointTestRequest(request)),
+  }),
 )
 ipcMain.handle('elc408:debug-log-capture', (_event, enabled) => {
   const normalized = normalizeLogCaptureRequest(enabled)

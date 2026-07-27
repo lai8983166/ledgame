@@ -6,6 +6,7 @@ import {
   normalizeWiringDraft,
   normalizeSearchRequest,
   normalizeDebugStartRequest,
+  normalizePointTestRequest,
   normalizeLogCaptureRequest,
   normalizeSaveFilePayload,
 } from "../electron/elc408Ipc.cjs";
@@ -87,6 +88,17 @@ test("normalizeSearchRequest strips invalid fields", () => {
   assert.deepEqual(result, { networkInterfaceId: "ni-test" });
 });
 
+test("normalizeSearchRequest preserves HC04 model", () => {
+  const result = normalizeSearchRequest({
+    networkInterfaceId: "ni-test",
+    controllerModel: "hc04",
+  });
+  assert.deepEqual(result, {
+    networkInterfaceId: "ni-test",
+    controllerModel: "HC04",
+  });
+});
+
 test("normalizeDebugStartRequest applies canonical defaults", () => {
   const result = normalizeDebugStartRequest({});
   assert.equal(result.rgbMode, "RGB");
@@ -102,6 +114,48 @@ test("normalizeDebugStartRequest clamps displayColor", () => {
     displayColor: { r: 999, g: -5, b: 128 },
   });
   assert.deepEqual(result.displayColor, { r: 255, g: 0, b: 128 });
+});
+
+test("normalizeDebugStartRequest preserves HC04 and multi-controller fields", () => {
+  const result = normalizeDebugStartRequest({
+    controllerModel: "HC04",
+    controllerCount: 2,
+    maxPointsPerChannel: 64,
+    frameIntervalMs: 500,
+  });
+  assert.equal(result.controllerModel, "HC04");
+  assert.equal(result.controllerCount, 2);
+  assert.equal(result.maxPointsPerChannel, 64);
+  assert.equal(result.frameIntervalMs, 500);
+});
+
+test("normalizePointTestRequest preserves controlled point fields", () => {
+  const result = normalizePointTestRequest({
+    rgbMode: "grb",
+    networkInterfaceId: "ni-test",
+    controllerModel: "hc04",
+    controllerCount: 2,
+    displayColor: { r: 1, g: 2, b: 3 },
+    x: 7,
+    y: 11,
+    rawBytes: [0x75],
+  });
+  assert.deepEqual(result, {
+    rgbMode: "GRB",
+    networkInterfaceId: "ni-test",
+    controllerModel: "HC04",
+    controllerCount: 2,
+    displayColor: { r: 1, g: 2, b: 3 },
+    x: 7,
+    y: 11,
+  });
+  assert.equal(result.rawBytes, undefined);
+});
+
+test("normalizePointTestRequest leaves invalid coordinates for backend validation", () => {
+  const result = normalizePointTestRequest({ x: 1.5, y: "not-a-number" });
+  assert.equal(result.x, null);
+  assert.equal(result.y, null);
 });
 
 test("normalizeLogCaptureRequest accepts only a boolean enabled value", () => {

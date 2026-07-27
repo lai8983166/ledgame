@@ -92,6 +92,7 @@ contextBridge.exposeInMainWorld('elc408Tools', {
   search: (request) => ipcRenderer.invoke('elc408:debug-search', request),
   start: (request) => ipcRenderer.invoke('elc408:debug-start', request),
   stop: () => ipcRenderer.invoke('elc408:debug-stop'),
+  testPoint: (request) => ipcRenderer.invoke('elc408:debug-test-point', request),
   setLogCapture: (enabled) => ipcRenderer.invoke('elc408:debug-log-capture', enabled),
   logs: (after, limit) => ipcRenderer.invoke('elc408:debug-logs', after, limit),
   clearLogs: () => ipcRenderer.invoke('elc408:debug-clear-logs'),

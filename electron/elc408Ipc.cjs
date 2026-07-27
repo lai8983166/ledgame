@@ -113,6 +113,22 @@ function normalizeDebugStartRequest(request) {
   }
 }
 
+function normalizePointTestRequest(request) {
+  const source = request && typeof request === 'object' ? request : {}
+  const normalized = normalizeDebugStartRequest(source)
+  const x = Number(source.x)
+  const y = Number(source.y)
+  return {
+    rgbMode: normalized.rgbMode,
+    networkInterfaceId: normalized.networkInterfaceId,
+    controllerModel: normalized.controllerModel,
+    controllerCount: normalized.controllerCount,
+    displayColor: normalized.displayColor,
+    x: Number.isInteger(x) ? x : null,
+    y: Number.isInteger(y) ? y : null,
+  }
+}
+
 function normalizeLogCaptureRequest(enabled) {
   if (typeof enabled !== 'boolean') {
     return { ok: false, error: 'Protocol log capture requires a boolean enabled value' }
@@ -151,6 +167,7 @@ module.exports = {
   normalizeWiringDraft,
   normalizeSearchRequest,
   normalizeDebugStartRequest,
+  normalizePointTestRequest,
   normalizeLogCaptureRequest,
   normalizeSaveFilePayload,
 }

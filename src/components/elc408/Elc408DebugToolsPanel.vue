@@ -15,9 +15,11 @@ import {
   classifyBackendErrorCode,
   extractBackendError,
 } from "../../lib/elc408/elc408ToolsState.js";
+import { createElc408Diagnostics } from "../../lib/elc408/elc408Diagnostics.js";
 
 const { t } = useI18n({ useScope: "global" });
 const api = window.elc408Tools;
+const diagnostics = createElc408Diagnostics();
 const props = defineProps({
   active: {
     type: Boolean,
@@ -40,6 +42,7 @@ const expandedLogSeqs = ref(new Set());
 const searchBusy = ref(false);
 const startBusy = ref(false);
 const stopBusy = ref(false);
+const pointBusy = ref(false);
 const clearBusy = ref(false);
 const captureStatus = ref("inactive");
 const errorMessage = ref("");
@@ -175,11 +178,20 @@ async function loadInterfaces() {
 async function refreshState() {
   try {
     const payload = await api.debugState();
-    state.value = payload?.data || payload;
-    controllers.value = normalizeControllerList(state.value);
+    applyAuthoritativeState(payload);
   } catch (error) {
     applyBackendError(error);
   }
+}
+
+function applyAuthoritativeState(payload) {
+  const nextState = payload?.data ?? payload;
+  if (!nextState || typeof nextState !== "object") {
+    return;
+  }
+  state.value = nextState;
+  controllers.value = normalizeControllerList(nextState);
+  diagnostics.stateChanged(nextState);
 }
 
 async function pollLogs() {
@@ -239,14 +251,21 @@ async function search() {
       networkInterfaceId: draft.networkInterfaceId,
       controllerModel: draft.controllerModel,
     };
+    diagnostics.started("Search", {
+      controllerModel: payload.controllerModel,
+      networkInterfaceSelected: Boolean(payload.networkInterfaceId),
+    });
     const response = await api.search(payload);
     if (response?.code && response.code !== 200) {
       applyBackendCode(response.code, response.message);
+      diagnostics.failed("Search", new Error(response.message || `HTTP_${response.code}`));
       return;
     }
-    await refreshState();
+    applyAuthoritativeState(response);
+    diagnostics.succeeded("Search", response);
   } catch (error) {
     applyBackendError(error);
+    diagnostics.failed("Search", error);
   } finally {
     searchBusy.value = false;
   }
@@ -266,15 +285,25 @@ async function start() {
       displayColor: displayColorToRgb(draft.displayColor),
       frameIntervalMs: draft.frameIntervalMs,
     };
+    diagnostics.started("Start", {
+      controllerModel: payload.controllerModel,
+      controllerCount: payload.controllerCount,
+      rgbMode: payload.rgbMode,
+      frameIntervalMs: payload.frameIntervalMs,
+      networkInterfaceSelected: Boolean(payload.networkInterfaceId),
+    });
     const response = await api.start(payload);
     if (response?.code && response.code !== 200) {
       applyBackendCode(response.code, response.message);
+      diagnostics.failed("Start", new Error(response.message || `HTTP_${response.code}`));
       return;
     }
-    await refreshState();
+    applyAuthoritativeState(response);
+    diagnostics.succeeded("Start", response);
     successMessage.value = t("elc408.debug.running");
   } catch (error) {
     applyBackendError(error);
+    diagnostics.failed("Start", error);
   } finally {
     startBusy.value = false;
   }
@@ -284,17 +313,59 @@ async function stop() {
   stopBusy.value = true;
   errorMessage.value = "";
   try {
+    diagnostics.started("Stop");
     const response = await api.stop();
     if (response?.code && response.code !== 200) {
       applyBackendCode(response.code, response.message);
+      diagnostics.failed("Stop", new Error(response.message || `HTTP_${response.code}`));
       return;
     }
-    await refreshState();
+    applyAuthoritativeState(response);
+    diagnostics.succeeded("Stop", response);
     successMessage.value = t("elc408.debug.stopping");
   } catch (error) {
     applyBackendError(error);
+    diagnostics.failed("Stop", error);
   } finally {
     stopBusy.value = false;
+  }
+}
+
+async function testPoint() {
+  pointBusy.value = true;
+  errorMessage.value = "";
+  successMessage.value = "";
+  const payload = {
+    rgbMode: draft.rgbMode,
+    networkInterfaceId: draft.networkInterfaceId,
+    controllerModel: draft.controllerModel,
+    controllerCount: draft.controllerCount,
+    displayColor: displayColorToRgb(draft.displayColor),
+    x: draft.pointX,
+    y: draft.pointY,
+  };
+  diagnostics.started("Point test", {
+    controllerModel: payload.controllerModel,
+    controllerCount: payload.controllerCount,
+    x: payload.x,
+    y: payload.y,
+    networkInterfaceSelected: Boolean(payload.networkInterfaceId),
+  });
+  try {
+    const response = await api.testPoint(payload);
+    if (response?.code && response.code !== 200) {
+      applyBackendCode(response.code, response.message);
+      diagnostics.failed("Point test", new Error(response.message || `HTTP_${response.code}`));
+      return;
+    }
+    applyAuthoritativeState(response);
+    diagnostics.succeeded("Point test", response);
+    successMessage.value = t("elc408.debug.pointTestSent");
+  } catch (error) {
+    applyBackendError(error);
+    diagnostics.failed("Point test", error);
+  } finally {
+    pointBusy.value = false;
   }
 }
 
@@ -407,6 +478,28 @@ function logHexPreview(entry) {
           </option>
         </select>
       </fieldset>
+      <fieldset>
+        <legend>{{ t("elc408.debug.pointCoordinate") }}</legend>
+        <div class="elc408-coordinate-grid">
+          <label>
+            <span>X</span>
+            <input v-model.number="draft.pointX" type="number" min="0" step="1" />
+          </label>
+          <label>
+            <span>Y</span>
+            <input v-model.number="draft.pointY" type="number" min="0" step="1" />
+          </label>
+        </div>
+      </fieldset>
+      <div class="elc408-debug-actions">
+        <button
+          type="button"
+          :disabled="pointBusy || isRunning || !draft.networkInterfaceId"
+          @click="testPoint"
+        >
+          {{ pointBusy ? t("elc408.debug.testingPoint") : t("elc408.debug.testPoint") }}
+        </button>
+      </div>
       <fieldset>
         <legend>{{ t("elc408.debug.frameIntervalMs") }}</legend>
         <input v-model.number="draft.frameIntervalMs" type="number" min="1" max="60000" />
@@ -555,6 +648,20 @@ function logHexPreview(entry) {
   margin-top: 5px;
   color: #7a8694;
   font-size: 0.75rem;
+}
+.elc408-coordinate-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.elc408-coordinate-grid label {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-items: center;
+  gap: 5px;
+  color: #667386;
+  font-size: 0.76rem;
+  font-weight: 700;
 }
 .elc408-debug-actions {
   display: flex;
