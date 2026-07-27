@@ -11,6 +11,7 @@ import { resolveLiveOccupancyCell } from "../lib/simpleOccupancy.js";
 import { createLevelPreviewSnapshot } from "../lib/simpleLevelPreview.js";
 import { createWholeFrameCopyPlan } from "../lib/simpleFrameCopyPlan.js";
 import { normalizeLevelOption, validateLevelOption } from "../lib/simpleLevelOptions.js";
+import { createRgbEditHistory } from "../lib/simpleRgbEditHistory.js";
 import {
   canSelectObjectForMerge,
   MERGE_ERROR,
@@ -61,6 +62,8 @@ const anchorEditMode = ref(false);
 const anchorCandidate = ref(null);
 const objectIdCounter = ref(0);
 const contextMenu = ref({ visible: false, x: 0, y: 0 });
+const rgbEditHistory = createRgbEditHistory();
+const rgbHistoryRevision = ref(0);
 const fitViewportRef = ref(null);
 const fitContentRef = ref(null);
 const MIN_EDITOR_FIT_WIDTH = 1600;
@@ -124,6 +127,14 @@ const displayedFrameIndex = computed(() =>
     ? previewFrameIndex.value
     : activeFrameIndex.value,
 );
+const canUndoRgbEdit = computed(() => {
+  rgbHistoryRevision.value;
+  return rgbEditHistory.canUndo;
+});
+const canRedoRgbEdit = computed(() => {
+  rgbHistoryRevision.value;
+  return rgbEditHistory.canRedo;
+});
 const previewFrame = computed(() => frames.value[displayedFrameIndex.value] || activeFrame.value || null);
 const activeFramePercent = computed(() => {
   if (frames.value.length <= 1) {
@@ -404,6 +415,7 @@ watch(
 async function loadEditor() {
   editorFitReady.value = false;
   editorFitCanReveal = false;
+  clearRgbEditHistory();
   document.value = null;
   await runEditorAction("load", async () => {
     const gameId = currentGameId.value;
@@ -1002,6 +1014,7 @@ async function importFrame() {
       frame.repeatTimes = toInteger(parsed.repeatTimes, toInteger(frame.repeatTimes, 1));
     }
     invalidateMatrixFrame(frame);
+    clearRgbEditHistory();
     syncSelectedObject();
     scheduleMatrixCacheWarmup(frameIndex);
     statusMessage.value = dropped > 0
@@ -1324,6 +1337,113 @@ function setMatrixFrameVersion(frame, version) {
   });
 }
 
+function createRgbHistoryTarget(levelIndex, frameIndex) {
+  return {
+    levelIndex: toInteger(levelIndex, 0),
+    frameIndex: toInteger(frameIndex, 0),
+  };
+}
+
+function currentFrameRgbHistoryTargets() {
+  return [createRgbHistoryTarget(activeLevelIndex.value, activeFrameIndex.value)];
+}
+
+function currentLevelRgbHistoryTargets(frameIndices = frames.value.map((_frame, index) => index)) {
+  return frameIndices.map((frameIndex) =>
+    createRgbHistoryTarget(activeLevelIndex.value, frameIndex),
+  );
+}
+
+function captureRgbHistorySnapshot(targets) {
+  const uniqueTargets = new Map();
+  for (const target of targets || []) {
+    const key = `${target.levelIndex}:${target.frameIndex}`;
+    uniqueTargets.set(key, target);
+  }
+  return {
+    activeLevelIndex: activeLevelIndex.value,
+    activeFrameIndex: activeFrameIndex.value,
+    selectedObjectId: selectedObjectId.value,
+    matrices: [...uniqueTargets.values()].map((target) => {
+      const frame = document.value?.levels?.[target.levelIndex]?.frameList?.[target.frameIndex];
+      return {
+        ...target,
+        matrix: cloneRgbMatrix(frame?.matrix),
+      };
+    }),
+  };
+}
+
+function cloneRgbMatrix(matrix) {
+  return (matrix || []).map((object) => ({
+    id: object.id,
+    x: toInteger(object.x, 0),
+    y: toInteger(object.y, 0),
+    color: clampColorIndex(object.color),
+    points: getObjectPoints(object).map(([dx, dy]) => [dx, dy]),
+  }));
+}
+
+function runRgbEdit(targets, action, mutation) {
+  const before = captureRgbHistorySnapshot(targets);
+  const result = mutation();
+  const after = captureRgbHistorySnapshot(targets);
+  if (rgbEditHistory.commit(before, after, { action })) {
+    rgbHistoryRevision.value += 1;
+  }
+  return result;
+}
+
+function clearRgbEditHistory() {
+  rgbEditHistory.clear();
+  rgbHistoryRevision.value += 1;
+}
+
+function undoRgbEdit() {
+  if (busyAction.value || !rgbEditHistory.canUndo) {
+    return false;
+  }
+  const entry = rgbEditHistory.undo();
+  restoreRgbHistorySnapshot(entry.snapshot);
+  rgbHistoryRevision.value += 1;
+  statusMessage.value = t("simple.rgbUndoComplete");
+  return true;
+}
+
+function redoRgbEdit() {
+  if (busyAction.value || !rgbEditHistory.canRedo) {
+    return false;
+  }
+  const entry = rgbEditHistory.redo();
+  restoreRgbHistorySnapshot(entry.snapshot);
+  rgbHistoryRevision.value += 1;
+  statusMessage.value = t("simple.rgbRedoComplete");
+  return true;
+}
+
+function restoreRgbHistorySnapshot(snapshot) {
+  for (const item of snapshot?.matrices || []) {
+    const frame = document.value?.levels?.[item.levelIndex]?.frameList?.[item.frameIndex];
+    if (frame) {
+      frame.matrix = cloneRgbMatrix(item.matrix);
+    }
+  }
+  activeLevelIndex.value = clampIndex(snapshot?.activeLevelIndex, levels.value.length);
+  activeFrameIndex.value = clampIndex(
+    snapshot?.activeFrameIndex,
+    document.value?.levels?.[activeLevelIndex.value]?.frameList?.length,
+  );
+  selectedObjectId.value = snapshot?.selectedObjectId || "";
+  resetMatrixFrameCache();
+  syncSelectedObject();
+  scheduleMatrixCacheWarmup(activeFrameIndex.value);
+}
+
+function clampIndex(value, length) {
+  const max = Math.max(0, toInteger(length, 0) - 1);
+  return Math.min(max, Math.max(0, toInteger(value, 0)));
+}
+
 function selectLevel(index) {
   activeLevelIndex.value = index;
   activeFrameIndex.value = 0;
@@ -1390,6 +1510,7 @@ function addLevel() {
   });
   activeLevelIndex.value = nextIndex;
   activeFrameIndex.value = 0;
+  clearRgbEditHistory();
   syncSelectedObject();
   scheduleMatrixCacheWarmup(0);
 }
@@ -1417,6 +1538,7 @@ function moveActiveLevel(direction) {
   document.value.levels.splice(toIndex, 0, level);
   activeLevelIndex.value = toIndex;
   activeFrameIndex.value = Math.min(activeFrameIndex.value, Math.max(0, frames.value.length - 1));
+  clearRgbEditHistory();
   ensureActiveFrame();
   syncSelectedObject();
   scheduleMatrixCacheWarmup(activeFrameIndex.value);
@@ -1432,6 +1554,7 @@ function addFrame() {
   level.frameList.push(createBlankFrame());
   invalidateMatrixFrame(level.frameList[level.frameList.length - 1]);
   activeFrameIndex.value = level.frameList.length - 1;
+  clearRgbEditHistory();
   syncSelectedObject();
   scheduleMatrixCacheWarmup(activeFrameIndex.value);
 }
@@ -1450,6 +1573,7 @@ function deleteCurrentFrame() {
     level.frameList.push(createBlankFrame());
   }
   activeFrameIndex.value = Math.min(activeFrameIndex.value, level.frameList.length - 1);
+  clearRgbEditHistory();
   syncSelectedObject();
   scheduleMatrixCacheWarmup(activeFrameIndex.value);
 }
@@ -1518,10 +1642,12 @@ function handleCellClick(x, y) {
     statusMessage.value = t("simple.realCellsOnly");
     return;
   }
-  const object = createMatrixObject(x, y, selectedColor.value, frame);
-  frame.matrix.push(object);
-  patchMatrixFrame(frame, object, "add");
-  selectedObjectId.value = object.id;
+  runRgbEdit(currentFrameRgbHistoryTargets(), "create-object", () => {
+    const object = createMatrixObject(x, y, selectedColor.value, frame);
+    frame.matrix.push(object);
+    patchMatrixFrame(frame, object, "add");
+    selectedObjectId.value = object.id;
+  });
   statusMessage.value = t(isRealCell(x, y) ? "simple.singleCreated" : "simple.virtualCreated");
 }
 
@@ -1540,16 +1666,18 @@ function handleCellRangeCreate(payload) {
   const anchorInsideRealMatrix = isRealCell(requestedAnchorX, requestedAnchorY);
   const anchorX = !panoramaMode.value && !anchorInsideRealMatrix ? cells[0].x : requestedAnchorX;
   const anchorY = !panoramaMode.value && !anchorInsideRealMatrix ? cells[0].y : requestedAnchorY;
-  const object = {
-    id: createUniqueObjectId(frame, activeFrameIndex.value),
-    x: anchorX,
-    y: anchorY,
-    color: clampColorIndex(selectedColor.value),
-    points: cells.map((cell) => [cell.x - anchorX, cell.y - anchorY]),
-  };
-  frame.matrix.push(object);
-  patchMatrixFrame(frame, object, "add");
-  selectedObjectId.value = object.id;
+  runRgbEdit(currentFrameRgbHistoryTargets(), "create-range-object", () => {
+    const object = {
+      id: createUniqueObjectId(frame, activeFrameIndex.value),
+      x: anchorX,
+      y: anchorY,
+      color: clampColorIndex(selectedColor.value),
+      points: cells.map((cell) => [cell.x - anchorX, cell.y - anchorY]),
+    };
+    frame.matrix.push(object);
+    patchMatrixFrame(frame, object, "add");
+    selectedObjectId.value = object.id;
+  });
   statusMessage.value = t(hasOverlap ? "simple.overlapMultiCreated" : "simple.multiCreated");
 }
 
@@ -1634,23 +1762,25 @@ function handleObjectDragEnd(payload) {
   objectDragState = null;
   objectDragPreview.value = null;
   if (dragState.moved && !payload.cancelled) {
-    const object = selectedObject.value;
-    if (!object || object.id !== dragState.objectId) {
+    if (!selectedObject.value || selectedObject.value.id !== dragState.objectId) {
       return;
     }
-    const previousX = toInteger(object.x, 0);
-    const previousY = toInteger(object.y, 0);
-    object.x = dragState.originX + dragState.deltaX;
-    object.y = dragState.originY + dragState.deltaY;
-    wrapSelectedObjectInPanorama();
-    invalidateMatrixFrame();
-    if (anchorCandidate.value?.objectId === object.id) {
-      anchorCandidate.value = {
-        ...anchorCandidate.value,
-        x: anchorCandidate.value.x + toInteger(object.x, 0) - previousX,
-        y: anchorCandidate.value.y + toInteger(object.y, 0) - previousY,
-      };
-    }
+    runRgbEdit(currentFrameRgbHistoryTargets(), "drag-object", () => {
+      const object = selectedObject.value;
+      const previousX = toInteger(object.x, 0);
+      const previousY = toInteger(object.y, 0);
+      object.x = dragState.originX + dragState.deltaX;
+      object.y = dragState.originY + dragState.deltaY;
+      wrapSelectedObjectInPanorama();
+      invalidateMatrixFrame();
+      if (anchorCandidate.value?.objectId === object.id) {
+        anchorCandidate.value = {
+          ...anchorCandidate.value,
+          x: anchorCandidate.value.x + toInteger(object.x, 0) - previousX,
+          y: anchorCandidate.value.y + toInteger(object.y, 0) - previousY,
+        };
+      }
+    });
     statusMessage.value = t("simple.objectMoved");
   }
 }
@@ -1699,10 +1829,11 @@ function applyBrushColorToSelectedObject() {
   if (!object) {
     return;
   }
-  object.color = selectedColor.value;
-  const frame = ensureActiveFrame();
-  patchMatrixFrame(frame, object, "remove");
-  patchMatrixFrame(frame, object, "add");
+  runRgbEdit(currentFrameRgbHistoryTargets(), "recolor-object", () => {
+    object.color = selectedColor.value;
+    const frame = ensureActiveFrame();
+    invalidateMatrixFrame(frame);
+  });
 }
 
 function deleteSelectedObject() {
@@ -1714,11 +1845,13 @@ function deleteSelectedObject() {
   if (!confirmDestructiveAction(t("simple.deleteObjectConfirm"))) {
     return;
   }
-  const [removed] = frame.matrix.splice(index, 1);
-  patchMatrixFrame(frame, removed, "remove");
-  selectedObjectId.value = "";
-  stopSelectionMode();
-  stopAnchorEdit();
+  runRgbEdit(currentFrameRgbHistoryTargets(), "delete-object", () => {
+    const [removed] = frame.matrix.splice(index, 1);
+    patchMatrixFrame(frame, removed, "remove");
+    selectedObjectId.value = "";
+    stopSelectionMode();
+    stopAnchorEdit();
+  });
 }
 
 function moveSelectedObjectLayerUp() {
@@ -1739,9 +1872,11 @@ function reorderSelectedObject(targetIndex) {
   if (boundedIndex === currentIndex) {
     return;
   }
-  const [object] = frame.matrix.splice(currentIndex, 1);
-  frame.matrix.splice(boundedIndex, 0, object);
-  invalidateMatrixFrame(frame);
+  runRgbEdit(currentFrameRgbHistoryTargets(), "reorder-object", () => {
+    const [object] = frame.matrix.splice(currentIndex, 1);
+    frame.matrix.splice(boundedIndex, 0, object);
+    invalidateMatrixFrame(frame);
+  });
   statusMessage.value = t("simple.layerAdjusted");
 }
 
@@ -1755,21 +1890,22 @@ function applySelectedObjectLayerToAllFrames() {
 
   let appliedCount = 0;
   let skippedCount = 0;
-  for (const frame of level.frameList || []) {
-    frame.matrix ||= [];
-    const currentIndex = frame.matrix.findIndex((object) => object.id === objectId);
-    if (currentIndex < 0) {
-      skippedCount++;
-      continue;
+  runRgbEdit(currentLevelRgbHistoryTargets(), "apply-layer-to-frames", () => {
+    for (const frame of level.frameList || []) {
+      frame.matrix ||= [];
+      const currentIndex = frame.matrix.findIndex((object) => object.id === objectId);
+      if (currentIndex < 0) {
+        skippedCount++;
+        continue;
+      }
+
+      const [object] = frame.matrix.splice(currentIndex, 1);
+      const boundedIndex = Math.min(targetIndex, frame.matrix.length);
+      frame.matrix.splice(boundedIndex, 0, object);
+      invalidateMatrixFrame(frame);
+      appliedCount++;
     }
-
-    const [object] = frame.matrix.splice(currentIndex, 1);
-    const boundedIndex = Math.min(targetIndex, frame.matrix.length);
-    frame.matrix.splice(boundedIndex, 0, object);
-    invalidateMatrixFrame(frame);
-    appliedCount++;
-  }
-
+  });
   statusMessage.value = t("simple.layerApplied", { applied: appliedCount, skipped: skippedCount });
 }
 
@@ -1786,13 +1922,16 @@ function copySelectedObjectToAllFrames() {
     return;
   }
   let copied = 0;
-  frames.value.forEach((frame, frameIndex) => {
-    if (frameIndex === activeFrameIndex.value) {
-      return;
-    }
-    upsertObjectInFrame(selectedObject.value, frame);
-    invalidateMatrixFrame(frame);
-    copied += 1;
+  const targetIndices = frames.value
+    .map((_frame, frameIndex) => frameIndex)
+    .filter((frameIndex) => frameIndex !== activeFrameIndex.value);
+  runRgbEdit(currentLevelRgbHistoryTargets(targetIndices), "copy-object-to-all-frames", () => {
+    targetIndices.forEach((frameIndex) => {
+      const frame = frames.value[frameIndex];
+      upsertObjectInFrame(selectedObject.value, frame);
+      invalidateMatrixFrame(frame);
+      copied += 1;
+    });
   });
   statusMessage.value = copied
     ? t("simple.framesUpdated", { count: copied })
@@ -1809,18 +1948,20 @@ function copyColorObjectsToAllFrames(colorIndex) {
     statusMessage.value = t("simple.noColorObjects", { color: normalizedColor });
     return;
   }
+  const targetIndices = frames.value
+    .map((_frame, frameIndex) => frameIndex)
+    .filter((frameIndex) => frameIndex !== activeFrameIndex.value);
   let copiedFrames = 0;
-  for (let frameIndex = 0; frameIndex < frames.value.length; frameIndex += 1) {
-    if (frameIndex === activeFrameIndex.value) {
-      continue;
+  runRgbEdit(currentLevelRgbHistoryTargets(targetIndices), "copy-color-to-all-frames", () => {
+    for (const frameIndex of targetIndices) {
+      const targetFrame = frames.value[frameIndex];
+      for (const object of sourceObjects) {
+        upsertObjectInFrame(object, targetFrame);
+      }
+      invalidateMatrixFrame(targetFrame);
+      copiedFrames += 1;
     }
-    const targetFrame = frames.value[frameIndex];
-    for (const object of sourceObjects) {
-      upsertObjectInFrame(object, targetFrame);
-    }
-    invalidateMatrixFrame(targetFrame);
-    copiedFrames += 1;
-  }
+  });
   statusMessage.value = copiedFrames
     ? t("simple.colorCopied", {
       objects: sourceObjects.length,
@@ -1834,8 +1975,10 @@ function copySelectedObjectToFrame(frameIndex) {
   if (!selectedObject.value || frameIndex < 0 || frameIndex >= frames.value.length) {
     return;
   }
-  upsertObjectInFrame(selectedObject.value, frames.value[frameIndex]);
-  invalidateMatrixFrame(frames.value[frameIndex]);
+  runRgbEdit(currentLevelRgbHistoryTargets([frameIndex]), "copy-object-to-frame", () => {
+    upsertObjectInFrame(selectedObject.value, frames.value[frameIndex]);
+    invalidateMatrixFrame(frames.value[frameIndex]);
+  });
   statusMessage.value = t("simple.frameUpdated", { number: frameIndex + 1 });
 }
 
@@ -1916,6 +2059,7 @@ function executeWholeFrameCopy(mode) {
     replaceFrameObjects(sourceFrame, targetFrame);
     invalidateMatrixFrame(targetFrame);
   }
+  clearRgbEditHistory();
 
   if (mode === "next") {
     selectFrame(plan.targetIndices[0]);
@@ -1968,13 +2112,15 @@ function confirmAnchorEdit() {
   const cells = getObjectCells(selectedObject.value);
   const nextX = anchorCandidate.value.x;
   const nextY = anchorCandidate.value.y;
-  selectedObject.value.x = nextX;
-  selectedObject.value.y = nextY;
-  selectedObject.value.points = prioritizeAnchorPoint(
-    cells.map((cell) => [cell.x - nextX, cell.y - nextY]),
-  );
-  invalidateMatrixFrame();
-  stopAnchorEdit();
+  runRgbEdit(currentFrameRgbHistoryTargets(), "change-object-anchor", () => {
+    selectedObject.value.x = nextX;
+    selectedObject.value.y = nextY;
+    selectedObject.value.points = prioritizeAnchorPoint(
+      cells.map((cell) => [cell.x - nextX, cell.y - nextY]),
+    );
+    invalidateMatrixFrame();
+    stopAnchorEdit();
+  });
 }
 
 function stopAnchorEdit() {
@@ -1994,30 +2140,34 @@ function rotateSelectedObject(direction) {
   if (!selectedObject.value) {
     return;
   }
-  selectedObject.value.points = rotatePointsAroundAnchor(
-    getObjectPoints(selectedObject.value),
-    direction,
-  );
-  invalidateMatrixFrame();
+  runRgbEdit(currentFrameRgbHistoryTargets(), `rotate-object-${direction}`, () => {
+    selectedObject.value.points = rotatePointsAroundAnchor(
+      getObjectPoints(selectedObject.value),
+      direction,
+    );
+    invalidateMatrixFrame();
+  });
 }
 
 function moveSelectedObject(deltaX, deltaY) {
   if (!selectedObject.value) {
     return;
   }
-  const previousX = toInteger(selectedObject.value.x, 0);
-  const previousY = toInteger(selectedObject.value.y, 0);
-  selectedObject.value.x = Number(selectedObject.value.x || 0) + deltaX;
-  selectedObject.value.y = Number(selectedObject.value.y || 0) + deltaY;
-  wrapSelectedObjectInPanorama();
-  invalidateMatrixFrame();
-  if (anchorCandidate.value?.objectId === selectedObject.value.id) {
-    anchorCandidate.value = {
-      ...anchorCandidate.value,
-      x: anchorCandidate.value.x + toInteger(selectedObject.value.x, 0) - previousX,
-      y: anchorCandidate.value.y + toInteger(selectedObject.value.y, 0) - previousY,
-    };
-  }
+  runRgbEdit(currentFrameRgbHistoryTargets(), "move-object", () => {
+    const previousX = toInteger(selectedObject.value.x, 0);
+    const previousY = toInteger(selectedObject.value.y, 0);
+    selectedObject.value.x = Number(selectedObject.value.x || 0) + deltaX;
+    selectedObject.value.y = Number(selectedObject.value.y || 0) + deltaY;
+    wrapSelectedObjectInPanorama();
+    invalidateMatrixFrame();
+    if (anchorCandidate.value?.objectId === selectedObject.value.id) {
+      anchorCandidate.value = {
+        ...anchorCandidate.value,
+        x: anchorCandidate.value.x + toInteger(selectedObject.value.x, 0) - previousX,
+        y: anchorCandidate.value.y + toInteger(selectedObject.value.y, 0) - previousY,
+      };
+    }
+  });
 }
 
 function togglePanoramaMode() {
@@ -2088,10 +2238,12 @@ function mergeSelectedObjects() {
     return;
   }
 
-  frame.matrix = result.matrix;
-  invalidateMatrixFrame(frame);
-  selectedObjectId.value = result.object.id;
-  stopSelectionMode();
+  runRgbEdit(currentFrameRgbHistoryTargets(), "merge-objects", () => {
+    frame.matrix = result.matrix;
+    invalidateMatrixFrame(frame);
+    selectedObjectId.value = result.object.id;
+    stopSelectionMode();
+  });
   statusMessage.value = t("merge.complete");
 }
 
@@ -2452,6 +2604,22 @@ function handleGlobalKeydown(event) {
     return;
   }
   const lowerKey = event.key.toLowerCase();
+  const historyModifier = event.ctrlKey || event.metaKey;
+  const historyShortcut = (
+    !event.repeat &&
+    !event.isComposing &&
+    historyModifier &&
+    !event.altKey &&
+    (lowerKey === "y" || lowerKey === "z")
+  );
+  if (historyShortcut) {
+    const redo = lowerKey === "y" || (lowerKey === "z" && event.shiftKey);
+    const handled = redo ? redoRgbEdit() : undoRgbEdit();
+    if (handled) {
+      event.preventDefault();
+    }
+    return;
+  }
   if (lowerKey === "q" && canTriggerGlobalShortcut(event)) {
     event.preventDefault();
     setInteractionMode(interactionMode.value === "add" ? "select-move" : "add");
@@ -2823,6 +2991,28 @@ function formatRuntimeSummary(value) {
             </div>
           </div>
           <div class="matrix-status-actions">
+            <div class="rgb-history-actions" :aria-label="t('simple.rgbHistory')">
+              <button
+                class="icon-add-button rgb-history-button"
+                type="button"
+                :aria-label="t('simple.undoRgb')"
+                :data-tip="t('simple.undoRgbTip')"
+                :disabled="Boolean(busyAction) || !canUndoRgbEdit"
+                @click="undoRgbEdit"
+              >
+                ↶
+              </button>
+              <button
+                class="icon-add-button rgb-history-button"
+                type="button"
+                :aria-label="t('simple.redoRgb')"
+                :data-tip="t('simple.redoRgbTip')"
+                :disabled="Boolean(busyAction) || !canRedoRgbEdit"
+                @click="redoRgbEdit"
+              >
+                ↷
+              </button>
+            </div>
             <button class="soft-button compact-button" type="button" @click="togglePanoramaMode">
               {{ t(panoramaMode ? "simple.exitPanorama" : "simple.panorama") }}
             </button>
