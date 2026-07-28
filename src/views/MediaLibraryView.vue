@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
+import { createLatestAsyncValueLoader } from "../lib/latestAsyncTask.js";
 
 const { t } = useI18n({ useScope: "global" });
 
@@ -13,8 +14,29 @@ const errorMessage = ref("");
 const noticeMessage = ref("");
 const rootExists = ref(true);
 const audioElement = ref(null);
-
+let mounted = false;
 const mediaApi = computed(() => window.mediaLibrary);
+const previewLoader = createLatestAsyncValueLoader({
+  loadValue: (relativePath) => mediaApi.value.getPreviewUrl(relativePath),
+  isActive: () => mounted,
+  getCurrentKey: () => selectedPath.value,
+  onSuccess(result, _relativePath, node) {
+    preview.value = {
+      kind: result.mediaType,
+      name: node.name,
+      relativePath: node.relativePath,
+      url: result.url,
+    };
+  },
+  onError(error, _relativePath, node) {
+    preview.value = {
+      kind: "error",
+      name: node.name,
+      relativePath: node.relativePath,
+      message: error?.message || t("media.openFailed"),
+    };
+  },
+});
 
 const visibleRows = computed(() => {
   const rows = [];
@@ -77,6 +99,8 @@ function toggleFolder(node) {
 
 async function selectNode(node) {
   stopAudioPreview();
+  previewLoader.invalidate();
+  preview.value = null;
   selectedPath.value = node.relativePath;
   noticeMessage.value = "";
 
@@ -95,29 +119,16 @@ async function selectNode(node) {
     return;
   }
 
-  try {
-    const result = await mediaApi.value.getPreviewUrl(node.relativePath);
-    preview.value = {
-      kind: result.mediaType,
-      name: node.name,
-      relativePath: node.relativePath,
-      url: result.url,
-    };
-  } catch (error) {
-    preview.value = {
-      kind: "error",
-      name: node.name,
-      relativePath: node.relativePath,
-      message: error?.message || t("media.openFailed"),
-    };
-  }
+  await previewLoader.load(node.relativePath, node);
 }
 
 async function loadMedia() {
   stopAudioPreview();
+  previewLoader.invalidate();
   errorMessage.value = "";
   noticeMessage.value = "";
   preview.value = null;
+  selectedPath.value = "";
 
   if (!mediaApi.value?.list || !mediaApi.value?.getPreviewUrl) {
     mediaTree.value = [];
@@ -131,7 +142,6 @@ async function loadMedia() {
     const result = await mediaApi.value.list();
     mediaTree.value = Array.isArray(result?.items) ? result.items : [];
     rootExists.value = result?.exists !== false;
-    selectedPath.value = "";
     expandedPaths.value = new Set();
     if (mediaTree.value.length > 0) {
       noticeMessage.value = t("media.refreshed");
@@ -168,11 +178,14 @@ function handleAudioError() {
 }
 
 onMounted(() => {
+  mounted = true;
   loadMedia();
 });
 
 onBeforeUnmount(() => {
   stopAudioPreview();
+  mounted = false;
+  previewLoader.invalidate();
 });
 </script>
 

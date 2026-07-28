@@ -9,6 +9,10 @@ import {
   touchViewForState,
 } from "../lib/gameFlowState.js";
 import { loadSimpleGameVariants } from "../lib/simpleGameVariants.js";
+import {
+  confirmTouchPreparationTransaction,
+  createTouchStateCoordinator,
+} from "../lib/touchRuntimeCoordinator.js";
 
 const api = window.ledGame;
 const mediaApi = window.mediaLibrary;
@@ -26,7 +30,6 @@ const loadingGames = ref(false);
 const gameInitializationWarning = ref("");
 const busyAction = ref("");
 const errorMessage = ref("");
-const stateBroadcastVersion = ref(0);
 const draft = reactive({
   userCount: 1,
   startLevelIndex: 0,
@@ -34,6 +37,10 @@ const draft = reactive({
 });
 let removeStateListener = null;
 let syncedPreparationRevision = null;
+const stateCoordinator = createTouchStateCoordinator({
+  readState: () => api.touchGameState(),
+  applyState: applyRuntimeState,
+});
 
 const view = computed(() => touchViewForState(runtimeState.value));
 const preparation = computed(() => runtimeState.value.preparation);
@@ -57,8 +64,7 @@ onMounted(async () => {
   document.addEventListener("visibilitychange", resumeIdleVideoWhenVisible);
   window.addEventListener("focus", resumeIdleVideoWhenVisible);
   removeStateListener = api?.onEngineState?.((state) => {
-    stateBroadcastVersion.value += 1;
-    applyRuntimeState(state);
+    stateCoordinator.applyBroadcast(state);
   });
   await Promise.all([refreshState(), loadIdleVideo()]);
 });
@@ -116,14 +122,10 @@ async function refreshState() {
     errorMessage.value = t("touch.apiUnavailable");
     return;
   }
-  const versionBeforeRequest = stateBroadcastVersion.value;
   loadingState.value = true;
   errorMessage.value = "";
   try {
-    const result = await api.touchGameState();
-    if (stateBroadcastVersion.value === versionBeforeRequest) {
-      applyRuntimeState(result?.data ?? result);
-    }
+    await stateCoordinator.refresh();
   } catch (error) {
     errorMessage.value = extractErrorMessage(error, t("touch.stateReadFailed"));
   } finally {
@@ -253,13 +255,19 @@ async function confirmPreparation() {
   busyAction.value = "confirm";
   errorMessage.value = "";
   try {
-    const updated = await api.updatePreparation(sessionId, preparationPatch());
-    applyRuntimeState(updated?.data ?? updated);
-    const confirmed = await api.confirmPreparation(sessionId);
-    applyRuntimeState(confirmed?.data ?? confirmed);
-  } catch (error) {
-    errorMessage.value = extractErrorMessage(error, t("common.operationFailed"));
-    await refreshState();
+    await confirmTouchPreparationTransaction({
+      api,
+      sessionId,
+      patch: preparationPatch(),
+      applyState: applyRuntimeState,
+      recover: async (error) => {
+        errorMessage.value = extractErrorMessage(error, t("common.operationFailed"));
+        await refreshState();
+      },
+    });
+  } catch (_error) {
+    // Recovery is part of the transaction helper so all failure points refresh
+    // the authoritative state before the action becomes available again.
   } finally {
     busyAction.value = "";
   }

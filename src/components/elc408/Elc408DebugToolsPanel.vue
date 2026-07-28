@@ -16,6 +16,7 @@ import {
   extractBackendError,
 } from "../../lib/elc408/elc408ToolsState.js";
 import { createElc408Diagnostics } from "../../lib/elc408/elc408Diagnostics.js";
+import { clearLogsWithPollingIsolation } from "../../lib/elc408/logPollingControl.js";
 
 const { t } = useI18n({ useScope: "global" });
 const api = window.elc408Tools;
@@ -228,15 +229,26 @@ async function pollLogs() {
 }
 
 async function clearLogs() {
+  if (clearBusy.value) {
+    return;
+  }
   clearBusy.value = true;
   try {
-    const result = await api.clearLogs();
-    logs.value = [];
-    expandedLogSeqs.value = new Set();
-    const next = result?.data ?? result;
-    logsCursor.value = Number.isFinite(next) ? next : 0;
-  } catch (error) {
-    applyBackendError(error);
+    await clearLogsWithPollingIsolation({
+      stopPolling,
+      clearRemote: () => api.clearLogs(),
+      applyClearedState(nextCursor) {
+        logs.value = [];
+        expandedLogSeqs.value = new Set();
+        logsCursor.value = nextCursor;
+      },
+      handleError: applyBackendError,
+      resumePolling() {
+        if (captureStatus.value === "active" && shouldCaptureLogs()) {
+          startPolling();
+        }
+      },
+    });
   } finally {
     clearBusy.value = false;
   }

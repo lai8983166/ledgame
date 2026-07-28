@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
+import { drawTwoPhaseCanvasPatch } from "../lib/simpleCanvasPatch.js";
 
 const props = defineProps({
   cells: {
@@ -232,24 +233,19 @@ function drawBasePatch(patchCells) {
   const width = canvasWidth.value;
   const height = canvasHeight.value;
   const context = prepareCanvas(canvas, width, height);
-  for (const patchCell of patchCells) {
-    const renderCell = findRenderCell(patchCell);
-    if (!renderCell) {
-      continue;
-    }
-    const position = getGridCellPosition(renderCell);
-    if (!position) {
-      continue;
-    }
-    const clearOffset = Math.max(4, Math.ceil(props.cellSize * 0.16));
-    context.clearRect(
-      position.left - clearOffset,
-      position.top - clearOffset,
-      props.cellSize + clearOffset * 2,
-      props.cellSize + clearOffset * 2,
-    );
-    drawCell(context, renderCell, renderCell.renderIndex);
-  }
+  drawTwoPhaseCanvasPatch(context, patchCells, {
+    cellSize: props.cellSize,
+    resolvePatchCell(patchCell) {
+      const renderCell = findRenderCell(patchCell);
+      const position = renderCell ? getGridCellPosition(renderCell) : null;
+      return renderCell && position
+        ? { cell: renderCell, left: position.left, top: position.top }
+        : null;
+    },
+    drawPatchCell(patchContext, renderCell) {
+      drawCell(patchContext, renderCell, renderCell.renderIndex);
+    },
+  });
   appliedBasePatchVersion = props.basePatchVersion;
 }
 

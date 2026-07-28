@@ -12,6 +12,12 @@ import { createLevelPreviewSnapshot } from "../lib/simpleLevelPreview.js";
 import { createWholeFrameCopyPlan } from "../lib/simpleFrameCopyPlan.js";
 import { normalizeLevelOption, validateLevelOption } from "../lib/simpleLevelOptions.js";
 import { createRgbEditHistory } from "../lib/simpleRgbEditHistory.js";
+import { createLatestAsyncTaskGuard } from "../lib/latestAsyncTask.js";
+import { saveSimpleGlobalConfigDocument } from "../lib/simpleGlobalConfig.js";
+import {
+  runGuardedFrameSequence,
+  waitForGuardedPromise,
+} from "../lib/guardedAsyncFlow.js";
 import {
   canSelectObjectForMerge,
   MERGE_ERROR,
@@ -63,6 +69,7 @@ const anchorCandidate = ref(null);
 const objectIdCounter = ref(0);
 const contextMenu = ref({ visible: false, x: 0, y: 0 });
 const rgbEditHistory = createRgbEditHistory();
+const editorLoadGuard = createLatestAsyncTaskGuard();
 const rgbHistoryRevision = ref(0);
 const fitViewportRef = ref(null);
 const fitContentRef = ref(null);
@@ -350,6 +357,9 @@ watch(
     // .matrix-scroll is behind v-if="document", so it only exists after the editor data
     // loads. Measure it once and start observing once it appears.
     nextTick(() => {
+      if (!editorMounted) {
+        return;
+      }
       measureMatrixContainer();
       if (matrixScrollRef.value && matrixResizeObserver) {
         matrixResizeObserver.observe(matrixScrollRef.value);
@@ -377,7 +387,7 @@ onMounted(() => {
   if (fonts && typeof fonts.ready?.then === "function") {
     fonts.ready
       .then(() => {
-        if (editorFitReady.value) {
+        if (editorMounted && editorFitReady.value) {
           scheduleEditorFitMeasurement();
         }
       })
@@ -387,6 +397,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   editorMounted = false;
+  editorLoadGuard.invalidate();
   levelPreviewSnapshot.value = null;
   window.removeEventListener("keydown", handleGlobalKeydown);
   window.removeEventListener("click", closeContextMenu);
@@ -413,16 +424,20 @@ watch(
 );
 
 async function loadEditor() {
+  const gameId = currentGameId.value;
+  const loadTicket = editorLoadGuard.begin(gameId);
   editorFitReady.value = false;
   editorFitCanReveal = false;
   clearRgbEditHistory();
   document.value = null;
   await runEditorAction("load", async () => {
-    const gameId = currentGameId.value;
     if (!gameId) {
       throw new Error(t("simple.gameSelectionMissing"));
     }
     const detail = await api.getGameEditor(gameId);
+    if (!isCurrentEditorLoad(loadTicket)) {
+      return;
+    }
     const loaded = detail?.data ?? detail;
     if (!loaded || Number(loaded.id) !== gameId) {
       throw new Error(t("simple.editorGameMismatch", { game: currentGameName.value }));
@@ -444,30 +459,44 @@ async function loadEditor() {
     validationErrors.value = [];
     scheduleMatrixCacheWarmup(0);
     await nextTick();
-    await waitForEditorFonts();
-    await stabilizeEditorFitBeforeReveal(3);
+    if (!isCurrentEditorLoad(loadTicket)) {
+      return;
+    }
+    const fontsReady = await waitForEditorFonts(loadTicket);
+    if (!fontsReady) {
+      return;
+    }
+    await stabilizeEditorFitBeforeReveal(3, loadTicket);
+  }, () => isCurrentEditorLoad(loadTicket));
+}
+
+function isCurrentEditorLoad(ticket) {
+  return editorMounted && editorLoadGuard.isCurrent(ticket, currentGameId.value);
+}
+
+async function waitForEditorFonts(loadTicket) {
+  const fonts = window.document?.fonts;
+  if (!fonts || typeof fonts.ready?.then !== "function") {
+    return isCurrentEditorLoad(loadTicket);
+  }
+  return waitForGuardedPromise({
+    promise: fonts.ready,
+    isCurrent: () => isCurrentEditorLoad(loadTicket),
+    // Font readiness is an optimization; layout can still stabilize without it.
+    ignoreError: true,
   });
 }
 
-async function waitForEditorFonts() {
-  const fonts = window.document?.fonts;
-  if (!fonts || typeof fonts.ready?.then !== "function") {
-    return;
-  }
-  try {
-    await fonts.ready;
-  } catch (_error) {
-    // Font readiness is an optimization; layout can still stabilize without it.
-  }
-}
-
-async function stabilizeEditorFitBeforeReveal(frames) {
-  for (let index = 0; index < frames; index += 1) {
-    await nextAnimationFrame();
-    measureEditorFit();
-  }
-  editorFitCanReveal = true;
-  measureEditorFit();
+async function stabilizeEditorFitBeforeReveal(frames, loadTicket) {
+  return runGuardedFrameSequence({
+    frames,
+    nextFrame: nextAnimationFrame,
+    isCurrent: () => isCurrentEditorLoad(loadTicket),
+    measure: measureEditorFit,
+    reveal() {
+      editorFitCanReveal = true;
+    },
+  });
 }
 
 function nextAnimationFrame() {
@@ -491,7 +520,7 @@ function setupEditorFitMeasurement() {
 }
 
 function scheduleEditorFitMeasurement() {
-  if (fitMeasureFrame) {
+  if (!editorMounted || fitMeasureFrame) {
     return;
   }
   fitMeasureFrame = window.requestAnimationFrame(() => {
@@ -501,6 +530,9 @@ function scheduleEditorFitMeasurement() {
 }
 
 function measureEditorFit() {
+  if (!editorMounted) {
+    return;
+  }
   const viewport = fitViewportRef.value;
   const content = fitContentRef.value;
   if (!viewport || !content) {
@@ -801,19 +833,6 @@ function openGlobalConfig() {
   globalConfigOpen.value = true;
 }
 
-function applyGlobalConfigPatch(target, patch) {
-  target.cover = patch.cover ?? "";
-  target.type = patch.type ?? "";
-  target.mode = patch.mode ?? "";
-  target.name = patch.name ?? "";
-  target.firstCatalog = patch.firstCatalog ?? "";
-  target.globalTimeLimit = Boolean(patch.globalTimeLimit);
-  target.globalTimeLimitValue = patch.globalTimeLimitValue ?? 0;
-  target.audio = { ...(target.audio || {}), ...(patch.audio || {}) };
-  target.gif = { ...(target.gif || {}), ...(patch.gif || {}) };
-  target.commonConfig = { ...(target.commonConfig || {}), ...(patch.commonConfig || {}) };
-}
-
 async function saveGlobalConfig(patch) {
   const gameId = currentGameId.value;
   if (!gameId) {
@@ -822,19 +841,17 @@ async function saveGlobalConfig(patch) {
   // 仅持久化配置字段：用后端上次已保存的文档作为 base，只应用配置 patch 后落库，
   // 避免把 RGB 编辑区未保存的帧/矩阵改动一并提交。
   await runEditorAction("save", async () => {
-    const detail = await api.getGameEditor(gameId);
-    const base = detail?.data;
-    if (!base) {
-      throw new Error(t("simple.readSavedFailed"));
-    }
-    applyGlobalConfigPatch(base, patch);
-    const result = await api.saveGameEditor(gameId, base);
+    const result = await saveSimpleGlobalConfigDocument({
+      api,
+      gameId,
+      patch,
+      liveDocument: document.value,
+      missingDocumentMessage: t("simple.readSavedFailed"),
+    });
     statusMessage.value = result?.data?.saved ? t("simple.globalSaved") : t("simple.saveComplete");
     validationErrors.value = [];
   });
   if (!errorMessage.value) {
-    // 让内存文档反映新配置，但保留未保存的编辑区改动。
-    applyGlobalConfigPatch(document.value, patch);
     globalConfigOpen.value = false;
   }
 }
@@ -1025,7 +1042,7 @@ async function importFrame() {
   }
 }
 
-async function runEditorAction(name, action) {
+async function runEditorAction(name, action, shouldCommit = () => true) {
   busyAction.value = name;
   errorMessage.value = "";
   statusMessage.value = "";
@@ -1035,9 +1052,13 @@ async function runEditorAction(name, action) {
     }
     await action();
   } catch (error) {
-    errorMessage.value = error.message || String(error);
+    if (shouldCommit()) {
+      errorMessage.value = error.message || String(error);
+    }
   } finally {
-    busyAction.value = "";
+    if (shouldCommit()) {
+      busyAction.value = "";
+    }
   }
 }
 

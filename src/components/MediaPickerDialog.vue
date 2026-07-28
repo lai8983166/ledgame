@@ -1,6 +1,7 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
+import { createLatestAsyncValueLoader } from "../lib/latestAsyncTask.js";
 
 const props = defineProps({
   accept: { type: String, default: "any" }, // 'image' | 'audio' | 'any'
@@ -17,6 +18,23 @@ const loadError = ref("");
 const allFiles = ref([]);
 const selected = ref(props.currentValue || "");
 const preview = ref(null);
+let mounted = false;
+const previewLoader = createLatestAsyncValueLoader({
+  loadValue: (relativePath) => mediaApi.getPreviewUrl(relativePath),
+  isActive: () => mounted,
+  getCurrentKey: () => selected.value,
+  onSuccess(result, relativePath) {
+    preview.value = { ...result, name: relativePath.split("/").pop() };
+  },
+  onError(error, relativePath) {
+    preview.value = {
+      url: "",
+      mediaType: "error",
+      name: relativePath.split("/").pop(),
+      error: error?.message || String(error),
+    };
+  },
+});
 
 const acceptLabel = computed(() => {
   if (props.accept === "audio") return t("mediaPicker.audio");
@@ -61,16 +79,12 @@ async function loadMedia() {
 
 async function loadPreview(relativePath) {
   if (!relativePath || !mediaApi?.getPreviewUrl) {
+    previewLoader.invalidate();
     preview.value = null;
     return;
   }
   preview.value = null;
-  try {
-    const result = await mediaApi.getPreviewUrl(relativePath);
-    preview.value = { ...result, name: relativePath.split("/").pop() };
-  } catch (error) {
-    preview.value = { url: "", mediaType: "error", name: relativePath.split("/").pop(), error: error?.message || String(error) };
-  }
+  await previewLoader.load(relativePath);
 }
 
 function selectFile(node) {
@@ -111,8 +125,12 @@ function handleKeydown(event) {
 watch(selected, (value) => loadPreview(value));
 
 onMounted(async () => {
+  mounted = true;
   window.addEventListener("keydown", handleKeydown);
   await loadMedia();
+  if (!mounted) {
+    return;
+  }
   if (selected.value) {
     loadPreview(selected.value);
   }
@@ -120,6 +138,8 @@ onMounted(async () => {
 });
 
 onBeforeUnmount(() => {
+  mounted = false;
+  previewLoader.invalidate();
   window.removeEventListener("keydown", handleKeydown);
 });
 </script>

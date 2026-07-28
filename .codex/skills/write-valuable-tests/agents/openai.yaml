@@ -1,0 +1,4 @@
+interface:
+  display_name: "Write Valuable Tests"
+  short_description: "Design focused unit and integration tests from product risk"
+  default_prompt: "Use $write-valuable-tests to decide which behaviors deserve tests and implement the lightest focused tests that protect them."
