@@ -6,12 +6,22 @@ const fs = require('node:fs/promises')
 const { pathToFileURL } = require('node:url')
 const { app, BrowserWindow, dialog, ipcMain, Menu, protocol, net: electronNet, screen } = require('electron')
 const {
+  gameFlowWindowPlan,
+  isTouchExitCode,
   preparationRequest,
   shouldInitializeSystemIdle,
 } = require('./game-flow.cjs')
 const {
   createLanguagePreferenceStore,
 } = require('./language-settings.cjs')
+const {
+  createApplicationSettingsStore,
+} = require('./application-settings.cjs')
+const {
+  describeDisplays,
+  matchSecondaryDisplay,
+  toDisplaySelection,
+} = require('./secondary-display.cjs')
 const {
   appendBoundedLogSync,
   createBoundedLogSink,
@@ -33,6 +43,10 @@ const {
 const {
   inferFrameSize,
 } = require('./frame-size.cjs')
+const {
+  createKeyboardWristbandReader,
+  normalizeWristbandId,
+} = require('./wristband-reader.cjs')
 
 const isDev = Boolean(process.env.VITE_DEV_SERVER_URL)
 const shouldUseEmbeddedBackend = !isDev && !process.env.LED_BACKEND_URL
@@ -67,12 +81,20 @@ const languagePreferences = createLanguagePreferenceStore({
   fs,
   settingsPath: path.join(app.getPath('userData'), 'settings', 'language.json'),
 })
+const applicationSettings = createApplicationSettingsStore({
+  fs,
+  settingsPath: path.join(app.getPath('userData'), 'settings', 'application.json'),
+})
 
 appendStartupLog('Electron main loaded')
 
 let mainWindow
 let debugWindow
 let touchWindow
+let secondaryWindow
+let secondaryWindowDisplayId = null
+let touchPresentationMode = 'debug'
+let currentEntryMethod = 'touch'
 let backendBaseUrl = process.env.LED_BACKEND_URL || 'http://127.0.0.1:8080'
 let runtimeStateStreamUrl = process.env.LED_RUNTIME_STATE_URL || defaultRuntimeStateStreamUrl(backendBaseUrl)
 let latestFrame = null
@@ -115,6 +137,52 @@ async function setApplicationLanguage(locale) {
   const savedLocale = await languagePreferences.set(locale)
   broadcastApplicationLanguage(savedLocale)
   return savedLocale
+}
+
+function broadcastApplicationSettings(settings) {
+  BrowserWindow.getAllWindows().forEach((window) => {
+    if (!window.isDestroyed()) {
+      window.webContents.send('app-settings-changed', settings)
+    }
+  })
+}
+
+async function updateApplicationSettings(patch) {
+  const settings = await applicationSettings.update(patch)
+  currentEntryMethod = settings.entryMethod
+  broadcastApplicationSettings(settings)
+  await broadcastSecondaryDisplayStatus()
+  return settings
+}
+
+function currentDisplayDescriptors() {
+  return describeDisplays(screen.getAllDisplays(), screen.getPrimaryDisplay())
+}
+
+async function getSecondaryDisplayState() {
+  const settings = await applicationSettings.get()
+  const displays = currentDisplayDescriptors()
+  const selected = matchSecondaryDisplay(displays, settings.secondaryDisplay)
+  return {
+    displays,
+    selectedId: selected?.id ?? null,
+    selectedAvailable: Boolean(selected),
+    windowOpen: Boolean(secondaryWindow && !secondaryWindow.isDestroyed()),
+    activeDisplayId: secondaryWindowDisplayId,
+  }
+}
+
+async function broadcastSecondaryDisplayStatus(error = null) {
+  const state = {
+    ...(await getSecondaryDisplayState()),
+    error,
+  }
+  BrowserWindow.getAllWindows().forEach((window) => {
+    if (!window.isDestroyed()) {
+      window.webContents.send('secondary-display-changed', state)
+    }
+  })
+  return state
 }
 
 function defaultRuntimeStateStreamUrl(baseUrl) {
@@ -291,10 +359,24 @@ function createDebugWindow() {
   })
 }
 
-function activateTouchWindow(targetWindow = touchWindow) {
+function normalizeTouchPresentationMode(value) {
+  return value === 'game' ? 'game' : 'debug'
+}
+
+function applyTouchPresentationMode(targetWindow, mode) {
   if (!targetWindow || targetWindow.isDestroyed() || targetWindow !== touchWindow) {
     return
   }
+  touchPresentationMode = normalizeTouchPresentationMode(mode)
+  targetWindow.setFullScreen(touchPresentationMode === 'game')
+  targetWindow.webContents.send('touch-presentation-mode', touchPresentationMode)
+}
+
+function activateTouchWindow(targetWindow = touchWindow, mode = touchPresentationMode) {
+  if (!targetWindow || targetWindow.isDestroyed() || targetWindow !== touchWindow) {
+    return
+  }
+  applyTouchPresentationMode(targetWindow, mode)
   targetWindow.setFocusable(true)
   if (targetWindow.isMinimized()) {
     targetWindow.restore()
@@ -307,11 +389,13 @@ function activateTouchWindow(targetWindow = touchWindow) {
   targetWindow.webContents.focus()
 }
 
-function createTouchWindow() {
+function createTouchWindow(mode = 'debug') {
+  const presentationMode = normalizeTouchPresentationMode(mode)
   if (touchWindow && !touchWindow.isDestroyed()) {
-    activateTouchWindow(touchWindow)
+    activateTouchWindow(touchWindow, presentationMode)
     return touchWindow
   }
+  touchPresentationMode = presentationMode
 
   const bounds = resolveWindowBounds({
     targetWidth: 960,
@@ -343,9 +427,30 @@ function createTouchWindow() {
   })
   touchWindow.setMenuBarVisibility(false)
   const createdTouchWindow = touchWindow
+  const wristbandReader = createKeyboardWristbandReader()
+
+  createdTouchWindow.webContents.on('before-input-event', (event, input) => {
+    if (
+      currentEntryMethod !== 'wristband' ||
+      String(latestEngineState?.engineState || '').toUpperCase() !== 'IDLE'
+    ) {
+      wristbandReader.reset()
+      return
+    }
+    const result = wristbandReader.push(input)
+    if (result.consumed) {
+      event.preventDefault()
+    }
+    if (result.wristbandId && !createdTouchWindow.isDestroyed()) {
+      createdTouchWindow.webContents.send('wristband-scanned', {
+        wristbandId: result.wristbandId,
+        balance: null,
+      })
+    }
+  })
 
   touchWindow.once('ready-to-show', () => {
-    activateTouchWindow(createdTouchWindow)
+    activateTouchWindow(createdTouchWindow, presentationMode)
   })
   touchWindow.on('focus', () => {
     if (!createdTouchWindow.isDestroyed()) {
@@ -360,10 +465,12 @@ function createTouchWindow() {
   })
 
   if (isDev) {
-    touchWindow.loadURL(`${process.env.VITE_DEV_SERVER_URL}?window=touch`)
+    touchWindow.loadURL(
+      `${process.env.VITE_DEV_SERVER_URL}?window=touch&presentation=${encodeURIComponent(presentationMode)}`,
+    )
   } else {
     touchWindow.loadFile(path.join(__dirname, '../dist/index.html'), {
-      query: { window: 'touch' },
+      query: { window: 'touch', presentation: presentationMode },
     })
   }
 
@@ -371,9 +478,134 @@ function createTouchWindow() {
     if (latestEngineState && !createdTouchWindow.isDestroyed()) {
       createdTouchWindow.webContents.send('engine-state', latestEngineState)
     }
-    setImmediate(() => activateTouchWindow(createdTouchWindow))
+    setImmediate(() => activateTouchWindow(createdTouchWindow, presentationMode))
   })
   return createdTouchWindow
+}
+
+function exitTouchFullScreen(event, code) {
+  if (
+    !touchWindow ||
+    touchWindow.isDestroyed() ||
+    event.sender !== touchWindow.webContents ||
+    !isTouchExitCode(code)
+  ) {
+    return { success: false }
+  }
+  touchWindow.setFullScreen(false)
+  return { success: true }
+}
+
+function activateSecondaryWindow(targetWindow = secondaryWindow) {
+  if (!targetWindow || targetWindow.isDestroyed() || targetWindow !== secondaryWindow) {
+    return
+  }
+  if (targetWindow.isMinimized()) {
+    targetWindow.restore()
+  }
+  if (!targetWindow.isVisible()) {
+    targetWindow.show()
+  }
+  targetWindow.moveTop()
+  targetWindow.focus()
+  targetWindow.webContents.focus()
+}
+
+function closeSecondaryWindow() {
+  if (secondaryWindow && !secondaryWindow.isDestroyed()) {
+    secondaryWindow.close()
+  }
+  secondaryWindow = null
+  secondaryWindowDisplayId = null
+}
+
+function createSecondaryWindow(display) {
+  if (!display?.selectable || display.primary) {
+    throw new Error('SECONDARY_DISPLAY_UNAVAILABLE')
+  }
+  if (
+    secondaryWindow &&
+    !secondaryWindow.isDestroyed() &&
+    secondaryWindowDisplayId === String(display.id)
+  ) {
+    activateSecondaryWindow(secondaryWindow)
+    return secondaryWindow
+  }
+  closeSecondaryWindow()
+
+  const bounds = display.bounds
+  secondaryWindowDisplayId = String(display.id)
+  secondaryWindow = new BrowserWindow({
+    x: bounds.x,
+    y: bounds.y,
+    width: bounds.width,
+    height: bounds.height,
+    useContentSize: true,
+    show: false,
+    title: 'LED Game Secondary Display',
+    backgroundColor: '#061019',
+    autoHideMenuBar: false,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.cjs'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      backgroundThrottling: false,
+      zoomFactor: 1.0,
+    },
+  })
+  secondaryWindow.setMenuBarVisibility(false)
+  const createdWindow = secondaryWindow
+
+  createdWindow.once('ready-to-show', () => {
+    if (createdWindow.isDestroyed() || createdWindow !== secondaryWindow) {
+      return
+    }
+    createdWindow.setBounds(bounds)
+    createdWindow.setFullScreen(true)
+    activateSecondaryWindow(createdWindow)
+  })
+  createdWindow.on('closed', () => {
+    if (secondaryWindow === createdWindow) {
+      secondaryWindow = null
+      secondaryWindowDisplayId = null
+      void broadcastSecondaryDisplayStatus()
+    }
+  })
+
+  if (isDev) {
+    createdWindow.loadURL(`${process.env.VITE_DEV_SERVER_URL}?window=secondary`)
+  } else {
+    createdWindow.loadFile(path.join(__dirname, '../dist/index.html'), {
+      query: { window: 'secondary' },
+    })
+  }
+  createdWindow.webContents.once('did-finish-load', () => {
+    if (latestEngineState && !createdWindow.isDestroyed()) {
+      createdWindow.webContents.send('engine-state', latestEngineState)
+    }
+  })
+  return createdWindow
+}
+
+async function selectSecondaryDisplay(displayId) {
+  const display = currentDisplayDescriptors().find(
+    (item) => item.selectable && String(item.id) === String(displayId),
+  )
+  if (!display) {
+    throw new Error('SECONDARY_DISPLAY_UNAVAILABLE')
+  }
+  await updateApplicationSettings({ secondaryDisplay: toDisplaySelection(display) })
+  return getSecondaryDisplayState()
+}
+
+async function openSecondaryDisplay() {
+  const settings = await applicationSettings.get()
+  const display = matchSecondaryDisplay(currentDisplayDescriptors(), settings.secondaryDisplay)
+  if (!display) {
+    throw new Error('SECONDARY_DISPLAY_UNAVAILABLE')
+  }
+  createSecondaryWindow(display)
+  return getSecondaryDisplayState()
 }
 
 function startFrameServer() {
@@ -1090,8 +1322,13 @@ function refreshDatabase() {
 }
 
 async function enterGameFlow() {
-  createDebugWindow()
-  createTouchWindow()
+  const settings = await applicationSettings.get()
+  currentEntryMethod = settings.entryMethod
+  const windowPlan = gameFlowWindowPlan(settings.mode)
+  if (windowPlan.openDebugPanel) {
+    createDebugWindow()
+  }
+  createTouchWindow(windowPlan.presentationMode)
   const current = await requestCurrentGameState()
   if (shouldInitializeSystemIdle(current?.data)) {
     return engineStateRequest('/engine/game/idle', { method: 'POST' })
@@ -1366,9 +1603,39 @@ ipcMain.handle('database:refresh', () => refreshDatabase())
 ipcMain.handle('game:state', () => requestCurrentGameState())
 ipcMain.handle('game:idle', () => engineStateRequest('/engine/game/idle', { method: 'POST' }))
 ipcMain.handle('game:stop', () => engineStateRequest('/engine/game/stop', { method: 'POST' }))
-ipcMain.handle('game:preparation:create', () =>
-  executePreparationRequest('create'),
-)
+ipcMain.handle('game:preparation:create', async () => {
+  const settings = await applicationSettings.get()
+  currentEntryMethod = settings.entryMethod
+  if (settings.entryMethod === 'wristband') {
+    throw new Error('WRISTBAND_SCAN_REQUIRED')
+  }
+  return executePreparationRequest('create', null, settings.entryMethod)
+})
+ipcMain.handle('game:preparation:create-wristband', async (event, value) => {
+  if (
+    !touchWindow ||
+    touchWindow.isDestroyed() ||
+    event.sender !== touchWindow.webContents
+  ) {
+    throw new Error('WRISTBAND_TOUCH_WINDOW_REQUIRED')
+  }
+  const settings = await applicationSettings.get()
+  currentEntryMethod = settings.entryMethod
+  if (settings.entryMethod !== 'wristband') {
+    throw new Error('WRISTBAND_ENTRY_DISABLED')
+  }
+  if (String(latestEngineState?.engineState || '').toUpperCase() !== 'IDLE') {
+    throw new Error('WRISTBAND_SCAN_NOT_ALLOWED')
+  }
+  const wristbandId = normalizeWristbandId(value)
+  if (!wristbandId) {
+    throw new Error('WRISTBAND_ID_INVALID')
+  }
+  return executePreparationRequest('create', null, {
+    launchMethod: 'wristband',
+    tokenList: [wristbandId],
+  })
+})
 ipcMain.handle('game:preparation:select', (_event, sessionId, gameId) =>
   executePreparationRequest('select', sessionId, gameId),
 )
@@ -1426,6 +1693,15 @@ ipcMain.handle('media:list', () => listMediaLibrary())
 ipcMain.handle('media:get-preview-url', (_event, relativePath) => getMediaPreviewUrl(relativePath))
 ipcMain.handle('app-language:get', () => languagePreferences.get())
 ipcMain.handle('app-language:set', (_event, locale) => setApplicationLanguage(locale))
+ipcMain.handle('app-settings:get', () => applicationSettings.get())
+ipcMain.handle('app-settings:update', (_event, patch) => updateApplicationSettings(patch))
+ipcMain.handle('touch:presentation-mode', () => touchPresentationMode)
+ipcMain.handle('touch:exit-fullscreen', (event, code) => exitTouchFullScreen(event, code))
+ipcMain.handle('secondary-display:list', () => getSecondaryDisplayState())
+ipcMain.handle('secondary-display:select', (_event, displayId) =>
+  selectSecondaryDisplay(displayId),
+)
+ipcMain.handle('secondary-display:open', () => openSecondaryDisplay())
 
 // ELC-408 SDK debug assistant IPC. The renderer can only call fixed actions;
 // the main process validates body shape and refuses arbitrary URLs/paths/bytes.
@@ -1542,6 +1818,28 @@ app.whenReady()
     startFrameServer()
     startRuntimeStateStream()
     createWindow()
+
+    screen.on('display-added', () => {
+      void broadcastSecondaryDisplayStatus()
+    })
+    screen.on('display-metrics-changed', () => {
+      void broadcastSecondaryDisplayStatus()
+    })
+    screen.on('display-removed', (_event, display) => {
+      if (
+        secondaryWindow &&
+        !secondaryWindow.isDestroyed() &&
+        secondaryWindowDisplayId === String(display?.id)
+      ) {
+        const detachedWindow = secondaryWindow
+        secondaryWindow = null
+        secondaryWindowDisplayId = null
+        detachedWindow.close()
+        void broadcastSecondaryDisplayStatus('SECONDARY_DISPLAY_DISCONNECTED')
+        return
+      }
+      void broadcastSecondaryDisplayStatus()
+    })
 
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) {

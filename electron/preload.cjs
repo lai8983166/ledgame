@@ -2,11 +2,25 @@ const { contextBridge, ipcRenderer } = require('electron')
 
 function detectWindowKind(search) {
   const kind = new URLSearchParams(search || '').get('window')
-  return kind === 'debug' || kind === 'touch' ? kind : 'main'
+  return kind === 'debug' || kind === 'touch' || kind === 'secondary' ? kind : 'main'
 }
 
-contextBridge.exposeInMainWorld('ledGame', {
-  windowKind: detectWindowKind(window.location.search),
+const windowKind = detectWindowKind(window.location.search)
+
+function onEngineState(callback) {
+  const listener = (_event, state) => callback(state)
+  ipcRenderer.on('engine-state', listener)
+  return () => ipcRenderer.removeListener('engine-state', listener)
+}
+
+const secondaryRuntimeApi = {
+  windowKind,
+  touchGameState: () => ipcRenderer.invoke('game:state'),
+  onEngineState,
+}
+
+const fullLedGameApi = {
+  windowKind,
   enterGameFlow: () => ipcRenderer.invoke('game-flow:enter'),
   openDebugPanel: () => ipcRenderer.invoke('open-debug-panel'),
   startFixed: () => ipcRenderer.invoke('engine:start-fixed'),
@@ -19,6 +33,8 @@ contextBridge.exposeInMainWorld('ledGame', {
   startSystemIdle: () => ipcRenderer.invoke('game:idle'),
   stopTouchGame: () => ipcRenderer.invoke('game:stop'),
   createPreparation: () => ipcRenderer.invoke('game:preparation:create'),
+  createWristbandPreparation: (wristbandId) =>
+    ipcRenderer.invoke('game:preparation:create-wristband', wristbandId),
   selectPreparationGame: (sessionId, gameId) =>
     ipcRenderer.invoke('game:preparation:select', sessionId, gameId),
   updatePreparation: (sessionId, patch) =>
@@ -41,6 +57,18 @@ contextBridge.exposeInMainWorld('ledGame', {
   exportFrameJson: (payload) => ipcRenderer.invoke('frame:export-json', payload),
   importFrameJson: () => ipcRenderer.invoke('frame:import-json'),
   saveGif: (payload) => ipcRenderer.invoke('level:save-gif', payload),
+  touchPresentationMode: () => ipcRenderer.invoke('touch:presentation-mode'),
+  exitTouchFullScreen: (code) => ipcRenderer.invoke('touch:exit-fullscreen', code),
+  onTouchPresentationMode: (callback) => {
+    const listener = (_event, mode) => callback(mode)
+    ipcRenderer.on('touch-presentation-mode', listener)
+    return () => ipcRenderer.removeListener('touch-presentation-mode', listener)
+  },
+  onWristbandScanned: (callback) => {
+    const listener = (_event, payload) => callback(payload)
+    ipcRenderer.on('wristband-scanned', listener)
+    return () => ipcRenderer.removeListener('wristband-scanned', listener)
+  },
   ...(process.env.LED_LAYOUT_DIAGNOSTICS === 'true'
     ? { reportEditorLayout: (snapshot) => ipcRenderer.send('diagnostic:editor-layout', snapshot) }
     : {}),
@@ -50,17 +78,18 @@ contextBridge.exposeInMainWorld('ledGame', {
     ipcRenderer.on('led-frame', listener)
     return () => ipcRenderer.removeListener('led-frame', listener)
   },
-  onEngineState: (callback) => {
-    const listener = (_event, state) => callback(state)
-    ipcRenderer.on('engine-state', listener)
-    return () => ipcRenderer.removeListener('engine-state', listener)
-  },
+  onEngineState,
   onDatabaseRefreshed: (callback) => {
     const listener = (_event, result) => callback(result)
     ipcRenderer.on('database-refreshed', listener)
     return () => ipcRenderer.removeListener('database-refreshed', listener)
   },
-})
+}
+
+contextBridge.exposeInMainWorld(
+  'ledGame',
+  windowKind === 'secondary' ? secondaryRuntimeApi : fullLedGameApi,
+)
 
 contextBridge.exposeInMainWorld('mediaLibrary', {
   list: () => ipcRenderer.invoke('media:list'),
@@ -76,6 +105,31 @@ contextBridge.exposeInMainWorld('appLanguage', {
     return () => ipcRenderer.removeListener('app-language-changed', listener)
   },
 })
+
+contextBridge.exposeInMainWorld('appSettings', {
+  get: () => ipcRenderer.invoke('app-settings:get'),
+  ...(windowKind === 'main'
+    ? { update: (patch) => ipcRenderer.invoke('app-settings:update', patch) }
+    : {}),
+  onChanged: (callback) => {
+    const listener = (_event, settings) => callback(settings)
+    ipcRenderer.on('app-settings-changed', listener)
+    return () => ipcRenderer.removeListener('app-settings-changed', listener)
+  },
+})
+
+if (windowKind === 'main') {
+  contextBridge.exposeInMainWorld('secondaryDisplay', {
+    list: () => ipcRenderer.invoke('secondary-display:list'),
+    select: (displayId) => ipcRenderer.invoke('secondary-display:select', displayId),
+    open: () => ipcRenderer.invoke('secondary-display:open'),
+    onChanged: (callback) => {
+      const listener = (_event, state) => callback(state)
+      ipcRenderer.on('secondary-display-changed', listener)
+      return () => ipcRenderer.removeListener('secondary-display-changed', listener)
+    },
+  })
+}
 
 contextBridge.exposeInMainWorld('spiritLibrary', {
   list: () => ipcRenderer.invoke('spirit:list'),

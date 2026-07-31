@@ -1,5 +1,6 @@
 import { additionalMessages } from "./additional-messages.js";
 import { elc408Messages } from "./elc408-messages.js";
+import { kioskMessages } from "./kiosk-messages.js";
 
 function deepMergeMessages(base, addition) {
   const result = { ...base };
@@ -956,4 +957,7 @@ const baseMessages = {
   ...additionalMessages,
 };
 
-export const messages = deepMergeMessages(baseMessages, elc408Messages);
+export const messages = deepMergeMessages(
+  deepMergeMessages(baseMessages, elc408Messages),
+  kioskMessages,
+);

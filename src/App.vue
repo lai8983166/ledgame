@@ -10,12 +10,16 @@ import LedGameTouchView from "./views/LedGameTouchView.vue";
 import LanguageView from "./views/LanguageView.vue";
 import Elc408DebugAssistantView from "./views/Elc408DebugAssistantView.vue";
 import DatabaseRefreshView from "./views/DatabaseRefreshView.vue";
+import ApplicationSettingsView from "./views/ApplicationSettingsView.vue";
+import SecondaryDisplayView from "./views/SecondaryDisplayView.vue";
+import SecondaryDisplayPickerDialog from "./components/SecondaryDisplayPickerDialog.vue";
 
 const { t } = useI18n({ useScope: "global" });
 
 const api = window.ledGame;
 const isDebugWindow = api?.windowKind === "debug";
 const isTouchWindow = api?.windowKind === "touch";
+const isSecondaryWindow = api?.windowKind === "secondary";
 const engineState = ref("UNKNOWN");
 const demoType = ref(null);
 const busyAction = ref("");
@@ -28,9 +32,21 @@ const selectedEditorGame = ref(null);
 const helpMenuOpen = ref(false);
 const helpButtonRef = ref(null);
 const helpMenuRef = ref(null);
+const secondaryMenuOpen = ref(false);
+const secondaryButtonRef = ref(null);
+const secondaryMenuRef = ref(null);
+const secondaryPickerOpen = ref(false);
+const secondaryDisplayState = ref({
+  displays: [],
+  selectedId: null,
+  selectedAvailable: false,
+  windowOpen: false,
+});
+const secondaryErrorMessage = ref("");
 let removeHelpMenuListeners = null;
 let removeLedFrameListener = null;
 let removeEngineStateListener = null;
+let removeSecondaryDisplayListener = null;
 
 const frameAge = computed(() => {
   if (!frameState.value.receivedAt) {
@@ -77,7 +93,7 @@ const runtimeStatusItems = computed(() => {
 });
 
 onMounted(async () => {
-  if (isTouchWindow) {
+  if (isTouchWindow || isSecondaryWindow) {
     return;
   }
   removeEngineStateListener = api?.onEngineState?.((state) => {
@@ -95,35 +111,57 @@ onMounted(async () => {
   }
 
   attachHelpMenuListeners();
-  await refreshState();
+  removeSecondaryDisplayListener =
+    window.secondaryDisplay?.onChanged?.((state) => applySecondaryDisplayState(state)) || null;
+  await Promise.all([refreshState(), refreshSecondaryDisplayState()]);
 });
 
 onUnmounted(() => {
   removeLedFrameListener?.();
   removeEngineStateListener?.();
+  removeSecondaryDisplayListener?.();
   removeHelpMenuListeners?.();
   hoverCell.value = null;
 });
 
 function attachHelpMenuListeners() {
   function onDocumentClick(event) {
-    if (!helpMenuOpen.value) {
+    if (!helpMenuOpen.value && !secondaryMenuOpen.value) {
       return;
     }
-    const menu = helpMenuRef.value;
-    const button = helpButtonRef.value;
-    if (menu && event.target instanceof Node && menu.contains(event.target)) {
-      return;
+    if (helpMenuOpen.value) {
+      const menu = helpMenuRef.value;
+      const button = helpButtonRef.value;
+      if (
+        (menu && event.target instanceof Node && menu.contains(event.target)) ||
+        (button && event.target instanceof Node && button.contains(event.target))
+      ) {
+        return;
+      }
+      closeHelpMenu();
     }
-    if (button && event.target instanceof Node && button.contains(event.target)) {
-      return;
+    if (secondaryMenuOpen.value) {
+      const menu = secondaryMenuRef.value;
+      const button = secondaryButtonRef.value;
+      if (
+        (menu && event.target instanceof Node && menu.contains(event.target)) ||
+        (button && event.target instanceof Node && button.contains(event.target))
+      ) {
+        return;
+      }
+      closeSecondaryMenu();
     }
-    closeHelpMenu();
   }
   function onKeydown(event) {
-    if (event.key === "Escape" && helpMenuOpen.value) {
-      closeHelpMenu();
-      helpButtonRef.value?.focus();
+    if (event.key === "Escape") {
+      if (helpMenuOpen.value) {
+        closeHelpMenu();
+        helpButtonRef.value?.focus();
+      }
+      if (secondaryMenuOpen.value) {
+        closeSecondaryMenu();
+        secondaryButtonRef.value?.focus();
+      }
     }
   }
   document.addEventListener("click", onDocumentClick);
@@ -139,6 +177,7 @@ function toggleHelpMenu() {
 }
 
 function openHelpMenu() {
+  closeSecondaryMenu();
   helpMenuOpen.value = true;
 }
 
@@ -219,6 +258,82 @@ function enterGameFlow() {
 function openSimpleEditor(game) {
   selectedEditorGame.value = game ? { id: game.id, name: game.name } : null;
   activeView.value = "simple-editor";
+}
+
+function toggleSecondaryMenu() {
+  secondaryMenuOpen.value ? closeSecondaryMenu() : openSecondaryMenu();
+}
+
+function openSecondaryMenu() {
+  closeHelpMenu();
+  secondaryMenuOpen.value = true;
+}
+
+function closeSecondaryMenu() {
+  secondaryMenuOpen.value = false;
+}
+
+function onSecondaryButtonKeydown(event) {
+  if (
+    !secondaryMenuOpen.value &&
+    (event.key === "Enter" || event.key === " " || event.key === "ArrowDown")
+  ) {
+    event.preventDefault();
+    openSecondaryMenu();
+  }
+}
+
+function showSecondaryDisplayList() {
+  closeSecondaryMenu();
+  secondaryPickerOpen.value = true;
+}
+
+function applySecondaryDisplayState(state) {
+  if (!state) return;
+  secondaryDisplayState.value = {
+    ...secondaryDisplayState.value,
+    ...state,
+    displays: Array.isArray(state.displays) ? state.displays : [],
+  };
+  if ("error" in state) {
+    secondaryErrorMessage.value = state.error
+      ? t(`secondaryDisplay.errors.${state.error}`)
+      : "";
+  }
+}
+
+async function refreshSecondaryDisplayState() {
+  if (!window.secondaryDisplay?.list) return;
+  try {
+    applySecondaryDisplayState(await window.secondaryDisplay.list());
+  } catch (error) {
+    secondaryErrorMessage.value =
+      error?.message || t("secondaryDisplay.listFailed");
+  }
+}
+
+async function openSecondaryDisplay() {
+  if (
+    !window.secondaryDisplay?.open ||
+    !secondaryDisplayState.value.selectedAvailable ||
+    busyAction.value
+  ) {
+    return;
+  }
+  closeSecondaryMenu();
+  busyAction.value = "secondary-display";
+  secondaryErrorMessage.value = "";
+  try {
+    applySecondaryDisplayState(await window.secondaryDisplay.open());
+  } catch (error) {
+    const code = error?.message || "";
+    secondaryErrorMessage.value =
+      code === "SECONDARY_DISPLAY_UNAVAILABLE"
+        ? t("secondaryDisplay.errors.SECONDARY_DISPLAY_UNAVAILABLE")
+        : code || t("secondaryDisplay.openFailed");
+  } finally {
+    busyAction.value = "";
+  }
 }
 
 function backToGameList() {
@@ -355,6 +470,8 @@ function formatRuntimeValue(value, fallback = "-") {
 <template>
   <LedGameTouchView v-if="isTouchWindow" />
 
+  <SecondaryDisplayView v-else-if="isSecondaryWindow" />
+
   <DemoView
     v-else-if="isDebugWindow"
     :demo-type="demoType"
@@ -430,6 +547,59 @@ function formatRuntimeValue(value, fallback = "-") {
         </button>
         <div class="nav-help-wrapper">
           <button
+            ref="secondaryButtonRef"
+            class="nav-tab nav-help-button"
+            type="button"
+            aria-haspopup="menu"
+            :aria-expanded="secondaryMenuOpen"
+            @click="toggleSecondaryMenu"
+            @keydown="onSecondaryButtonKeydown"
+          >
+            {{ t("nav.secondaryDisplay") }}
+            <span class="nav-help-chevron" aria-hidden="true">▾</span>
+          </button>
+          <div
+            v-if="secondaryMenuOpen"
+            ref="secondaryMenuRef"
+            class="nav-help-menu"
+            role="menu"
+          >
+            <button
+              class="nav-help-item"
+              type="button"
+              role="menuitem"
+              @click="showSecondaryDisplayList"
+            >
+              {{ t("nav.secondaryDisplayList") }}
+            </button>
+            <button
+              class="nav-help-item"
+              type="button"
+              role="menuitem"
+              :disabled="
+                !secondaryDisplayState.selectedAvailable ||
+                busyAction === 'secondary-display'
+              "
+              @click="openSecondaryDisplay"
+            >
+              {{
+                busyAction === "secondary-display"
+                  ? t("secondaryDisplay.opening")
+                  : t("nav.openSecondaryDisplay")
+              }}
+            </button>
+          </div>
+        </div>
+        <button
+          class="nav-tab"
+          :class="{ active: activeView === 'application-settings' }"
+          type="button"
+          @click="activeView = 'application-settings'"
+        >
+          {{ t("nav.configuration") }}
+        </button>
+        <div class="nav-help-wrapper">
+          <button
             ref="helpButtonRef"
             class="nav-tab nav-help-button"
             :class="{ active: activeView === 'debug-assistant' || activeView === 'database-refresh' }"
@@ -471,6 +641,13 @@ function formatRuntimeValue(value, fallback = "-") {
       </nav>
     </header>
 
+    <div v-if="secondaryErrorMessage" class="app-global-error" role="alert">
+      <span>{{ secondaryErrorMessage }}</span>
+      <button type="button" :aria-label="t('common.close')" @click="secondaryErrorMessage = ''">
+        ×
+      </button>
+    </div>
+
     <DemoView
       v-if="activeView === 'demo'"
       :busy-action="busyAction"
@@ -501,6 +678,14 @@ function formatRuntimeValue(value, fallback = "-") {
 
     <DatabaseRefreshView v-else-if="activeView === 'database-refresh'" />
 
+    <ApplicationSettingsView v-else-if="activeView === 'application-settings'" />
+
     <LanguageView v-else />
+
+    <SecondaryDisplayPickerDialog
+      :open="secondaryPickerOpen"
+      @close="secondaryPickerOpen = false"
+      @state="applySecondaryDisplayState"
+    />
   </main>
 </template>

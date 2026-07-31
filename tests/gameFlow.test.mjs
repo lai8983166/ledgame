@@ -169,8 +169,8 @@ test("packaged windows keep stable content bounds when first activated", async (
   const source = await readFile(new URL("../electron/main.cjs", import.meta.url), "utf8");
 
   assert.match(source, /Menu\.setApplicationMenu\(null\)/);
-  assert.equal((source.match(/autoHideMenuBar:\s*false/g) || []).length, 3);
-  assert.equal((source.match(/\.setMenuBarVisibility\(false\)/g) || []).length, 3);
+  assert.equal((source.match(/autoHideMenuBar:\s*false/g) || []).length, 4);
+  assert.equal((source.match(/\.setMenuBarVisibility\(false\)/g) || []).length, 4);
   assert.doesNotMatch(source, /setAutoHideMenuBar\(true\)/);
 });
 
@@ -181,7 +181,7 @@ test("full game entry keeps the Touch idle video active across auxiliary windows
     "utf8",
   );
   const createTouchWindow = mainSource.slice(
-    mainSource.indexOf("function createTouchWindow()"),
+    mainSource.indexOf("function createTouchWindow("),
     mainSource.indexOf("function startFrameServer()"),
   );
   const enterGameFlow = mainSource.slice(
@@ -190,7 +190,9 @@ test("full game entry keeps the Touch idle video active across auxiliary windows
   );
 
   assert.match(createTouchWindow, /backgroundThrottling:\s*false/);
-  assert.ok(enterGameFlow.indexOf("createDebugWindow()") < enterGameFlow.indexOf("createTouchWindow()"));
+  assert.match(enterGameFlow, /windowPlan\.openDebugPanel/);
+  assert.match(enterGameFlow, /createDebugWindow\(\)/);
+  assert.match(enterGameFlow, /createTouchWindow\(windowPlan\.presentationMode\)/);
   assert.match(touchSource, /visibilitychange/);
   assert.match(touchSource, /resumeIdleVideoWhenVisible/);
 });

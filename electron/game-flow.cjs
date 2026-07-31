@@ -41,7 +41,15 @@ function sanitizePreparationPatch(value) {
 
 function preparationRequest(kind, sessionId, payload) {
   if (kind === 'create') {
-    return jsonRequest('/game/preparations', 'POST', { launchMethod: 'touch' })
+    const source = payload && typeof payload === 'object'
+      ? payload
+      : { launchMethod: payload }
+    return jsonRequest('/game/preparations', 'POST', {
+      launchMethod: normalizeLaunchMethod(source.launchMethod),
+      ...(Array.isArray(source.tokenList) && source.tokenList.length
+        ? { tokenList: source.tokenList.map((item) => String(item)) }
+        : {}),
+    })
   }
   if (kind === 'select') {
     return jsonRequest(preparationPath(sessionId, '/game'), 'PUT', { gameId: payload })
@@ -58,6 +66,23 @@ function preparationRequest(kind, sessionId, payload) {
   throw new Error(`Unsupported preparation request: ${kind}`)
 }
 
+function normalizeLaunchMethod(value) {
+  return value === 'coin' || value === 'wristband' ? value : 'touch'
+}
+
+function gameFlowWindowPlan(mode) {
+  const presentationMode = mode === 'game' ? 'game' : 'debug'
+  return {
+    presentationMode,
+    openDebugPanel: presentationMode === 'debug',
+    fullScreenTouch: presentationMode === 'game',
+  }
+}
+
+function isTouchExitCode(value) {
+  return String(value ?? '') === '888888'
+}
+
 function jsonRequest(pathname, method, body) {
   return {
     pathname,
@@ -70,13 +95,16 @@ function jsonRequest(pathname, method, body) {
 
 function detectWindowKind(search) {
   const kind = new URLSearchParams(search || '').get('window')
-  return kind === 'debug' || kind === 'touch' ? kind : 'main'
+  return kind === 'debug' || kind === 'touch' || kind === 'secondary' ? kind : 'main'
 }
 
 module.exports = {
   detectWindowKind,
+  gameFlowWindowPlan,
   hasTermination,
   isActiveGameFlow,
+  isTouchExitCode,
+  normalizeLaunchMethod,
   preparationPath,
   preparationRequest,
   sanitizePreparationPatch,

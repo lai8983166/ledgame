@@ -25,6 +25,12 @@ const idleVideoUrl = ref("");
 const idleVideoElement = ref(null);
 const idleVideoFailed = ref(false);
 const idleAwakeRequested = ref(false);
+const presentationMode = ref("debug");
+const entryMethod = ref("touch");
+const wristbandRead = ref(null);
+const exitKeypadOpen = ref(false);
+const exitCode = ref("");
+const exitError = ref("");
 const loadingState = ref(true);
 const loadingGames = ref(false);
 const gameInitializationWarning = ref("");
@@ -36,6 +42,10 @@ const draft = reactive({
   stageFailurePolicy: "END_GAME",
 });
 let removeStateListener = null;
+let removePresentationListener = null;
+let removeSettingsListener = null;
+let removeWristbandListener = null;
+let wristbandAdvanceTimer = null;
 let syncedPreparationRevision = null;
 const stateCoordinator = createTouchStateCoordinator({
   readState: () => api.touchGameState(),
@@ -52,6 +62,13 @@ const canConfirm = computed(() => Boolean(preparation.value?.sessionId && select
 const terminated = computed(() => hasTermination(runtimeState.value));
 const resultSucceeded = computed(() => runtimeState.value.success === true);
 const gameplay = computed(() => runtimeState.value.gameplay || {});
+const isGamePresentation = computed(() => presentationMode.value === "game");
+const isWristbandEntry = computed(() => entryMethod.value === "wristband");
+const activeWristbandId = computed(() =>
+  wristbandRead.value?.wristbandId
+  || preparation.value?.options?.tokenList?.[0]
+  || "",
+);
 const showIdleVideo = computed(() =>
   view.value === "IDLE" && !idleAwakeRequested.value && idleVideoUrl.value && !idleVideoFailed.value,
 );
@@ -66,18 +83,34 @@ onMounted(async () => {
   removeStateListener = api?.onEngineState?.((state) => {
     stateCoordinator.applyBroadcast(state);
   });
-  await Promise.all([refreshState(), loadIdleVideo()]);
+  removePresentationListener =
+    api?.onTouchPresentationMode?.((mode) => applyPresentationMode(mode)) || null;
+  removeSettingsListener =
+    window.appSettings?.onChanged?.((settings) => applyApplicationSettings(settings)) || null;
+  removeWristbandListener =
+    api?.onWristbandScanned?.((payload) => handleWristbandScanned(payload)) || null;
+  await Promise.all([
+    refreshState(),
+    loadIdleVideo(),
+    loadPresentationMode(),
+    loadApplicationSettings(),
+  ]);
 });
 
 onUnmounted(() => {
   document.removeEventListener("visibilitychange", resumeIdleVideoWhenVisible);
   window.removeEventListener("focus", resumeIdleVideoWhenVisible);
   removeStateListener?.();
+  removePresentationListener?.();
+  removeSettingsListener?.();
+  removeWristbandListener?.();
+  clearTimeout(wristbandAdvanceTimer);
 });
 
 watch(view, async (nextView) => {
   if (nextView === "IDLE") {
     idleAwakeRequested.value = false;
+    wristbandRead.value = null;
   }
   if (nextView === "PREPARING") {
     await loadGames();
@@ -94,6 +127,43 @@ function playIdleVideo() {
   idleVideoElement.value?.play().catch(() => {
     // canplay will retry after the custom media protocol finishes loading.
   });
+}
+
+async function loadPresentationMode() {
+  if (!api?.touchPresentationMode) return;
+  try {
+    applyPresentationMode(await api.touchPresentationMode());
+  } catch (_error) {
+    applyPresentationMode("debug");
+  }
+}
+
+function applyPresentationMode(mode) {
+  presentationMode.value = mode === "game" ? "game" : "debug";
+  if (presentationMode.value !== "game") {
+    closeExitKeypad();
+  }
+}
+
+async function loadApplicationSettings() {
+  if (!window.appSettings?.get) return;
+  try {
+    applyApplicationSettings(await window.appSettings.get());
+  } catch (_error) {
+    applyApplicationSettings(null);
+  }
+}
+
+function applyApplicationSettings(settings) {
+  entryMethod.value = settings?.entryMethod === "wristband"
+    ? "wristband"
+    : settings?.entryMethod === "coin"
+      ? "coin"
+      : "touch";
+  if (!isWristbandEntry.value) {
+    wristbandRead.value = null;
+    clearTimeout(wristbandAdvanceTimer);
+  }
 }
 
 function resumeIdleVideoWhenVisible() {
@@ -170,9 +240,44 @@ async function runAction(name, action, { refreshOnError = false } = {}) {
 }
 
 async function wakeTouch() {
+  if (isWristbandEntry.value) return;
   idleAwakeRequested.value = true;
   const result = await runAction("wake", () => api.createPreparation());
   if (!result && view.value === "IDLE") {
+    idleAwakeRequested.value = false;
+  }
+}
+
+function handleWristbandScanned(payload) {
+  if (
+    !isWristbandEntry.value
+    || view.value !== "IDLE"
+    || busyAction.value
+    || wristbandRead.value
+  ) {
+    return;
+  }
+  const wristbandId = String(payload?.wristbandId || "").trim();
+  if (!wristbandId) return;
+  idleAwakeRequested.value = true;
+  wristbandRead.value = {
+    wristbandId,
+    balance: payload?.balance ?? null,
+  };
+  clearTimeout(wristbandAdvanceTimer);
+  wristbandAdvanceTimer = setTimeout(() => {
+    void createWristbandPreparation(wristbandId);
+  }, 1200);
+}
+
+async function createWristbandPreparation(wristbandId) {
+  if (!api?.createWristbandPreparation || view.value !== "IDLE") return;
+  const result = await runAction(
+    "wristband",
+    () => api.createWristbandPreparation(wristbandId),
+  );
+  if (!result && view.value === "IDLE") {
+    wristbandRead.value = null;
     idleAwakeRequested.value = false;
   }
 }
@@ -235,7 +340,7 @@ function preparationPatch() {
     userCount: Math.max(1, Math.floor(Number(draft.userCount) || 1)),
     startLevelIndex: Math.max(0, Math.floor(Number(draft.startLevelIndex) || 0)),
     stageFailurePolicy: draft.stageFailurePolicy === "RETRY" ? "RETRY" : "END_GAME",
-    launchMethod: "touch",
+    launchMethod: preparation.value?.options.launchMethod || "touch",
   };
 }
 
@@ -291,14 +396,74 @@ async function stopGame() {
   if (!window.confirm(t("touch.stopConfirm"))) return;
   await runAction("stop", () => api.stopTouchGame());
 }
+
+function openExitKeypad(event) {
+  if (!isGamePresentation.value || exitKeypadOpen.value) return;
+  if (event?.pointerType === "mouse" && event.button !== 0) return;
+  exitCode.value = "";
+  exitError.value = "";
+  exitKeypadOpen.value = true;
+}
+
+function closeExitKeypad() {
+  exitKeypadOpen.value = false;
+  exitCode.value = "";
+  exitError.value = "";
+}
+
+function appendExitDigit(digit) {
+  if (exitCode.value.length >= 6) return;
+  exitCode.value += String(digit);
+  exitError.value = "";
+}
+
+function removeExitDigit() {
+  exitCode.value = exitCode.value.slice(0, -1);
+  exitError.value = "";
+}
+
+async function confirmExitFullScreen() {
+  if (!api?.exitTouchFullScreen) {
+    exitError.value = t("touch.exitApiUnavailable");
+    return;
+  }
+  try {
+    const result = await api.exitTouchFullScreen(exitCode.value);
+    if (result?.success) {
+      closeExitKeypad();
+      return;
+    }
+    exitCode.value = "";
+    exitError.value = t("touch.exitCodeIncorrect");
+  } catch (error) {
+    exitError.value = extractErrorMessage(error, t("common.operationFailed"));
+  }
+}
 </script>
 
 <template>
-  <main class="touch-shell" :data-state="view">
+  <main
+    class="touch-shell"
+    :class="{ 'touch-game-presentation': isGamePresentation }"
+    :data-state="view"
+  >
     <TouchMatrixCanvas
       v-if="view !== 'PREPARING' && (view !== 'IDLE' || idleVideoFailed)"
       :mode="statusCanvasMode"
     />
+
+    <div
+      v-if="
+        isGamePresentation &&
+        ['STARTING', 'RUNNING', 'SETTLING', 'STOPPED'].includes(view)
+      "
+      class="touch-game-motion"
+      aria-hidden="true"
+    >
+      <span></span>
+      <span></span>
+      <span></span>
+    </div>
 
     <video
       v-if="showIdleVideo"
@@ -322,13 +487,31 @@ async function stopGame() {
     <button
       v-else-if="view === 'IDLE'"
       class="touch-idle-action"
+      :class="{ 'wristband-entry': isWristbandEntry }"
       type="button"
-      :disabled="Boolean(busyAction)"
+      :disabled="Boolean(busyAction) || isWristbandEntry"
       @click="wakeTouch"
     >
       <span class="touch-kicker">LED GAME TOUCH</span>
-      <strong>{{ t(busyAction === "wake" ? "touch.waking" : "touch.tapToStart") }}</strong>
-      <small>{{ t("touch.idleHint") }}</small>
+      <template v-if="isWristbandEntry && wristbandRead">
+        <strong>{{ t("touch.wristbandRecognized") }}</strong>
+        <span class="touch-wristband-card">
+          <small>{{ t("touch.wristbandId") }}</small>
+          <b>{{ wristbandRead.wristbandId }}</b>
+          <small>
+            {{ t("touch.wristbandBalance") }}
+            {{ wristbandRead.balance == null ? t("touch.balancePending") : wristbandRead.balance }}
+          </small>
+        </span>
+      </template>
+      <template v-else-if="isWristbandEntry">
+        <strong>{{ t("touch.scanWristband") }}</strong>
+        <small>{{ t("touch.scanWristbandHint") }}</small>
+      </template>
+      <template v-else>
+        <strong>{{ t(busyAction === "wake" ? "touch.waking" : "touch.tapToStart") }}</strong>
+        <small>{{ t("touch.idleHint") }}</small>
+      </template>
     </button>
 
     <section v-else-if="view === 'PREPARING'" class="touch-preparing">
@@ -336,6 +519,10 @@ async function stopGame() {
         <div>
           <span class="touch-kicker">PREPARING</span>
           <h1>{{ t("touch.chooseGame") }}</h1>
+          <p v-if="activeWristbandId" class="touch-preparing-wristband">
+            {{ t("touch.wristbandId") }} {{ activeWristbandId }}
+            <span>{{ t("touch.wristbandBalance") }} {{ t("touch.balancePending") }}</span>
+          </p>
         </div>
         <button class="touch-text-button" type="button" :disabled="Boolean(busyAction)" @click="cancelPreparation">
           {{ t("touch.returnIdle") }}
@@ -417,12 +604,27 @@ async function stopGame() {
 
     <section v-else-if="view === 'RUNNING'" class="touch-center touch-status-panel">
       <span class="touch-kicker">RUNNING</span>
-      <h1>{{ runtimeState.gameName || t("touch.gameRunning") }}</h1>
-      <div class="touch-live-stats">
+      <h1>
+        {{
+          isGamePresentation
+            ? t("touch.gameModeRunning")
+            : runtimeState.gameName || t("touch.gameRunning")
+        }}
+      </h1>
+      <p v-if="isGamePresentation">{{ t("touch.gameModeRunningHint") }}</p>
+      <div v-if="!isGamePresentation" class="touch-live-stats">
         <span>{{ t("touch.score") }} <strong>{{ gameplay.score ?? 0 }}</strong></span>
         <span>{{ t("touch.life") }} <strong>{{ gameplay.life ?? "-" }}</strong></span>
       </div>
-      <button class="touch-danger-button" type="button" :disabled="Boolean(busyAction)" @click="stopGame">{{ t("touch.stopGame") }}</button>
+      <button
+        v-if="!isGamePresentation"
+        class="touch-danger-button"
+        type="button"
+        :disabled="Boolean(busyAction)"
+        @click="stopGame"
+      >
+        {{ t("touch.stopGame") }}
+      </button>
     </section>
 
     <section v-else-if="view === 'SETTLING'" class="touch-center touch-status-panel">
@@ -433,9 +635,12 @@ async function stopGame() {
 
     <section v-else-if="view === 'STOPPED'" class="touch-center touch-status-panel">
       <span class="touch-kicker">GAME OVER</span>
-      <h1 v-if="terminated">{{ t(resultSucceeded ? "touch.challengeComplete" : "touch.gameEnded") }}</h1>
+      <h1 v-if="isGamePresentation && terminated">{{ t("touch.gameModeEnded") }}</h1>
+      <h1 v-else-if="terminated">{{ t(resultSucceeded ? "touch.challengeComplete" : "touch.gameEnded") }}</h1>
       <h1 v-else>{{ t("touch.readyForGame") }}</h1>
-      <div v-if="terminated" class="touch-result-score">{{ gameplay.score ?? 0 }}</div>
+      <div v-if="terminated && !isGamePresentation" class="touch-result-score">
+        {{ gameplay.score ?? 0 }}
+      </div>
       <button class="touch-primary-button" type="button" :disabled="Boolean(busyAction)" @click="returnToIdle">
         {{ t(busyAction === "idle" ? "touch.returning" : "touch.returnIdle") }}
       </button>
@@ -450,6 +655,44 @@ async function stopGame() {
     <div v-if="errorMessage" class="touch-error" role="alert">
       <span>{{ errorMessage }}</span>
       <button type="button" @click="errorMessage = ''">{{ t("common.close") }}</button>
+    </div>
+
+    <button
+      v-if="isGamePresentation && !exitKeypadOpen"
+      class="touch-exit-edge"
+      type="button"
+      :aria-label="t('touch.openExitKeypad')"
+      @pointerup="openExitKeypad"
+    ></button>
+
+    <div v-if="exitKeypadOpen" class="touch-exit-backdrop">
+      <section class="touch-exit-keypad" role="dialog" aria-modal="true">
+        <span class="touch-kicker">OPERATOR EXIT</span>
+        <h2>{{ t("touch.exitFullScreen") }}</h2>
+        <div class="touch-exit-code" aria-live="polite">
+          {{ "•".repeat(exitCode.length) || "—" }}
+        </div>
+        <div class="touch-exit-grid">
+          <button
+            v-for="digit in [1, 2, 3, 4, 5, 6, 7, 8, 9]"
+            :key="digit"
+            type="button"
+            @click="appendExitDigit(digit)"
+          >
+            {{ digit }}
+          </button>
+          <button type="button" @click="exitCode = ''">{{ t("touch.clear") }}</button>
+          <button type="button" @click="appendExitDigit(0)">0</button>
+          <button type="button" @click="removeExitDigit">{{ t("touch.backspace") }}</button>
+        </div>
+        <p v-if="exitError" class="touch-exit-error" role="alert">{{ exitError }}</p>
+        <div class="touch-exit-actions">
+          <button type="button" @click="closeExitKeypad">{{ t("common.cancel") }}</button>
+          <button type="button" class="confirm" @click="confirmExitFullScreen">
+            {{ t("common.confirm") }}
+          </button>
+        </div>
+      </section>
     </div>
   </main>
 </template>
@@ -517,6 +760,11 @@ async function stopGame() {
   cursor: pointer;
 }
 
+.touch-idle-action.wristband-entry {
+  cursor: default;
+  opacity: 1;
+}
+
 .touch-idle-video {
   position: absolute;
   inset: 0;
@@ -535,6 +783,23 @@ async function stopGame() {
   margin-top: 12px;
   color: #c5d5df;
   font-size: 17px;
+}
+
+.touch-wristband-card {
+  display: grid;
+  gap: 8px;
+  min-width: min(420px, calc(100vw - 48px));
+  margin-top: 22px;
+  padding: 18px 24px;
+  border: 1px solid rgba(120, 216, 255, 0.5);
+  border-radius: 8px;
+  background: rgba(7, 16, 24, 0.82);
+}
+
+.touch-wristband-card b {
+  color: #f8fcff;
+  font-size: 28px;
+  letter-spacing: 0;
 }
 
 .touch-preparing {
@@ -558,6 +823,18 @@ async function stopGame() {
 
 .touch-preparing-header h1 {
   font-size: 34px;
+}
+
+.touch-preparing-wristband {
+  display: flex;
+  gap: 18px;
+  margin: 8px 0 0;
+  color: #d8f4ff;
+  font-size: 14px;
+}
+
+.touch-preparing-wristband span {
+  color: #9fb3c0;
 }
 
 .touch-preparing-body {
@@ -823,6 +1100,132 @@ fieldset:disabled {
   color: #ffffff;
   background: transparent;
   cursor: pointer;
+}
+
+.touch-shell button {
+  touch-action: manipulation;
+}
+
+.touch-game-motion {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.touch-game-motion span {
+  position: absolute;
+  left: -24vw;
+  width: 22vw;
+  height: 4px;
+  background: #48b6df;
+  opacity: 0.42;
+  animation: touch-game-scan 4.2s linear infinite;
+}
+
+.touch-game-motion span:nth-child(1) {
+  top: 24%;
+}
+
+.touch-game-motion span:nth-child(2) {
+  top: 50%;
+  animation-delay: 1.4s;
+}
+
+.touch-game-motion span:nth-child(3) {
+  top: 76%;
+  animation-delay: 2.8s;
+}
+
+@keyframes touch-game-scan {
+  to {
+    transform: translateX(148vw);
+  }
+}
+
+.touch-exit-edge {
+  position: absolute;
+  inset: 0 auto 0 0;
+  z-index: 12;
+  width: 10%;
+  border: 0;
+  opacity: 0;
+  background: transparent;
+  cursor: default;
+}
+
+.touch-exit-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(2, 8, 13, 0.86);
+}
+
+.touch-exit-keypad {
+  width: min(480px, 92vw);
+  display: grid;
+  gap: 18px;
+  padding: 28px;
+  border: 1px solid #31556c;
+  border-radius: 8px;
+  background: #0b1b27;
+  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.46);
+  text-align: center;
+}
+
+.touch-exit-keypad h2 {
+  margin: 0;
+  font-size: 30px;
+}
+
+.touch-exit-code {
+  min-height: 58px;
+  display: grid;
+  place-items: center;
+  border: 1px solid #29495e;
+  border-radius: 6px;
+  color: #dff6ff;
+  background: #07131c;
+  font-size: 34px;
+  letter-spacing: 10px;
+}
+
+.touch-exit-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.touch-exit-grid button,
+.touch-exit-actions button {
+  min-height: 64px;
+  border: 1px solid #34566b;
+  border-radius: 7px;
+  color: #eaf8ff;
+  background: #112a3a;
+  cursor: pointer;
+  font-size: 21px;
+  font-weight: 720;
+}
+
+.touch-exit-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.touch-exit-actions .confirm {
+  border-color: #4387aa;
+  background: #236783;
+}
+
+.touch-exit-error {
+  margin: 0;
+  color: #ffadb5;
 }
 
 @media (max-width: 760px) {

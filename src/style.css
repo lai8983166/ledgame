@@ -82,6 +82,7 @@ button {
 
 .nav-tabs {
   display: inline-flex;
+  min-width: 0;
   gap: 8px;
   padding: 6px;
   border-radius: 18px;
@@ -92,9 +93,9 @@ button {
 }
 
 .nav-tab {
-  min-width: 96px;
+  min-width: 82px;
   min-height: 40px;
-  padding: 0 18px;
+  padding: 0 13px;
   border: 0;
   border-radius: 14px;
   color: #7a8492;
@@ -115,6 +116,30 @@ button {
   box-shadow:
     7px 7px 14px rgba(176, 185, 198, 0.38),
     -7px -7px 14px rgba(255, 255, 255, 0.96);
+}
+
+@media (max-width: 1220px) {
+  .app-shell {
+    padding-right: 14px;
+    padding-left: 14px;
+  }
+
+  .brand-mark {
+    display: none;
+  }
+
+  .nav-tabs {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .nav-tab {
+    min-width: 0;
+    padding-right: 10px;
+    padding-left: 10px;
+    font-size: 13px;
+    white-space: nowrap;
+  }
 }
 
 .nav-help-wrapper {
@@ -175,6 +200,42 @@ button {
 .nav-help-item.active {
   color: #315d91;
   background: #dfe8f4;
+}
+
+.nav-help-item:disabled {
+  color: #a2aab4;
+  background: #edf0f3;
+  cursor: not-allowed;
+}
+
+.app-global-error {
+  position: fixed;
+  top: 18px;
+  left: 50%;
+  z-index: 90;
+  min-width: min(520px, calc(100vw - 32px));
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 14px;
+  transform: translateX(-50%);
+  border: 1px solid #d7a4a8;
+  border-radius: 7px;
+  color: #8f3038;
+  background: #fff3f4;
+  box-shadow: 0 12px 32px rgba(89, 43, 48, 0.2);
+}
+
+.app-global-error button {
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 5px;
+  color: inherit;
+  background: #f2dfe1;
+  cursor: pointer;
+  font-size: 20px;
 }
 
 @media (max-width: 900px) {
