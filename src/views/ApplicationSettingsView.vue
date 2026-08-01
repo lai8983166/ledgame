@@ -1,9 +1,15 @@
 <script setup>
 import { computed, onMounted, onUnmounted, reactive, ref } from "vue";
 import { useI18n } from "vue-i18n";
+import { SUPPORTED_LOCALES } from "../i18n/index.js";
+import { createApplicationSettingsPatch } from "../lib/applicationSettingsPatch.js";
 
-const { t } = useI18n();
+const { t, locale } = useI18n({ useScope: "global" });
 const api = window.appSettings;
+const defaultIdlePrompt = () => t("applicationSettings.defaultIdlePrompt");
+const defaultPromptTexts = () => Object.fromEntries(
+  SUPPORTED_LOCALES.map((item) => [item, item === locale.value ? defaultIdlePrompt() : ""]),
+);
 const loading = ref(true);
 const saving = ref(false);
 const errorMessage = ref("");
@@ -11,15 +17,32 @@ const savedMessage = ref("");
 const saved = ref({
   entryMethod: "touch",
   mode: "debug",
+  touchIdlePromptTexts: defaultPromptTexts(),
+  touchIdlePromptFontSize: 72,
 });
 const draft = reactive({
   entryMethod: "touch",
   mode: "debug",
+  touchIdlePromptTexts: defaultPromptTexts(),
+  touchIdlePromptFontSize: 72,
 });
 let removeSettingsListener = null;
 
+const currentIdlePromptText = computed({
+  get: () => draft.touchIdlePromptTexts[locale.value] || defaultIdlePrompt(),
+  set: (value) => {
+    draft.touchIdlePromptTexts = {
+      ...draft.touchIdlePromptTexts,
+      [locale.value]: value,
+    };
+  },
+});
+
 const dirty = computed(
-  () => draft.entryMethod !== saved.value.entryMethod || draft.mode !== saved.value.mode,
+  () => draft.entryMethod !== saved.value.entryMethod
+    || draft.mode !== saved.value.mode
+    || JSON.stringify(draft.touchIdlePromptTexts) !== JSON.stringify(saved.value.touchIdlePromptTexts)
+    || draft.touchIdlePromptFontSize !== saved.value.touchIdlePromptFontSize,
 );
 
 onMounted(async () => {
@@ -43,15 +66,35 @@ onUnmounted(() => {
 });
 
 function applySettings(settings) {
+  const source = settings?.touchIdlePromptTexts && typeof settings.touchIdlePromptTexts === "object"
+    ? settings.touchIdlePromptTexts
+    : typeof settings?.touchIdlePromptText === "string"
+      ? { [locale.value]: settings.touchIdlePromptText }
+      : {};
+  const promptTexts = Object.fromEntries(
+    SUPPORTED_LOCALES.map((item) => [
+      item,
+      typeof source[item] === "string" && source[item].trim()
+        ? source[item].trim()
+        : item === locale.value ? defaultIdlePrompt() : "",
+    ]),
+  );
+  const promptFontSize = Number(settings?.touchIdlePromptFontSize);
   const normalized = {
     entryMethod: ["touch", "coin", "wristband"].includes(settings?.entryMethod)
       ? settings.entryMethod
       : "touch",
     mode: settings?.mode === "game" ? "game" : "debug",
+    touchIdlePromptTexts: promptTexts,
+    touchIdlePromptFontSize: Number.isInteger(promptFontSize) && promptFontSize >= 32 && promptFontSize <= 200
+      ? promptFontSize
+      : 72,
   };
   saved.value = normalized;
   draft.entryMethod = normalized.entryMethod;
   draft.mode = normalized.mode;
+  draft.touchIdlePromptTexts = normalized.touchIdlePromptTexts;
+  draft.touchIdlePromptFontSize = normalized.touchIdlePromptFontSize;
 }
 
 async function saveSettings() {
@@ -61,10 +104,7 @@ async function saveSettings() {
   savedMessage.value = "";
   try {
     applySettings(
-      await api.update({
-        entryMethod: draft.entryMethod,
-        mode: draft.mode,
-      }),
+      await api.update(createApplicationSettingsPatch(draft)),
     );
     savedMessage.value = t("applicationSettings.saved");
   } catch (error) {
@@ -100,6 +140,35 @@ async function saveSettings() {
             <option value="wristband">{{ t("applicationSettings.entryMethods.wristband") }}</option>
           </select>
           <small>{{ t("applicationSettings.entryMethodHint") }}</small>
+        </label>
+
+        <label class="application-settings-field">
+          <span>{{ t("applicationSettings.idlePromptText") }}</span>
+          <input
+            v-model="currentIdlePromptText"
+            type="text"
+            maxlength="48"
+            autocomplete="off"
+          />
+          <small>{{ t("applicationSettings.idlePromptTextHint") }}</small>
+        </label>
+
+        <label class="application-settings-field">
+          <span>{{ t("applicationSettings.idlePromptFontSize") }}</span>
+          <span class="application-settings-input-row">
+            <input
+              v-model.number="draft.touchIdlePromptFontSize"
+              type="number"
+              min="32"
+              max="200"
+              step="1"
+              inputmode="numeric"
+            />
+            <span class="application-settings-range-hint">
+              {{ t("applicationSettings.idlePromptFontSizeRange") }}
+            </span>
+          </span>
+          <small>{{ t("applicationSettings.idlePromptFontSizeHint") }}</small>
         </label>
 
         <label class="application-settings-field">
@@ -172,6 +241,39 @@ async function saveSettings() {
   color: #344151;
   background: #fff;
   font: inherit;
+}
+
+.application-settings-field input {
+  min-height: 46px;
+  padding: 0 13px;
+  border: 1px solid #b9c4d1;
+  border-radius: 6px;
+  color: #344151;
+  background: #fff;
+  font: inherit;
+}
+
+.application-settings-input-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.application-settings-input-row input {
+  flex: 1;
+  min-width: 0;
+}
+
+.application-settings-range-hint {
+  flex: none;
+  padding: 5px 9px;
+  border: 1px solid #c8d4e2;
+  border-radius: 5px;
+  color: #536579;
+  background: #eef3f8;
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
 }
 
 .application-settings-field small {

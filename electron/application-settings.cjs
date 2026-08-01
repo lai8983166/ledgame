@@ -2,10 +2,23 @@ const path = require('node:path')
 
 const ENTRY_METHODS = Object.freeze(['touch', 'coin', 'wristband'])
 const APPLICATION_MODES = Object.freeze(['debug', 'game'])
+const TOUCH_IDLE_PROMPT_DEFAULTS = Object.freeze({
+  'zh-CN': '开始游戏',
+  'en-US': 'Start Game',
+  'ru-RU': 'Начать игру',
+  'ko-KR': '게임 시작',
+  'ja-JP': 'ゲームを開始',
+})
+const TOUCH_IDLE_PROMPT_MAX_LENGTH = 48
+const TOUCH_IDLE_PROMPT_FONT_SIZE_DEFAULT = 72
+const TOUCH_IDLE_PROMPT_FONT_SIZE_MIN = 32
+const TOUCH_IDLE_PROMPT_FONT_SIZE_MAX = 200
 const DEFAULT_APPLICATION_SETTINGS = Object.freeze({
   entryMethod: 'touch',
   mode: 'debug',
   secondaryDisplay: null,
+  touchIdlePromptTexts: TOUCH_IDLE_PROMPT_DEFAULTS,
+  touchIdlePromptFontSize: TOUCH_IDLE_PROMPT_FONT_SIZE_DEFAULT,
 })
 
 function normalizeBounds(value) {
@@ -40,6 +53,26 @@ function normalizeSecondaryDisplay(value) {
   }
 }
 
+function normalizeTouchIdlePromptTexts(value) {
+  const source = value && typeof value === 'object'
+    ? value
+    : typeof value === 'string'
+      ? { 'zh-CN': value }
+      : {}
+  return Object.fromEntries(Object.entries(TOUCH_IDLE_PROMPT_DEFAULTS).map(([locale, fallback]) => {
+    const text = typeof source[locale] === 'string' ? source[locale].trim() : ''
+    return [locale, text && Array.from(text).length <= TOUCH_IDLE_PROMPT_MAX_LENGTH ? text : fallback]
+  }))
+}
+
+function normalizeTouchIdlePromptFontSize(value) {
+  return Number.isInteger(value)
+    && value >= TOUCH_IDLE_PROMPT_FONT_SIZE_MIN
+    && value <= TOUCH_IDLE_PROMPT_FONT_SIZE_MAX
+    ? value
+    : TOUCH_IDLE_PROMPT_FONT_SIZE_DEFAULT
+}
+
 function normalizeApplicationSettings(value) {
   const source = value && typeof value === 'object' ? value : {}
   return {
@@ -50,6 +83,10 @@ function normalizeApplicationSettings(value) {
       ? source.mode
       : DEFAULT_APPLICATION_SETTINGS.mode,
     secondaryDisplay: normalizeSecondaryDisplay(source.secondaryDisplay),
+    touchIdlePromptTexts: normalizeTouchIdlePromptTexts(
+      source.touchIdlePromptTexts ?? source.touchIdlePromptText,
+    ),
+    touchIdlePromptFontSize: normalizeTouchIdlePromptFontSize(source.touchIdlePromptFontSize),
   }
 }
 
@@ -60,6 +97,32 @@ function validateSettingsPatch(value) {
   }
   if ('mode' in patch && !APPLICATION_MODES.includes(patch.mode)) {
     throw new Error(`Unsupported application mode: ${patch.mode}`)
+  }
+  if ('touchIdlePromptTexts' in patch || 'touchIdlePromptText' in patch) {
+    const value = patch.touchIdlePromptTexts ?? patch.touchIdlePromptText
+    if (!value || typeof value !== 'object' && typeof value !== 'string') {
+      throw new Error('Touch idle prompt texts must be a locale map or string')
+    }
+    const entries = typeof value === 'string' ? [['zh-CN', value]] : Object.entries(value)
+    for (const [locale, rawText] of entries) {
+      if (!(locale in TOUCH_IDLE_PROMPT_DEFAULTS)) continue
+      if (typeof rawText !== 'string' || !rawText.trim()) {
+        throw new Error(`Touch idle prompt text for ${locale} must not be blank`)
+      }
+      if (Array.from(rawText.trim()).length > TOUCH_IDLE_PROMPT_MAX_LENGTH) {
+        throw new Error(`Touch idle prompt text for ${locale} must be at most ${TOUCH_IDLE_PROMPT_MAX_LENGTH} characters`)
+      }
+    }
+  }
+  if (
+    'touchIdlePromptFontSize' in patch &&
+    (!Number.isInteger(patch.touchIdlePromptFontSize)
+      || patch.touchIdlePromptFontSize < TOUCH_IDLE_PROMPT_FONT_SIZE_MIN
+      || patch.touchIdlePromptFontSize > TOUCH_IDLE_PROMPT_FONT_SIZE_MAX)
+  ) {
+    throw new Error(
+      `Touch idle prompt font size must be an integer between ${TOUCH_IDLE_PROMPT_FONT_SIZE_MIN} and ${TOUCH_IDLE_PROMPT_FONT_SIZE_MAX}`,
+    )
   }
   if (
     'secondaryDisplay' in patch &&
@@ -123,6 +186,11 @@ module.exports = {
   APPLICATION_MODES,
   DEFAULT_APPLICATION_SETTINGS,
   ENTRY_METHODS,
+  TOUCH_IDLE_PROMPT_DEFAULTS,
+  TOUCH_IDLE_PROMPT_FONT_SIZE_DEFAULT,
+  TOUCH_IDLE_PROMPT_FONT_SIZE_MAX,
+  TOUCH_IDLE_PROMPT_FONT_SIZE_MIN,
+  TOUCH_IDLE_PROMPT_MAX_LENGTH,
   createApplicationSettingsStore,
   normalizeApplicationSettings,
   normalizeSecondaryDisplay,

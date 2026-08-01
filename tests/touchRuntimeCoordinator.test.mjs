@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   confirmTouchPreparationTransaction,
   createTouchStateCoordinator,
+  returnTouchRuntimeToIdle,
 } from "../src/lib/touchRuntimeCoordinator.js";
 
 function deferred() {
@@ -129,4 +130,69 @@ test("failed Touch confirmation recovers after applying the accepted option upda
 
   assert.deepEqual(appliedStates, [{ revision: 8, phase: "PREPARING" }]);
   assert.deepEqual(recovered, [failure]);
+});
+
+test("Touch return-to-idle cancels preparation before entering system idle", async () => {
+  const calls = [];
+  const appliedStates = [];
+
+  await returnTouchRuntimeToIdle({
+    api: {
+      async cancelPreparation(sessionId) {
+        calls.push(["cancel", sessionId]);
+        return { data: { engineState: "IDLE", revision: 2 } };
+      },
+      async startSystemIdle() {
+        calls.push(["idle"]);
+        return { data: { engineState: "IDLE", revision: 3 } };
+      },
+    },
+    engineState: "PREPARING",
+    preparationSessionId: "prep-2",
+    applyState: (state) => appliedStates.push(state),
+  });
+
+  assert.deepEqual(calls, [["cancel", "prep-2"], ["idle"]]);
+  assert.deepEqual(appliedStates.map((state) => state.revision), [2, 3]);
+});
+
+test("Touch return-to-idle stops an active game before entering system idle", async () => {
+  const calls = [];
+
+  await returnTouchRuntimeToIdle({
+    api: {
+      async stopTouchGame() {
+        calls.push(["stop"]);
+        return { data: { engineState: "STOPPED" } };
+      },
+      async startSystemIdle() {
+        calls.push(["idle"]);
+        return { data: { engineState: "IDLE" } };
+      },
+    },
+    engineState: "RUNNING",
+    applyState() {},
+  });
+
+  assert.deepEqual(calls, [["stop"], ["idle"]]);
+});
+
+test("Touch return-to-idle does not stop an inactive runtime", async () => {
+  const calls = [];
+
+  await returnTouchRuntimeToIdle({
+    api: {
+      async stopTouchGame() {
+        calls.push(["stop"]);
+      },
+      async startSystemIdle() {
+        calls.push(["idle"]);
+        return { data: { engineState: "IDLE" } };
+      },
+    },
+    engineState: "STOPPED",
+    applyState() {},
+  });
+
+  assert.deepEqual(calls, [["idle"]]);
 });

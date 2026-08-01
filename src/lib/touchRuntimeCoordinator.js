@@ -2,6 +2,8 @@ function unwrapResult(result) {
   return result?.data ?? result;
 }
 
+const ACTIVE_GAME_STATES = new Set(["STARTING", "RUNNING", "SETTLING"]);
+
 export function createTouchStateCoordinator({ readState, applyState }) {
   let broadcastVersion = 0;
 
@@ -40,4 +42,24 @@ export async function confirmTouchPreparationTransaction({
     await recover?.(error);
     throw error;
   }
+}
+
+export async function returnTouchRuntimeToIdle({
+  api,
+  engineState,
+  preparationSessionId,
+  applyState,
+}) {
+  const state = String(engineState || "").trim().toUpperCase();
+  if (state === "PREPARING" && preparationSessionId) {
+    const cancelled = await api.cancelPreparation(preparationSessionId);
+    applyState(unwrapResult(cancelled));
+  } else if (ACTIVE_GAME_STATES.has(state)) {
+    const stopped = await api.stopTouchGame();
+    applyState(unwrapResult(stopped));
+  }
+
+  const idled = await api.startSystemIdle();
+  applyState(unwrapResult(idled));
+  return idled;
 }

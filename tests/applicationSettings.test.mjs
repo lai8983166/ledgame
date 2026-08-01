@@ -12,11 +12,21 @@ const {
   normalizeApplicationSettings,
 } = require("../electron/application-settings.cjs");
 
+const DEFAULT_PROMPT_TEXTS = {
+  "zh-CN": "开始游戏",
+  "en-US": "Start Game",
+  "ru-RU": "Начать игру",
+  "ko-KR": "게임 시작",
+  "ja-JP": "ゲームを開始",
+};
+
 test("application settings normalize missing and unsupported fields to safe defaults", () => {
   assert.deepEqual(normalizeApplicationSettings(null), {
     entryMethod: "touch",
     mode: "debug",
     secondaryDisplay: null,
+    touchIdlePromptTexts: DEFAULT_PROMPT_TEXTS,
+    touchIdlePromptFontSize: 72,
   });
   assert.deepEqual(
     normalizeApplicationSettings({
@@ -28,6 +38,8 @@ test("application settings normalize missing and unsupported fields to safe defa
       entryMethod: "touch",
       mode: "game",
       secondaryDisplay: null,
+      touchIdlePromptTexts: DEFAULT_PROMPT_TEXTS,
+      touchIdlePromptFontSize: 72,
     },
   );
 });
@@ -45,9 +57,18 @@ test("application settings persist valid values atomically and restore across in
         label: "Hall Screen",
         bounds: { x: 1920, y: 0, width: 1920, height: 1080 },
       },
+      touchIdlePromptTexts: {
+        ...DEFAULT_PROMPT_TEXTS,
+        "zh-CN": "准备开始",
+        "en-US": "Get Ready",
+      },
+      touchIdlePromptFontSize: 96,
     });
     assert.equal(saved.entryMethod, "wristband");
     assert.equal(saved.mode, "game");
+    assert.equal(saved.touchIdlePromptTexts["zh-CN"], "准备开始");
+    assert.equal(saved.touchIdlePromptTexts["en-US"], "Get Ready");
+    assert.equal(saved.touchIdlePromptFontSize, 96);
     assert.deepEqual(JSON.parse(await readFile(settingsPath, "utf8")), saved);
     assert.deepEqual(
       await createApplicationSettingsStore({ fs, settingsPath }).get(),
@@ -68,13 +89,35 @@ test("application settings reject invalid writes and recover damaged JSON", asyn
       entryMethod: "touch",
       mode: "debug",
       secondaryDisplay: null,
+      touchIdlePromptTexts: DEFAULT_PROMPT_TEXTS,
+      touchIdlePromptFontSize: 72,
     });
     await assert.rejects(() => store.update({ mode: "operator" }), /Unsupported application mode/);
     await assert.rejects(
       () => store.update({ entryMethod: "card" }),
       /Unsupported entry method/,
     );
+    await assert.rejects(
+      () => store.update({ touchIdlePromptTexts: { "zh-CN": "   " } }),
+      /must not be blank/,
+    );
+    await assert.rejects(
+      () => store.update({ touchIdlePromptTexts: { "zh-CN": "字".repeat(49) } }),
+      /at most 48/,
+    );
+    const maximumFontSize = await store.update({ touchIdlePromptFontSize: 200 });
+    assert.equal(maximumFontSize.touchIdlePromptFontSize, 200);
+    await assert.rejects(
+      () => store.update({ touchIdlePromptFontSize: 201 }),
+      /between 32 and 200/,
+    );
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
+});
+
+test("application settings migrate the legacy single idle prompt into localized defaults", () => {
+  const normalized = normalizeApplicationSettings({ touchIdlePromptText: "自定义开始" });
+  assert.equal(normalized.touchIdlePromptTexts["zh-CN"], "自定义开始");
+  assert.equal(normalized.touchIdlePromptTexts["en-US"], "Start Game");
 });

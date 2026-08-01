@@ -116,14 +116,25 @@ test("preload exposes removable language listeners without filesystem access", a
 
 test("language view exposes all supported locales with country flags", async () => {
   const source = await readFile(new URL("../src/views/LanguageView.vue", import.meta.url), "utf8");
+  const panel = await readFile(new URL("../src/components/LanguageSelectionPanel.vue", import.meta.url), "utf8");
+  const options = await readFile(new URL("../src/lib/applicationLanguages.js", import.meta.url), "utf8");
   for (const locale of SUPPORTED_LOCALES) {
-    assert.match(source, new RegExp(locale));
+    assert.match(options, new RegExp(locale));
   }
   for (const flag of ["cn.svg", "us.svg", "ru.svg", "kr.svg", "jp.svg"]) {
-    assert.match(source, new RegExp(`assets/flags/${flag.replace(".", "\\.")}`));
+    assert.match(options, new RegExp(`assets/flags/${flag.replace(".", "\\.")}`));
   }
-  assert.match(source, /<img class="language-option-flag"/);
-  assert.match(source, /language-option-flag/);
+  assert.match(source, /LanguageSelectionPanel/);
+  assert.match(panel, /<img class="language-option-flag"/);
+  assert.match(panel, /setApplicationLocale/);
+  assert.match(panel, /language-option-flag/);
+});
+
+test("Touch idle prompt reads the active application locale", async () => {
+  const source = await readFile(new URL("../src/views/LedGameTouchView.vue", import.meta.url), "utf8");
+  assert.match(source, /useI18n\(\{ useScope: "global" \}\)/);
+  assert.match(source, /touchIdlePromptTexts\.value\[locale\.value\]/);
+  assert.match(source, /defaultIdlePrompt/);
 });
 
 test("renderer applies locale immediately, preserves draft state, and cleans repeated listeners", async () => {
