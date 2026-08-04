@@ -1728,12 +1728,13 @@ button:disabled {
 
 .level-sequence-row {
   display: grid;
-  grid-template-columns: 36px auto minmax(0, 1fr);
+  grid-template-columns: auto auto minmax(0, 1fr);
   align-items: start;
   gap: 8px;
   min-width: 0;
 }
 
+.level-structure-actions,
 .level-reorder-actions {
   position: relative;
   z-index: 5;
@@ -1741,24 +1742,29 @@ button:disabled {
   gap: 4px;
 }
 
+.level-structure-actions .icon-add-button,
 .level-reorder-actions .icon-add-button {
   width: 32px;
   min-width: 32px;
   padding: 0;
 }
 
+.level-structure-actions .icon-add-button[data-tip]::after,
 .level-reorder-actions .icon-add-button[data-tip]::after {
   top: calc(100% + 8px);
   bottom: auto;
   transform: translateX(50%) translateY(-3px);
 }
 
+.level-structure-actions .icon-add-button[data-tip]:hover::after,
+.level-structure-actions .icon-add-button[data-tip]:focus-visible::after,
 .level-reorder-actions .icon-add-button[data-tip]:hover::after,
 .level-reorder-actions .icon-add-button[data-tip]:focus-visible::after {
   transform: translateX(50%) translateY(0);
 }
 
 .level-sequence-row .sequence-list {
+  width: 100%;
   padding-top: 0;
 }
 

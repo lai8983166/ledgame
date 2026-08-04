@@ -60,7 +60,8 @@ test("matrix edits use RGB transactions while frame and level structure clear hi
     ["loadEditor", "waitForEditorFonts"],
     ["importFrame", "runEditorAction"],
     ["addLevel", "moveActiveLevelUp"],
-    ["moveActiveLevel", "addFrame"],
+    ["moveActiveLevel", "deleteCurrentLevel"],
+    ["deleteCurrentLevel", "addFrame"],
     ["addFrame", "deleteCurrentFrame"],
     ["deleteCurrentFrame", "confirmDestructiveAction"],
     ["executeWholeFrameCopy", "replaceFrameObjects"],
@@ -82,6 +83,25 @@ test("RGB history restores only matrices and refreshes derived editor state", ()
   assert.match(restore, /resetMatrixFrameCache\(\)/);
   assert.match(restore, /syncSelectedObject\(\)/);
   assert.match(restore, /scheduleMatrixCacheWarmup/);
+});
+
+test("level deletion is confirmed and disabled when only one level remains", () => {
+  const deletion = functionSource("deleteCurrentLevel", "addFrame");
+  assert.match(deletion, /confirmDestructiveAction\(t\("simple\.deleteLevelConfirm"/);
+  assert.match(deletion, /deleteLevelAt\(document\.value\.levels, activeLevelIndex\.value\)/);
+  assert.match(deletion, /activeFrameIndex\.value = 0/);
+  assert.match(deletion, /clearRgbEditHistory\(\)/);
+  assert.match(editorSource, /:disabled="Boolean\(busyAction\) \|\| !canDeleteActiveLevel"/);
+  assert.match(editorSource, /@click="deleteCurrentLevel"/);
+  assert.match(editorSource, /class="level-structure-actions"[\s\S]*@click="deleteCurrentLevel"/);
+  assert.match(
+    styleSource,
+    /\.level-sequence-row\s*\{[^}]*grid-template-columns:\s*auto auto minmax\(0, 1fr\)/s,
+  );
+  assert.match(
+    styleSource,
+    /\.level-structure-actions \.icon-add-button\[data-tip\]::after[\s\S]*top:\s*calc\(100% \+ 8px\);[\s\S]*bottom:\s*auto/s,
+  );
 });
 
 test("level reorder tooltips and editor-only disabled styling are visible", () => {

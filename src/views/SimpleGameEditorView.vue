@@ -10,6 +10,8 @@ import { prepareSimpleLevelGif, selectSimpleTopItem } from "../lib/simpleLevelGi
 import { resolveLiveOccupancyCell } from "../lib/simpleOccupancy.js";
 import { createLevelPreviewSnapshot } from "../lib/simpleLevelPreview.js";
 import { createWholeFrameCopyPlan } from "../lib/simpleFrameCopyPlan.js";
+import { insertFrameAfter } from "../lib/simpleFrameSequence.js";
+import { deleteLevelAt } from "../lib/simpleLevelSequence.js";
 import { normalizeLevelOption, validateLevelOption } from "../lib/simpleLevelOptions.js";
 import { createRgbEditHistory } from "../lib/simpleRgbEditHistory.js";
 import { createLatestAsyncTaskGuard } from "../lib/latestAsyncTask.js";
@@ -196,6 +198,9 @@ const colorOptions = computed(() => [
   { index: 2, label: "Color 2", value: normalizeColor(document.value?.color2, "#ff00ff") },
   { index: 3, label: "Color 3", value: normalizeColor(document.value?.color3, "#ffffff") },
 ]);
+const colorSelectionDisabled = computed(
+  () => interactionMode.value !== "add" || selectionMode.value || anchorEditMode.value,
+);
 const interactionModeOptions = computed(() => [
   { value: "add", label: t("simple.modeAdd"), icon: "+", title: t("simple.modeAddTitle") },
   { value: "select-move", label: t("simple.modeSelectMove"), icon: "↖", title: t("simple.modeSelectTitle") },
@@ -1482,6 +1487,14 @@ function selectFrame(index) {
   scheduleMatrixCacheWarmup(index);
 }
 
+function restoreEditorFocus() {
+  window.focus?.();
+  const activeElement = window.document?.activeElement;
+  if (activeElement && typeof activeElement.blur === "function") {
+    activeElement.blur();
+  }
+}
+
 function getFrameIndexFromPointer(event) {
   if (!frames.value.length) {
     return activeFrameIndex.value;
@@ -1540,6 +1553,7 @@ const canMoveActiveLevelUp = computed(() => activeLevelIndex.value > 0);
 const canMoveActiveLevelDown = computed(
   () => activeLevelIndex.value >= 0 && activeLevelIndex.value < levels.value.length - 1,
 );
+const canDeleteActiveLevel = computed(() => levels.value.length > 1);
 
 function moveActiveLevelUp() {
   moveActiveLevel(-1);
@@ -1566,6 +1580,32 @@ function moveActiveLevel(direction) {
   statusMessage.value = t(direction < 0 ? "simple.levelMovedUp" : "simple.levelMovedDown");
 }
 
+function deleteCurrentLevel() {
+  const level = activeLevel.value;
+  if (!level || !canDeleteActiveLevel.value) {
+    return;
+  }
+  const levelName = level.label || `Level ${activeLevelIndex.value + 1}`;
+  const frameCount = level.frameList?.length || 0;
+  if (!confirmDestructiveAction(t("simple.deleteLevelConfirm", { name: levelName, count: frameCount }))) {
+    return;
+  }
+
+  const result = deleteLevelAt(document.value.levels, activeLevelIndex.value);
+  if (!result.deleted) {
+    return;
+  }
+  document.value.levels = result.levels;
+  activeLevelIndex.value = result.activeIndex;
+  activeFrameIndex.value = 0;
+  resetMatrixFrameCache();
+  clearRgbEditHistory();
+  stopSelectionMode();
+  syncSelectedObject();
+  scheduleMatrixCacheWarmup(0);
+  statusMessage.value = t("simple.levelDeleted", { name: levelName });
+}
+
 function addFrame() {
   const level = activeLevel.value;
   if (!level) {
@@ -1578,6 +1618,21 @@ function addFrame() {
   clearRgbEditHistory();
   syncSelectedObject();
   scheduleMatrixCacheWarmup(activeFrameIndex.value);
+}
+
+function addFrameAfterCurrent() {
+  const level = activeLevel.value;
+  if (!level) {
+    return;
+  }
+  level.frameList ||= [];
+  const result = insertFrameAfter(level.frameList, activeFrameIndex.value, createBlankFrame());
+  if (!result.inserted) {
+    return;
+  }
+  invalidateMatrixFrame(level.frameList[result.index]);
+  clearRgbEditHistory();
+  selectFrame(result.index);
 }
 
 function deleteCurrentFrame() {
@@ -1600,7 +1655,9 @@ function deleteCurrentFrame() {
 }
 
 function confirmDestructiveAction(message) {
-  return window.confirm(message);
+  const confirmed = window.confirm(message);
+  restoreEditorFocus();
+  return confirmed;
 }
 
 function applyCurrentRepeatTimesToAllFrames() {
@@ -1618,6 +1675,9 @@ function applyCurrentRepeatTimesToAllFrames() {
 }
 
 function selectColor(index) {
+  if (colorSelectionDisabled.value) {
+    return;
+  }
   selectedColor.value = index;
 }
 
@@ -2084,6 +2144,7 @@ function executeWholeFrameCopy(mode) {
 
   if (mode === "next") {
     selectFrame(plan.targetIndices[0]);
+    nextTick(restoreEditorFocus);
   }
   statusMessage.value = mode === "all"
     ? t("simple.frameCopiedMany", { count: plan.targetIndices.length })
@@ -2784,6 +2845,15 @@ function formatRuntimeSummary(value) {
             <button
               class="icon-add-button"
               type="button"
+              :aria-label="t('simple.addFrameAfter')"
+              :data-tip="t('simple.addFrameAfter')"
+              @click="addFrameAfterCurrent"
+            >
+              +&gt;
+            </button>
+            <button
+              class="icon-add-button"
+              type="button"
               :aria-label="t('simple.copyPreviousFrame')"
               :data-tip="t('simple.copyPreviousFrame')"
               :disabled="activeFrameIndex <= 0"
@@ -2827,7 +2897,7 @@ function formatRuntimeSummary(value) {
               :data-tip="t('simple.exportCurrentFrameJson')"
               @click="exportCurrentFrame"
             >
-              ⬇
+              ⬆
             </button>
             <button
               class="icon-add-button"
@@ -2836,7 +2906,7 @@ function formatRuntimeSummary(value) {
               :data-tip="t('simple.importReplaceFrameJson')"
               @click="importFrame"
             >
-              ⬆
+              ⬇
             </button>
           </div>
         </div>
@@ -2938,9 +3008,21 @@ function formatRuntimeSummary(value) {
 
       <main class="editor-panel editor-center">
         <div class="level-sequence-row">
-          <button class="icon-add-button" type="button" :aria-label="t('simple.addLevel')" :title="t('simple.addLevel')" @click="addLevel">
-            +
-          </button>
+          <div class="level-structure-actions">
+            <button class="icon-add-button" type="button" :aria-label="t('simple.addLevel')" :title="t('simple.addLevel')" @click="addLevel">
+              +
+            </button>
+            <button
+              class="icon-add-button icon-danger-button"
+              type="button"
+              :aria-label="t('simple.deleteCurrentLevel')"
+              :data-tip="t('simple.deleteCurrentLevel')"
+              :disabled="Boolean(busyAction) || !canDeleteActiveLevel"
+              @click="deleteCurrentLevel"
+            >
+              -
+            </button>
+          </div>
           <div class="level-reorder-actions" :aria-label="t('simple.reorderLevels')">
             <button
               class="icon-add-button"
@@ -2997,7 +3079,12 @@ function formatRuntimeSummary(value) {
               <label class="matrix-repeat-field">
                 <span>{{ t("simple.repeat") }}</span>
                 <div class="repeat-times-control">
-                  <input v-model.number="activeFrame.repeatTimes" min="1" type="number" />
+                  <input
+                    :key="`repeat-${activeLevelIndex}-${activeFrameIndex}`"
+                    v-model.number="activeFrame.repeatTimes"
+                    min="1"
+                    type="number"
+                  />
                   <button
                     class="inline-symbol-button"
                     type="button"
@@ -3285,6 +3372,7 @@ function formatRuntimeSummary(value) {
                   :key="color.index"
                   class="palette-option"
                   :class="{ active: selectedColor === color.index }"
+                  :disabled="colorSelectionDisabled"
                   type="button"
                   @click="selectColor(color.index)"
                 >
