@@ -5,10 +5,18 @@ import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
 const {
+  debugGameSplitBounds,
   gameFlowWindowPlan,
   isTouchExitCode,
   preparationRequest,
 } = require("../electron/game-flow.cjs");
+
+test("debug game mode splits the selected work area into touch-left and debug-right panes", () => {
+  assert.deepEqual(debugGameSplitBounds({ x: 10, y: 20, width: 1919, height: 1079 }), {
+    touch: { x: 10, y: 20, width: 959, height: 1079 },
+    debug: { x: 969, y: 20, width: 960, height: 1079 },
+  });
+});
 
 test("game flow window plan preserves debug defaults and isolates game mode", () => {
   assert.deepEqual(gameFlowWindowPlan(undefined), {
@@ -105,4 +113,24 @@ test("secondary window stays single-instance, targets explicit bounds, and close
   assert.match(displayRemovalSource, /secondaryWindowDisplayId === String\(display\?\.id\)/);
   assert.match(displayRemovalSource, /detachedWindow\.close\(\)/);
   assert.doesNotMatch(displayRemovalSource, /getPrimaryDisplay|createSecondaryWindow/);
+});
+
+test("debug game entry applies the split bounds to both auxiliary windows", async () => {
+  const source = await readFile(new URL("../electron/main.cjs", import.meta.url), "utf8");
+  const debugWindowSource = source.slice(
+    source.indexOf("function createDebugWindow("),
+    source.indexOf("function normalizeTouchPresentationMode("),
+  );
+  const enterGameFlowSource = source.slice(
+    source.indexOf("async function enterGameFlow()"),
+    source.indexOf("function executePreparationRequest"),
+  );
+
+  assert.match(source, /function resolveDebugGameSplitBounds\(\)/);
+  assert.match(source, /screen\.getDisplayMatching\(mainWindow\.getBounds\(\)\)/);
+  assert.match(debugWindowSource, /applyWindowBounds\(debugWindow, layoutBounds, \{ split: true \}\)/);
+  assert.match(debugWindowSource, /resizable: !layoutBounds/);
+  assert.match(enterGameFlowSource, /const splitBounds = windowPlan\.openDebugPanel \? resolveDebugGameSplitBounds\(\) : null/);
+  assert.match(enterGameFlowSource, /createDebugWindow\(splitBounds\.debug\)/);
+  assert.match(enterGameFlowSource, /createTouchWindow\(windowPlan\.presentationMode, splitBounds\?\.touch\)/);
 });

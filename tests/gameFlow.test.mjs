@@ -191,8 +191,8 @@ test("full game entry keeps the Touch idle video active across auxiliary windows
 
   assert.match(createTouchWindow, /backgroundThrottling:\s*false/);
   assert.match(enterGameFlow, /windowPlan\.openDebugPanel/);
-  assert.match(enterGameFlow, /createDebugWindow\(\)/);
-  assert.match(enterGameFlow, /createTouchWindow\(windowPlan\.presentationMode\)/);
+  assert.match(enterGameFlow, /createDebugWindow\([^)]*splitBounds\.debug/);
+  assert.match(enterGameFlow, /createTouchWindow\(windowPlan\.presentationMode, splitBounds\?\.touch\)/);
   assert.match(touchSource, /visibilitychange/);
   assert.match(touchSource, /resumeIdleVideoWhenVisible/);
 });

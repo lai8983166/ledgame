@@ -8,6 +8,14 @@ const editorSource = await readFile(
   new URL("../src/views/SimpleGameEditorView.vue", import.meta.url),
   "utf8",
 );
+const preloadSource = await readFile(
+  new URL("../electron/preload.cjs", import.meta.url),
+  "utf8",
+);
+const mainSource = await readFile(
+  new URL("../electron/main.cjs", import.meta.url),
+  "utf8",
+);
 
 function functionSource(name, nextName) {
   const start = editorSource.indexOf(`function ${name}`);
@@ -71,8 +79,25 @@ test("destructive confirmation restores renderer focus after Electron dialogs", 
   assert.match(confirmation, /const confirmed = window\.confirm\(message\)/);
   assert.match(confirmation, /restoreEditorFocus\(\)/);
   const focus = functionSource("restoreEditorFocus", "getFrameIndexFromPointer");
+  assert.match(focus, /window\.ledGame\?\.restoreFocus\?\.\(\)/);
   assert.match(focus, /window\.focus\?\.\(\)/);
   assert.match(focus, /activeElement\.blur\(\)/);
+  assert.match(preloadSource, /restoreFocus: \(\) => ipcRenderer\.invoke\('window:restore-focus'\)/);
+  assert.match(mainSource, /ipcMain\.handle\('window:restore-focus', \(event\) =>/);
+  assert.match(mainSource, /targetWindow\.focus\(\)/);
+  assert.match(mainSource, /targetWindow\.webContents\.focus\(\)/);
+
+  for (const [name, nextName] of [
+    ["deleteCurrentLevel", "addFrame"],
+    ["deleteCurrentFrame", "confirmDestructiveAction"],
+    ["deleteSelectedObject", "moveSelectedObjectLayerUp"],
+  ]) {
+    assert.match(
+      functionSource(name, nextName),
+      /nextTick\(restoreEditorFocus\)/,
+      `${name} must restore renderer focus after Vue updates`,
+    );
+  }
 });
 
 test("color controls are disabled outside add mode and import/export icons follow data flow", () => {

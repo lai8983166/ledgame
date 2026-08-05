@@ -79,6 +79,20 @@ function gameFlowWindowPlan(mode) {
   }
 }
 
+function debugGameSplitBounds(workArea) {
+  const source = workArea && typeof workArea === 'object' ? workArea : {}
+  const x = Number.isFinite(Number(source.x)) ? Math.trunc(Number(source.x)) : 0
+  const y = Number.isFinite(Number(source.y)) ? Math.trunc(Number(source.y)) : 0
+  const width = Math.max(0, Math.trunc(Number(source.width) || 0))
+  const height = Math.max(0, Math.trunc(Number(source.height) || 0))
+  const touchWidth = Math.floor(width / 2)
+
+  return {
+    touch: { x, y, width: touchWidth, height },
+    debug: { x: x + touchWidth, y, width: width - touchWidth, height },
+  }
+}
+
 function isTouchExitCode(value) {
   return String(value ?? '') === '888888'
 }
@@ -100,6 +114,7 @@ function detectWindowKind(search) {
 
 module.exports = {
   detectWindowKind,
+  debugGameSplitBounds,
   gameFlowWindowPlan,
   hasTermination,
   isActiveGameFlow,

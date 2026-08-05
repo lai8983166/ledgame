@@ -6,6 +6,7 @@ const fs = require('node:fs/promises')
 const { pathToFileURL } = require('node:url')
 const { app, BrowserWindow, dialog, ipcMain, Menu, protocol, net: electronNet, screen } = require('electron')
 const {
+  debugGameSplitBounds,
   gameFlowWindowPlan,
   isTouchExitCode,
   preparationRequest,
@@ -224,6 +225,22 @@ function resolveWindowBounds({ targetWidth, targetHeight, minWidth, minHeight })
   }
 }
 
+function resolveDebugGameSplitBounds() {
+  const display = mainWindow && !mainWindow.isDestroyed()
+    ? screen.getDisplayMatching(mainWindow.getBounds())
+    : screen.getPrimaryDisplay()
+  return debugGameSplitBounds(display.workArea)
+}
+
+function applyWindowBounds(targetWindow, bounds, { split = false } = {}) {
+  if (!targetWindow || targetWindow.isDestroyed() || !bounds) {
+    return
+  }
+  targetWindow.setFullScreen(false)
+  targetWindow.setResizable(!split)
+  targetWindow.setBounds(bounds)
+}
+
 function logWindowGeometry(window, label) {
   if (!window || window.isDestroyed()) {
     return
@@ -302,13 +319,16 @@ function createWindow() {
   }
 }
 
-function createDebugWindow() {
+function createDebugWindow(layoutBounds = null) {
   if (debugWindow && !debugWindow.isDestroyed()) {
+    if (layoutBounds) {
+      applyWindowBounds(debugWindow, layoutBounds, { split: true })
+    }
     debugWindow.focus()
     return
   }
 
-  const bounds = resolveWindowBounds({
+  const bounds = layoutBounds || resolveWindowBounds({
     targetWidth: 1380,
     targetHeight: 920,
     minWidth: 720,
@@ -318,12 +338,13 @@ function createDebugWindow() {
   debugWindow = new BrowserWindow({
     width: bounds.width,
     height: bounds.height,
-    minWidth: bounds.minWidth,
-    minHeight: bounds.minHeight,
+    minWidth: layoutBounds ? Math.min(720, bounds.width) : bounds.minWidth,
+    minHeight: layoutBounds ? Math.min(640, bounds.height) : bounds.minHeight,
     x: bounds.x,
     y: bounds.y,
     useContentSize: true,
-    center: true,
+    center: !layoutBounds,
+    resizable: !layoutBounds,
     title: 'LED Debug Panel',
     backgroundColor: '#0f1115',
     autoHideMenuBar: false,
@@ -389,15 +410,18 @@ function activateTouchWindow(targetWindow = touchWindow, mode = touchPresentatio
   targetWindow.webContents.focus()
 }
 
-function createTouchWindow(mode = 'debug') {
+function createTouchWindow(mode = 'debug', layoutBounds = null) {
   const presentationMode = normalizeTouchPresentationMode(mode)
   if (touchWindow && !touchWindow.isDestroyed()) {
+    if (layoutBounds) {
+      applyWindowBounds(touchWindow, layoutBounds, { split: true })
+    }
     activateTouchWindow(touchWindow, presentationMode)
     return touchWindow
   }
   touchPresentationMode = presentationMode
 
-  const bounds = resolveWindowBounds({
+  const bounds = layoutBounds || resolveWindowBounds({
     targetWidth: 960,
     targetHeight: 720,
     minWidth: 640,
@@ -407,12 +431,13 @@ function createTouchWindow(mode = 'debug') {
   touchWindow = new BrowserWindow({
     width: bounds.width,
     height: bounds.height,
-    minWidth: bounds.minWidth,
-    minHeight: bounds.minHeight,
+    minWidth: layoutBounds ? Math.min(640, bounds.width) : bounds.minWidth,
+    minHeight: layoutBounds ? Math.min(480, bounds.height) : bounds.minHeight,
     x: bounds.x,
     y: bounds.y,
     useContentSize: true,
-    center: true,
+    center: !layoutBounds,
+    resizable: !layoutBounds,
     title: 'LED Game Touch',
     backgroundColor: '#071018',
     autoHideMenuBar: false,
@@ -1325,10 +1350,11 @@ async function enterGameFlow() {
   const settings = await applicationSettings.get()
   currentEntryMethod = settings.entryMethod
   const windowPlan = gameFlowWindowPlan(settings.mode)
+  const splitBounds = windowPlan.openDebugPanel ? resolveDebugGameSplitBounds() : null
   if (windowPlan.openDebugPanel) {
-    createDebugWindow()
+    createDebugWindow(splitBounds.debug)
   }
-  createTouchWindow(windowPlan.presentationMode)
+  createTouchWindow(windowPlan.presentationMode, splitBounds?.touch)
   const current = await requestCurrentGameState()
   if (shouldInitializeSystemIdle(current?.data)) {
     return engineStateRequest('/engine/game/idle', { method: 'POST' })
@@ -1532,6 +1558,33 @@ function registerMediaProtocol() {
 
 ipcMain.handle('open-debug-panel', () => {
   createDebugWindow()
+})
+ipcMain.handle('window:restore-focus', (event) => {
+  const targetWindow = BrowserWindow.fromWebContents(event.sender)
+  if (!targetWindow || targetWindow.isDestroyed()) {
+    return false
+  }
+
+  const focusWindow = () => {
+    if (targetWindow.isDestroyed()) {
+      return
+    }
+    targetWindow.setFocusable(true)
+    if (targetWindow.isMinimized()) {
+      targetWindow.restore()
+    }
+    if (!targetWindow.isVisible()) {
+      targetWindow.show()
+    }
+    targetWindow.moveTop()
+    targetWindow.focus()
+    targetWindow.webContents.focus()
+  }
+
+  focusWindow()
+  setImmediate(focusWindow)
+  setTimeout(focusWindow, 50)
+  return true
 })
 ipcMain.handle('game-flow:enter', () => enterGameFlow())
 

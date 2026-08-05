@@ -1488,10 +1488,20 @@ function selectFrame(index) {
 }
 
 function restoreEditorFocus() {
+  const restoreWindowFocus = window.ledGame?.restoreFocus?.();
   window.focus?.();
   const activeElement = window.document?.activeElement;
   if (activeElement && typeof activeElement.blur === "function") {
     activeElement.blur();
+  }
+  if (restoreWindowFocus && typeof restoreWindowFocus.then === "function") {
+    restoreWindowFocus.then(() => {
+      window.focus?.();
+      const currentActiveElement = window.document?.activeElement;
+      if (currentActiveElement && typeof currentActiveElement.blur === "function") {
+        currentActiveElement.blur();
+      }
+    }).catch(() => {});
   }
 }
 
@@ -1603,6 +1613,7 @@ function deleteCurrentLevel() {
   stopSelectionMode();
   syncSelectedObject();
   scheduleMatrixCacheWarmup(0);
+  nextTick(restoreEditorFocus);
   statusMessage.value = t("simple.levelDeleted", { name: levelName });
 }
 
@@ -1652,6 +1663,7 @@ function deleteCurrentFrame() {
   clearRgbEditHistory();
   syncSelectedObject();
   scheduleMatrixCacheWarmup(activeFrameIndex.value);
+  nextTick(restoreEditorFocus);
 }
 
 function confirmDestructiveAction(message) {
@@ -1933,6 +1945,7 @@ function deleteSelectedObject() {
     stopSelectionMode();
     stopAnchorEdit();
   });
+  nextTick(restoreEditorFocus);
 }
 
 function moveSelectedObjectLayerUp() {
