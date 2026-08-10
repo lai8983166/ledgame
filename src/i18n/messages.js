@@ -267,6 +267,9 @@ const baseMessages = {
       canvasLabel: "精灵点阵编辑区",
     },
     touch: {
+      errors: {
+        wristbandNotReady: "排队需要已绑定且状态为 READY 的手环，请先完成会员注册和绑定。",
+      },
       apiUnavailable: "Touch runtime API 不可用",
       stateReadFailed: "读取游戏状态失败",
       gamesLoadFailed: "加载游戏列表失败",
@@ -306,6 +309,12 @@ const baseMessages = {
       returning: "正在返回",
       waitingState: "等待游戏状态",
       reconnect: "重新连接",
+      queueNext: "排队下一位",
+      queueScanTitle: "请刷下一位顾客的手环",
+      queueScanHint: "排队前请先完成会员注册和手环绑定；READY 或 ACTIVE 状态且有余额的手环才能排队。",
+      queueUidPlaceholder: "手环 ID",
+      queueSubmitting: "提交中...",
+      queueConfirm: "确认排队",
     },
     simple: {
       modeAdd: "新增对象",
@@ -734,6 +743,9 @@ const baseMessages = {
       canvasLabel: "Spirit point editor",
     },
     touch: {
+      errors: {
+        wristbandNotReady: "Queue requires a member-bound READY wristband. Register and bind it first.",
+      },
       apiUnavailable: "The Touch runtime API is unavailable",
       stateReadFailed: "Unable to read game state",
       gamesLoadFailed: "Unable to load games",
@@ -773,6 +785,12 @@ const baseMessages = {
       returning: "Returning",
       waitingState: "Waiting for game state",
       reconnect: "Reconnect",
+      queueNext: "Queue next player",
+      queueScanTitle: "Scan the next player's wristband",
+      queueScanHint: "Register and bind the wristband first; a member-bound READY or ACTIVE wristband with remaining time can join the queue.",
+      queueUidPlaceholder: "Wristband ID",
+      queueSubmitting: "Submitting...",
+      queueConfirm: "Join queue",
     },
     simple: {
       modeAdd: "Add Object",

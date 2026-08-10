@@ -85,6 +85,8 @@ const runtimeStatusItems = computed(() => {
     { label: "Game", value: formatRuntimeValue(state.gameName || state.gameType) },
     { label: t("debug.startLevel"), value: formatRuntimeValue(state.startLevelIndex) },
     { label: t("debug.launchMethod"), value: formatRuntimeValue(state.launchMethod) },
+    { label: "Runtime mode", value: formatRuntimeValue(state.runtimeMode, "PRODUCTION") },
+    { label: "Queue", value: formatRuntimeValue(state.queueSummary?.waiting?.length, "0") },
     { label: t("debug.phase"), value: formatRuntimeValue(gameplay.phase) },
     { label: t("debug.score"), value: formatRuntimeValue(gameplay.score, "0") },
     { label: t("debug.life"), value: formatRuntimeValue(gameplay.life, "0") },
@@ -115,6 +117,7 @@ onMounted(async () => {
     window.secondaryDisplay?.onChanged?.((state) => applySecondaryDisplayState(state)) || null;
   await Promise.all([refreshState(), refreshSecondaryDisplayState()]);
 });
+const runtimeMode = computed(() => String(gameRuntimeState.value?.runtimeMode || "PRODUCTION"));
 
 onUnmounted(() => {
   removeLedFrameListener?.();
@@ -226,7 +229,7 @@ function applyState(state) {
   if ("demoType" in state) {
     demoType.value = state.demoType || null;
   }
-  if ("gameId" in state || "gameplay" in state || state.gameType || state.gameName) {
+  if ("gameId" in state || "gameplay" in state || state.gameType || state.gameName || state.preparation || state.queueSummary || state.runtimeMode) {
     gameRuntimeState.value = state;
   }
 }
@@ -441,6 +444,15 @@ function sendRuntimeGameInput(x, y) {
     });
 }
 
+function sendDebugCommand(command) {
+  if (!api?.sendDebugCommand) return;
+  api.sendDebugCommand(command).then((result) => {
+    applyState(result?.data ?? result);
+  }).catch((error) => {
+    errorMessage.value = error.message || String(error);
+  });
+}
+
 function sendCellInput(type, x, y, color = { r: 255, g: 255, b: 255 }) {
   if (!api?.sendInput) {
     return;
@@ -484,6 +496,7 @@ function formatRuntimeValue(value, fallback = "-") {
     :is-debug-window="isDebugWindow"
     :pixels="frameState.pixels"
     :runtime-status-items="runtimeStatusItems"
+    :runtime-mode="runtimeMode"
     @clear-hover-cell="clearHoverCell"
     @game-input="sendRuntimeGameInput"
     @light-cell="lightCell"
@@ -491,6 +504,7 @@ function formatRuntimeValue(value, fallback = "-") {
     @refresh-state="refreshState"
     @release-cell="releaseCell"
     @set-hover-cell="setHoverCell"
+    @debug-command="sendDebugCommand"
   />
 
   <main v-else class="app-shell">

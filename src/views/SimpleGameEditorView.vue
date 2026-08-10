@@ -2958,6 +2958,8 @@ function formatRuntimeSummary(value) {
             <input v-model.number="document.siteSizeHeight" min="1" type="number" />
           </label>
         </div>
+        <!-- 周期和难度字段暂未参与当前玩法，保留数据模型以兼容已有游戏数据。 -->
+        <!--
         <div class="two-column-fields">
           <label>
             <span>{{ t("simple.period") }}</span>
@@ -2968,6 +2970,7 @@ function formatRuntimeSummary(value) {
             <input v-model.number="document.difficulty" min="0" type="number" />
           </label>
         </div>
+        -->
         <div v-if="activeLevel" class="level-limit-fields">
           <h3>{{ t("simple.levelLimits") }}</h3>
           <label>

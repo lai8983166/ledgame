@@ -51,6 +51,10 @@ const props = defineProps({
     type: Array,
     default: () => [],
   },
+  runtimeMode: {
+    type: String,
+    default: "PRODUCTION",
+  },
 });
 
 const emit = defineEmits([
@@ -62,6 +66,7 @@ const emit = defineEmits([
   "refresh-state",
   "release-cell",
   "set-hover-cell",
+  "debug-command",
   "start-fixed",
   "start-input",
   "stop-engine",
@@ -170,6 +175,22 @@ function emitLightCell(x, y) {
               <dd>{{ item.value }}</dd>
             </div>
           </dl>
+        </section>
+
+        <section v-if="runtimeMode === 'SIMULATION'" class="debug-card simulation-controls">
+          <div class="debug-card-head">
+            <div>
+              <h2>Simulation controls</h2>
+              <p>Only the simulation session can use these actions.</p>
+            </div>
+          </div>
+          <div class="simulation-button-grid">
+            <button type="button" @click="$emit('debug-command', { command: 'stageResult', result: 'success' })">Stage success</button>
+            <button type="button" @click="$emit('debug-command', { command: 'stageResult', result: 'failure' })">Stage failure</button>
+            <button type="button" @click="$emit('debug-command', { command: 'retry' })">Retry</button>
+            <button type="button" @click="$emit('debug-command', { command: 'nextStage' })">Next stage</button>
+            <button class="danger" type="button" @click="$emit('debug-command', { command: 'endGame' })">End game</button>
+          </div>
         </section>
 
         <section class="debug-controls" :class="{ disabled: !isInputMode }">

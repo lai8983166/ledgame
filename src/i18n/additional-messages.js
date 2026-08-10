@@ -240,6 +240,9 @@ export const additionalMessages = {
       "canvasLabel": "Редактор духовных точек"
     },
     "touch": {
+      "errors": {
+        "wristbandNotReady": "Queue requires a member-bound READY wristband. Register and bind it first."
+      },
       "apiUnavailable": "API среды выполнения Touch недоступен.",
       "stateReadFailed": "Невозможно прочитать состояние игры",
       "gamesLoadFailed": "Невозможно загрузить игры",
@@ -278,6 +281,12 @@ export const additionalMessages = {
       "readyForGame": "Готов войти в игру",
       "returning": "Возвращение",
       "waitingState": "Ожидание состояния игры",
+      "queueNext": "Поставить следующего игрока в очередь",
+      "queueScanTitle": "Отсканируйте браслет следующего игрока",
+      "queueScanHint": "Ожидающие игроки не активируются и не списываются до завершения текущей игры.",
+      "queueUidPlaceholder": "ID браслета",
+      "queueSubmitting": "Отправка...",
+      "queueConfirm": "В очередь",
       "reconnect": "Восстановить соединение"
     },
     "simple": {
@@ -746,6 +755,12 @@ export const additionalMessages = {
       "readyForGame": "게임 참가 준비 완료",
       "returning": "돌아오는 중",
       "waitingState": "게임 상태를 기다리는 중",
+      "queueNext": "다음 플레이어 대기열",
+      "queueScanTitle": "다음 플레이어의 손목 밴드를 스캔하세요",
+      "queueScanHint": "현재 게임이 끝날 때까지 대기 중인 플레이어는 활성화되거나 차감되지 않습니다.",
+      "queueUidPlaceholder": "손목 밴드 ID",
+      "queueSubmitting": "제출 중...",
+      "queueConfirm": "대기열 등록",
       "reconnect": "다시 연결"
     },
     "simple": {
@@ -1214,6 +1229,12 @@ export const additionalMessages = {
       "readyForGame": "ゲームに参加する準備ができました",
       "returning": "戻る",
       "waitingState": "ゲーム状態を待機中",
+      "queueNext": "次のプレイヤーを待機列へ",
+      "queueScanTitle": "次のプレイヤーのリストバンドをスキャン",
+      "queueScanHint": "現在のゲームが終わるまで、待機中のプレイヤーは有効化も時間消費もされません。",
+      "queueUidPlaceholder": "リストバンド ID",
+      "queueSubmitting": "送信中...",
+      "queueConfirm": "待機列に追加",
       "reconnect": "再接続"
     },
     "simple": {

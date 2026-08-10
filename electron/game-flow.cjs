@@ -7,6 +7,7 @@ const PREPARATION_PATCH_FIELDS = new Set([
   'isAdmin',
   'launchMethod',
   'stageFailurePolicy',
+  'runtimeMode',
 ])
 
 function shouldInitializeSystemIdle(state) {
@@ -44,12 +45,16 @@ function preparationRequest(kind, sessionId, payload) {
     const source = payload && typeof payload === 'object'
       ? payload
       : { launchMethod: payload }
-    return jsonRequest('/game/preparations', 'POST', {
+    const requestBody = {
       launchMethod: normalizeLaunchMethod(source.launchMethod),
       ...(Array.isArray(source.tokenList) && source.tokenList.length
         ? { tokenList: source.tokenList.map((item) => String(item)) }
         : {}),
-    })
+    }
+    if (source && typeof source === 'object' && source.runtimeMode !== undefined) {
+      requestBody.runtimeMode = normalizeRuntimeMode(source.runtimeMode)
+    }
+    return jsonRequest('/game/preparations', 'POST', requestBody)
   }
   if (kind === 'select') {
     return jsonRequest(preparationPath(sessionId, '/game'), 'PUT', { gameId: payload })
@@ -68,6 +73,23 @@ function preparationRequest(kind, sessionId, payload) {
 
 function normalizeLaunchMethod(value) {
   return value === 'coin' || value === 'wristband' ? value : 'touch'
+}
+
+function normalizeRuntimeMode(value) {
+  return String(value || '').toUpperCase() === 'SIMULATION' ? 'SIMULATION' : 'PRODUCTION'
+}
+
+function queueRequest(kind, itemId, payload) {
+  if (kind === 'enqueue') {
+    return jsonRequest('/engine/game/queue', 'POST', payload)
+  }
+  if (kind === 'cancel') {
+    const id = String(itemId || '').trim()
+    if (!id) throw new Error('Queue item id is required')
+    return { pathname: `/engine/game/queue/${encodeURIComponent(id)}`, options: { method: 'DELETE' } }
+  }
+  if (kind === 'list') return { pathname: '/engine/game/queue', options: { method: 'GET' } }
+  throw new Error(`Unsupported queue request: ${kind}`)
 }
 
 function gameFlowWindowPlan(mode) {
@@ -120,6 +142,8 @@ module.exports = {
   isActiveGameFlow,
   isTouchExitCode,
   normalizeLaunchMethod,
+  normalizeRuntimeMode,
+  queueRequest,
   preparationPath,
   preparationRequest,
   sanitizePreparationPatch,

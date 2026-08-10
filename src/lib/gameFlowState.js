@@ -1,3 +1,5 @@
+import { normalizePlayerAccess } from "./playerAccess.js";
+
 export const GAME_LIFECYCLE_STATES = Object.freeze([
   "IDLE",
   "PREPARING",
@@ -21,6 +23,7 @@ export function normalizeRuntimeState(value) {
   const state = source && typeof source === "object" ? source : {};
   const engineState = normalizeLifecycleState(state.engineState);
   const preparation = normalizePreparation(state.preparation);
+  const queueSummary = normalizeQueueSummary(state.queueSummary);
   return {
     ...state,
     engineState,
@@ -39,6 +42,9 @@ export function normalizeRuntimeState(value) {
       0,
     ),
     preparation,
+    runtimeMode: normalizeRuntimeMode(state.runtimeMode ?? preparation?.options.runtimeMode),
+    queueSummary,
+    playerAccess: normalizePlayerAccess(state.playerAccess),
     gameplay: state.gameplay && typeof state.gameplay === "object" ? { ...state.gameplay } : null,
   };
 }
@@ -62,7 +68,48 @@ export function normalizePreparation(value) {
       icList: Array.isArray(options.icList) ? [...options.icList] : [],
       tokenList: Array.isArray(options.tokenList) ? [...options.tokenList] : [],
       isAdmin: Boolean(options.isAdmin),
+      runtimeMode: normalizeRuntimeMode(options.runtimeMode),
     },
+  };
+}
+
+// WebSocket lifecycle events can arrive after the command response that
+// updated preparation. Never let an older snapshot remove a freshly scanned
+// wristband from the preparation screen.
+export function shouldIgnoreStalePreparationState(currentValue, nextValue) {
+  const current = normalizeRuntimeState(currentValue);
+  const next = normalizeRuntimeState(nextValue);
+  if (
+    current.engineState !== "PREPARING" ||
+    next.engineState !== "PREPARING" ||
+    !current.preparation ||
+    !next.preparation ||
+    current.preparation.sessionId !== next.preparation.sessionId
+  ) {
+    return false;
+  }
+  if (next.preparation.revision < current.preparation.revision) {
+    return true;
+  }
+  return Boolean(current.playerAccess && !next.playerAccess &&
+    next.preparation.revision <= current.preparation.revision);
+}
+
+export function normalizeQueueSummary(value) {
+  const source = value && typeof value === "object" ? value : {};
+  const normalizeItem = (item) => (item && typeof item === "object" ? {
+    id: String(item.id || ""),
+    wristbandUid: item.wristbandUid ? String(item.wristbandUid) : null,
+    gameId: nullableNumber(item.gameId),
+    gameName: nullableText(item.gameName),
+    status: nullableText(item.status),
+    reason: nullableText(item.reason),
+  } : null);
+  return {
+    deviceId: nullableText(source.deviceId),
+    current: normalizeItem(source.current),
+    waiting: Array.isArray(source.waiting) ? source.waiting.map(normalizeItem).filter(Boolean) : [],
+    failed: Array.isArray(source.failed) ? source.failed.map(normalizeItem).filter(Boolean) : [],
   };
 }
 
@@ -138,4 +185,8 @@ function nullableText(value) {
   }
   const text = String(value).trim();
   return text || null;
+}
+
+function normalizeRuntimeMode(value) {
+  return String(value || "").toUpperCase() === "SIMULATION" ? "SIMULATION" : "PRODUCTION";
 }

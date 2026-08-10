@@ -12,7 +12,7 @@ test("keyboard reader emits one wristband id only after the terminating Enter", 
   let time = 0;
   const reader = createKeyboardWristbandReader({ now: () => time });
 
-  for (const key of "2281487330") {
+  for (const key of "2283055618") {
     assert.deepEqual(reader.push({ type: "keyDown", key }), {
       consumed: true,
       wristbandId: null,
@@ -22,12 +22,33 @@ test("keyboard reader emits one wristband id only after the terminating Enter", 
 
   assert.deepEqual(reader.push({ type: "keyDown", key: "Enter" }), {
     consumed: true,
-    wristbandId: "2281487330",
+    wristbandId: "2283055618",
   });
   assert.deepEqual(reader.push({ type: "keyDown", key: "Enter" }), {
     consumed: false,
     wristbandId: null,
   });
+});
+
+test("keyboard reader ignores auto-repeat and cannot emit the same scan twice", () => {
+  let time = 0;
+  const reader = createKeyboardWristbandReader({ now: () => time });
+
+  for (const key of "2283055618") {
+    reader.push({ type: "keyDown", key });
+    reader.push({ type: "keyDown", key, isAutoRepeat: true });
+    time += 10;
+  }
+
+  assert.equal(
+    reader.push({ type: "keyDown", key: "Enter" }).wristbandId,
+    "2283055618",
+  );
+  assert.equal(
+    reader.push({ type: "keyDown", key: "Enter", isAutoRepeat: true }).wristbandId,
+    null,
+  );
+  assert.equal(reader.push({ type: "keyDown", key: "Enter" }).wristbandId, null);
 });
 
 test("keyboard reader rejects slow, malformed, and incomplete keyboard input", () => {

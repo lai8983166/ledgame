@@ -7,6 +7,7 @@ import {
   hasTermination,
   normalizeGameList,
   normalizeRuntimeState,
+  shouldIgnoreStalePreparationState,
   touchViewForState,
 } from "../src/lib/gameFlowState.js";
 import {
@@ -20,6 +21,7 @@ const {
   detectWindowKind,
   preparationPath,
   preparationRequest,
+  queueRequest,
   sanitizePreparationPatch,
   shouldInitializeSystemIdle,
 } = require("../electron/game-flow.cjs");
@@ -38,6 +40,71 @@ test("normalizeRuntimeState restores preparation options and legacy defaults", (
   assert.equal(state.preparation.options.stageFailurePolicy, "RETRY");
   assert.equal(state.userCount, 2);
   assert.equal(normalizeRuntimeState({ engineState: "RUNNING" }).startLevelIndex, 0);
+});
+
+test("normalizeRuntimeState exposes explicit simulation mode and queue summary", () => {
+  const state = normalizeRuntimeState({
+    engineState: "RUNNING",
+    runtimeMode: "SIMULATION",
+    queueSummary: {
+      deviceId: "device-a",
+      current: { id: "current", status: "RUNNING", wristbandUid: "2283055618" },
+      waiting: [{ id: "next", status: "WAITING", wristbandUid: "2283055619", gameId: 7 }],
+    },
+  });
+  assert.equal(state.runtimeMode, "SIMULATION");
+  assert.equal(state.queueSummary.waiting[0].wristbandUid, "2283055619");
+  assert.equal(state.queueSummary.current.status, "RUNNING");
+});
+
+test("normalizeRuntimeState replaces and clears authoritative playerAccess", () => {
+  const playerAccess = {
+    member: { id: 12, phone: "13800138000", name: "张三", status: "ACTIVE" },
+    access: {
+      bindingId: 9,
+      uid: "2283055618",
+      status: "ACTIVE",
+      durationMinutes: 60,
+      startedAt: "2026-08-09T03:00:00Z",
+      expiresAt: "2026-08-09T04:00:00Z",
+      remainingSeconds: 3598,
+    },
+    platformPlayId: null,
+    externalSessionId: "prep-21",
+  };
+
+  assert.deepEqual(normalizeRuntimeState({ engineState: "PREPARING", playerAccess }).playerAccess, playerAccess);
+  assert.equal(normalizeRuntimeState({ engineState: "IDLE" }).playerAccess, null);
+});
+
+test("stale preparation broadcasts cannot erase a scanned wristband", () => {
+  const scanned = normalizeRuntimeState({
+    engineState: "PREPARING",
+    preparation: {
+      sessionId: "prep-22",
+      revision: 1,
+      options: { tokenList: ["2283055618"] },
+    },
+    playerAccess: {
+      member: { id: 12, phone: "13800138000" },
+      access: {
+        bindingId: 9,
+        uid: "2283055618",
+        status: "READY",
+        durationMinutes: 60,
+        remainingSeconds: 1800,
+      },
+    },
+  });
+  const stale = normalizeRuntimeState({
+    engineState: "PREPARING",
+    preparation: { sessionId: "prep-22", revision: 0, options: { tokenList: [] } },
+  });
+
+  assert.equal(shouldIgnoreStalePreparationState(scanned, stale), true);
+  assert.equal(shouldIgnoreStalePreparationState(scanned, {
+    engineState: "RUNNING",
+  }), false);
 });
 
 test("normalizeGameList unwraps backend Result data", () => {
@@ -89,6 +156,13 @@ test("preparation routes encode ids and patches only expose contract fields", ()
     pathname: "/game/preparations",
     options: { method: "POST", body: JSON.stringify({ launchMethod: "touch" }) },
   });
+  assert.deepEqual(JSON.parse(preparationRequest("create", null, {
+    launchMethod: "wristband",
+    runtimeMode: "SIMULATION",
+  }).options.body), {
+    launchMethod: "wristband",
+    runtimeMode: "SIMULATION",
+  });
   assert.deepEqual(preparationRequest("select", "prep/7", 9), {
     pathname: "/game/preparations/prep%2F7/game",
     options: { method: "PUT", body: JSON.stringify({ gameId: 9 }) },
@@ -112,6 +186,10 @@ test("preparation routes encode ids and patches only expose contract fields", ()
     pathname: "/game/preparations/prep-7",
     options: { method: "DELETE" },
   });
+  assert.deepEqual(queueRequest("cancel", "item/7"), {
+    pathname: "/engine/game/queue/item%2F7",
+    options: { method: "DELETE" },
+  });
 });
 
 test("window kind recognises touch without changing debug compatibility", () => {
@@ -127,6 +205,111 @@ test("sandboxed preload keeps window detection local and exposes the minimal Tou
   assert.match(source, /game:preparation:create/);
   assert.match(source, /removeListener\(['"]engine-state['"]/);
   assert.doesNotMatch(source, /backendBaseUrl|node:fs|child_process/);
+});
+
+test("wristband IPC exposes the scanned UID only", async () => {
+  const source = await readFile(new URL("../electron/main.cjs", import.meta.url), "utf8");
+  const scanHandler = source.slice(
+    source.indexOf("const wristbandReader = createKeyboardWristbandReader()"),
+    source.indexOf("touchWindow.once('ready-to-show'"),
+  );
+
+  assert.match(scanHandler, /wristband-scanned[\s\S]*wristbandId:\s*result\.wristbandId/);
+  assert.doesNotMatch(scanHandler, /balance\s*:/);
+  assert.doesNotMatch(scanHandler, /member\s*:/);
+  assert.doesNotMatch(scanHandler, /binding\s*:/);
+});
+
+test("Touch wristband flow renders only authoritative playerAccess balance and recovery copy", async () => {
+  const source = await readFile(
+    new URL("../src/views/LedGameTouchView.vue", import.meta.url),
+    "utf8",
+  );
+
+  assert.doesNotMatch(source, /payload\?\.balance|wristbandRead\.value\?\.balance/);
+  assert.match(source, /runtimeState\.value\.playerAccess/);
+  assert.match(source, /playerAccessRemainingSeconds/);
+  assert.match(source, /playerAccess\.access\.durationMinutes/);
+  assert.match(source, /playerAccessExpiryLabel/);
+  assert.match(source, /wristbandErrorMessageKey/);
+  assert.match(source, /touch\.activatedTimeContinues/);
+  assert.match(source, /\["PREPARING",\s*"STARTING",\s*"RUNNING"\]/);
+});
+
+test("Touch wristband scan and confirm keep a single in-flight action", async () => {
+  const source = await readFile(
+    new URL("../src/views/LedGameTouchView.vue", import.meta.url),
+    "utf8",
+  );
+  const scanHandler = source.slice(
+    source.indexOf("function handleWristbandScanned"),
+    source.indexOf("async function loadGames"),
+  );
+  const confirmHandler = source.slice(
+    source.indexOf("async function confirmPreparation"),
+    source.indexOf("async function cancelPreparation"),
+  );
+
+  assert.match(scanHandler, /busyAction\.value/);
+  assert.match(scanHandler, /refreshOnError:\s*true/);
+  assert.match(confirmHandler, /busyAction\.value/);
+  assert.match(confirmHandler, /await refreshState\(\)/);
+});
+
+test("wristband entry wakes from IDLE and scans only inside the active preparation", async () => {
+  const touchSource = await readFile(
+    new URL("../src/views/LedGameTouchView.vue", import.meta.url),
+    "utf8",
+  );
+  const mainSource = await readFile(new URL("../electron/main.cjs", import.meta.url), "utf8");
+  const idlePrompt = touchSource.slice(
+    touchSource.indexOf("const idlePrompt = computed"),
+    touchSource.indexOf("const showIdleVideo"),
+  );
+  const wakeTouch = touchSource.slice(
+    touchSource.indexOf("async function wakeTouch"),
+    touchSource.indexOf("function handleWristbandScanned"),
+  );
+  const readerGate = mainSource.slice(
+    mainSource.indexOf("const wristbandReader = createKeyboardWristbandReader()"),
+    mainSource.indexOf("touchWindow.once('ready-to-show'"),
+  );
+
+  assert.doesNotMatch(idlePrompt, /touch\.scanWristband/);
+  assert.doesNotMatch(wakeTouch, /if \(isWristbandEntry\.value\) return/);
+  assert.match(wakeTouch, /api\.createPreparation\(\)/);
+  assert.match(readerGate, /engineState[^]*PREPARING/);
+  assert.match(readerGate, /playerAccess/);
+  assert.doesNotMatch(readerGate, /engineState[^]*IDLE/);
+});
+
+test("wristband scan binds UID to the current PREPARING session and gates confirm", async () => {
+  const touchSource = await readFile(
+    new URL("../src/views/LedGameTouchView.vue", import.meta.url),
+    "utf8",
+  );
+  const mainSource = await readFile(new URL("../electron/main.cjs", import.meta.url), "utf8");
+  const preloadSource = await readFile(new URL("../electron/preload.cjs", import.meta.url), "utf8");
+  const scanHandler = touchSource.slice(
+    touchSource.indexOf("function handleWristbandScanned"),
+    touchSource.indexOf("async function loadGames"),
+  );
+  const ipcHandler = mainSource.slice(
+    mainSource.indexOf("ipcMain.handle('game:preparation:create-wristband'"),
+    mainSource.indexOf("ipcMain.handle('game:preparation:select'"),
+  );
+
+  assert.match(scanHandler, /view\.value !== "PREPARING"/);
+  assert.match(scanHandler, /preparation\.value\?\.sessionId/);
+  assert.match(scanHandler, /createWristbandPreparation\(sessionId, wristbandId\)/);
+  assert.doesNotMatch(scanHandler, /setTimeout\([\s\S]*createWristbandPreparation/);
+  assert.match(ipcHandler, /sessionId, value/);
+  assert.match(ipcHandler, /executePreparationRequest\('update', sessionId/);
+  assert.match(ipcHandler, /launchMethod:\s*'wristband'/);
+  assert.match(ipcHandler, /tokenList:\s*\[wristbandId\]/);
+  assert.match(preloadSource, /createWristbandPreparation:\s*\(sessionId, wristbandId\)/);
+  assert.match(touchSource, /!isWristbandEntry\.value \|\| Boolean\(playerAccess\.value\)/);
+  assert.match(touchSource, /touch\.scanWristbandHint/);
 });
 
 test("Touch window is reusable, reconstructable, and closing it does not stop gameplay", async () => {

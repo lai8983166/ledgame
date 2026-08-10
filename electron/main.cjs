@@ -10,6 +10,7 @@ const {
   gameFlowWindowPlan,
   isTouchExitCode,
   preparationRequest,
+  queueRequest,
   shouldInitializeSystemIdle,
 } = require('./game-flow.cjs')
 const {
@@ -457,7 +458,9 @@ function createTouchWindow(mode = 'debug', layoutBounds = null) {
   createdTouchWindow.webContents.on('before-input-event', (event, input) => {
     if (
       currentEntryMethod !== 'wristband' ||
-      String(latestEngineState?.engineState || '').toUpperCase() !== 'IDLE'
+      !['PREPARING', 'STARTING', 'RUNNING'].includes(String(latestEngineState?.engineState || '').toUpperCase()) ||
+      (String(latestEngineState?.engineState || '').toUpperCase() === 'PREPARING' &&
+        (!latestEngineState?.preparation?.sessionId || latestEngineState?.playerAccess))
     ) {
       wristbandReader.reset()
       return
@@ -469,7 +472,6 @@ function createTouchWindow(mode = 'debug', layoutBounds = null) {
     if (result.wristbandId && !createdTouchWindow.isDestroyed()) {
       createdTouchWindow.webContents.send('wristband-scanned', {
         wristbandId: result.wristbandId,
-        balance: null,
       })
     }
   })
@@ -726,6 +728,10 @@ function publishEngineState(state) {
     return
   }
 
+  if (isStalePreparationState(latestEngineState, state)) {
+    return
+  }
+
   latestEngineState = state
   refreshLatestFrameSize(state)
 
@@ -896,7 +902,8 @@ async function backendRequest(pathname, options = {}) {
   const text = await response.text()
   const data = text ? JSON.parse(text) : null
   if (!response.ok) {
-    throw new Error(data?.message || `Backend request failed: ${response.status}`)
+    const backendMessage = data?.message || `Backend request failed: ${response.status}`
+    throw new Error(data?.code ? `${data.code}: ${backendMessage}` : backendMessage)
   }
   return data
 }
@@ -927,6 +934,30 @@ function getUserDatabaseBasePath() {
 
 function getUserDatabaseFilePath() {
   return `${getUserDatabaseBasePath()}.mv.db`
+}
+
+function isStalePreparationState(previous, next) {
+  if (
+    !previous || !next ||
+    String(previous.engineState || '').toUpperCase() !== 'PREPARING' ||
+    String(next.engineState || '').toUpperCase() !== 'PREPARING'
+  ) {
+    return false
+  }
+  const previousPreparation = previous.preparation
+  const nextPreparation = next.preparation
+  if (
+    !previousPreparation || !nextPreparation ||
+    String(previousPreparation.sessionId || '') !== String(nextPreparation.sessionId || '')
+  ) {
+    return false
+  }
+  const previousRevision = Number(previousPreparation.revision || 0)
+  const nextRevision = Number(nextPreparation.revision || 0)
+  if (nextRevision < previousRevision) {
+    return true
+  }
+  return Boolean(previous.playerAccess && !next.playerAccess && nextRevision <= previousRevision)
 }
 
 function getDatabaseBackupRoot() {
@@ -1382,6 +1413,9 @@ function normalizeGameStartRequest(request) {
     tokenList: Array.isArray(source.tokenList) ? source.tokenList : [],
     isAdmin: source.isAdmin ?? false,
     launchMethod: source.launchMethod || 'debug',
+    runtimeMode: String(source.runtimeMode || 'PRODUCTION').toUpperCase() === 'SIMULATION'
+      ? 'SIMULATION'
+      : 'PRODUCTION',
   }
 }
 
@@ -1659,12 +1693,12 @@ ipcMain.handle('game:stop', () => engineStateRequest('/engine/game/stop', { meth
 ipcMain.handle('game:preparation:create', async () => {
   const settings = await applicationSettings.get()
   currentEntryMethod = settings.entryMethod
-  if (settings.entryMethod === 'wristband') {
-    throw new Error('WRISTBAND_SCAN_REQUIRED')
-  }
-  return executePreparationRequest('create', null, settings.entryMethod)
+  return executePreparationRequest('create', null, {
+    launchMethod: settings.entryMethod,
+    runtimeMode: settings.mode === 'debug' ? 'SIMULATION' : 'PRODUCTION',
+  })
 })
-ipcMain.handle('game:preparation:create-wristband', async (event, value) => {
+ipcMain.handle('game:preparation:create-wristband', async (event, sessionId, value) => {
   if (
     !touchWindow ||
     touchWindow.isDestroyed() ||
@@ -1677,14 +1711,18 @@ ipcMain.handle('game:preparation:create-wristband', async (event, value) => {
   if (settings.entryMethod !== 'wristband') {
     throw new Error('WRISTBAND_ENTRY_DISABLED')
   }
-  if (String(latestEngineState?.engineState || '').toUpperCase() !== 'IDLE') {
+  if (
+    String(latestEngineState?.engineState || '').toUpperCase() !== 'PREPARING' ||
+    latestEngineState?.preparation?.sessionId !== String(sessionId || '') ||
+    latestEngineState?.playerAccess
+  ) {
     throw new Error('WRISTBAND_SCAN_NOT_ALLOWED')
   }
   const wristbandId = normalizeWristbandId(value)
   if (!wristbandId) {
     throw new Error('WRISTBAND_ID_INVALID')
   }
-  return executePreparationRequest('create', null, {
+  return executePreparationRequest('update', sessionId, {
     launchMethod: 'wristband',
     tokenList: [wristbandId],
   })
@@ -1701,6 +1739,26 @@ ipcMain.handle('game:preparation:confirm', (_event, sessionId) =>
 ipcMain.handle('game:preparation:cancel', (_event, sessionId) =>
   executePreparationRequest('cancel', sessionId),
 )
+ipcMain.handle('game:queue:enqueue', async (_event, payload) => {
+  const source = payload && typeof payload === 'object' ? payload : {}
+  const request = queueRequest('enqueue', null, source)
+  await backendRequest(request.pathname, request.options)
+  return requestCurrentGameState()
+})
+ipcMain.handle('game:queue:list', () => backendRequest(queueRequest('list').pathname))
+ipcMain.handle('game:queue:cancel', async (_event, itemId) => {
+  const request = queueRequest('cancel', itemId)
+  await backendRequest(request.pathname, request.options)
+  return requestCurrentGameState()
+})
+ipcMain.handle('engine:debug-command', async (_event, command) => {
+  const result = await backendRequest('/engine/game/debug/command', {
+    method: 'POST',
+    body: JSON.stringify(command || {}),
+  })
+  publishEngineState(result?.data)
+  return result
+})
 ipcMain.handle('engine:input', (_event, input) =>
   backendRequest('/engine/demo/input', {
     method: 'POST',

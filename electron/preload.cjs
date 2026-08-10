@@ -34,8 +34,8 @@ const fullLedGameApi = {
   startSystemIdle: () => ipcRenderer.invoke('game:idle'),
   stopTouchGame: () => ipcRenderer.invoke('game:stop'),
   createPreparation: () => ipcRenderer.invoke('game:preparation:create'),
-  createWristbandPreparation: (wristbandId) =>
-    ipcRenderer.invoke('game:preparation:create-wristband', wristbandId),
+  createWristbandPreparation: (sessionId, wristbandId) =>
+    ipcRenderer.invoke('game:preparation:create-wristband', sessionId, wristbandId),
   selectPreparationGame: (sessionId, gameId) =>
     ipcRenderer.invoke('game:preparation:select', sessionId, gameId),
   updatePreparation: (sessionId, patch) =>
@@ -44,6 +44,10 @@ const fullLedGameApi = {
     ipcRenderer.invoke('game:preparation:confirm', sessionId),
   cancelPreparation: (sessionId) =>
     ipcRenderer.invoke('game:preparation:cancel', sessionId),
+  enqueueGame: (payload) => ipcRenderer.invoke('game:queue:enqueue', payload),
+  queueState: () => ipcRenderer.invoke('game:queue:list'),
+  cancelQueuedGame: (itemId) => ipcRenderer.invoke('game:queue:cancel', itemId),
+  sendDebugCommand: (command) => ipcRenderer.invoke('engine:debug-command', command),
   sendGameInput: (input) => ipcRenderer.invoke('engine:game-input', input),
   stop: () => ipcRenderer.invoke('engine:stop'),
   state: () => ipcRenderer.invoke('engine:state'),

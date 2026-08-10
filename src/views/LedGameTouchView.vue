@@ -15,9 +15,14 @@ import {
   extractErrorMessage,
   hasTermination,
   normalizeRuntimeState,
+  shouldIgnoreStalePreparationState,
   touchViewForState,
 } from "../lib/gameFlowState.js";
 import { loadSimpleGameVariants } from "../lib/simpleGameVariants.js";
+import {
+  playerAccessRemainingSeconds,
+  wristbandErrorMessageKey,
+} from "../lib/playerAccess.js";
 import {
   confirmTouchPreparationTransaction,
   createTouchStateCoordinator,
@@ -59,6 +64,7 @@ const touchIdlePromptFontSize = ref(72);
 const idlePromptFading = ref(false);
 const languagePanelOpen = ref(false);
 const wristbandRead = ref(null);
+const playerAccessClock = ref(Date.now());
 const exitKeypadOpen = ref(false);
 const exitCode = ref("");
 const exitError = ref("");
@@ -70,6 +76,10 @@ const loadingGames = ref(false);
 const gameInitializationWarning = ref("");
 const busyAction = ref("");
 const errorMessage = ref("");
+const queuePanelOpen = ref(false);
+const queueUid = ref("");
+const queueGameId = ref(null);
+const queueSubmitting = ref(false);
 const gamePreparationStep = ref("players");
 const gameCarouselIndex = ref(0);
 const gameDocument = ref(null);
@@ -84,6 +94,7 @@ let removePresentationListener = null;
 let removeSettingsListener = null;
 let removeWristbandListener = null;
 let wristbandAdvanceTimer = null;
+let playerAccessClockTimer = null;
 let idlePromptTimer = null;
 let cancelGameCountdown = null;
 let gameWizardSessionId = null;
@@ -109,13 +120,38 @@ const selectedGame = computed(
   () => games.value.find((game) => game.id === selectedGameId.value) || null,
 );
 const canConfirm = computed(() =>
-  Boolean(preparation.value?.sessionId && selectedGameId.value),
+  Boolean(
+    preparation.value?.sessionId &&
+      selectedGameId.value &&
+      (!isWristbandEntry.value || Boolean(playerAccess.value)),
+  ),
 );
 const terminated = computed(() => hasTermination(runtimeState.value));
 const resultSucceeded = computed(() => runtimeState.value.success === true);
 const gameplay = computed(() => runtimeState.value.gameplay || {});
 const isGamePresentation = computed(() => presentationMode.value === "game");
 const isWristbandEntry = computed(() => entryMethod.value === "wristband");
+const playerAccess = computed(() => runtimeState.value.playerAccess);
+const queueSummary = computed(() => runtimeState.value.queueSummary || { current: null, waiting: [], failed: [] });
+const canCollectQueueEntry = computed(() =>
+  isWristbandEntry.value && ["STARTING", "RUNNING"].includes(view.value),
+);
+const showPlayerAccess = computed(() =>
+  Boolean(
+    isWristbandEntry.value &&
+      playerAccess.value &&
+      ["PREPARING", "STARTING", "RUNNING"].includes(view.value),
+  ),
+);
+const playerAccessRemaining = computed(() =>
+  playerAccessRemainingSeconds(playerAccess.value, playerAccessClock.value),
+);
+const playerAccessRemainingLabel = computed(() =>
+  formatRemainingTime(playerAccessRemaining.value),
+);
+const playerAccessExpiryLabel = computed(() =>
+  formatAccessExpiry(playerAccess.value?.access.expiresAt),
+);
 const carouselSlots = computed(() =>
   touchCarouselSlots(games.value, gameCarouselIndex.value),
 );
@@ -133,16 +169,8 @@ const gameBackgroundStyle = computed(() =>
 );
 const idlePrompt = computed(() => {
   if (busyAction.value === "wake") return t("touch.waking");
-  if (wristbandRead.value) return t("touch.wristbandRecognized");
-  if (isWristbandEntry.value) return t("touch.scanWristband");
   return touchIdlePromptTexts.value[locale.value] || defaultIdlePrompt();
 });
-const activeWristbandId = computed(
-  () =>
-    wristbandRead.value?.wristbandId ||
-    preparation.value?.options?.tokenList?.[0] ||
-    "",
-);
 const showIdleVideo = computed(
   () =>
     view.value === "IDLE" &&
@@ -157,6 +185,9 @@ const statusCanvasMode = computed(() => {
 });
 
 onMounted(async () => {
+  playerAccessClockTimer = window.setInterval(() => {
+    playerAccessClock.value = Date.now();
+  }, 1000);
   document.addEventListener("visibilitychange", resumeIdleVideoWhenVisible);
   window.addEventListener("focus", resumeIdleVideoWhenVisible);
   removeStateListener = api?.onEngineState?.((state) => {
@@ -189,6 +220,7 @@ onUnmounted(() => {
   removeSettingsListener?.();
   removeWristbandListener?.();
   clearTimeout(wristbandAdvanceTimer);
+  window.clearInterval(playerAccessClockTimer);
   stopIdlePromptAnimation();
   stopGameCountdown();
 });
@@ -377,6 +409,9 @@ async function refreshState() {
 
 function applyRuntimeState(value) {
   const next = normalizeRuntimeState(value);
+  if (shouldIgnoreStalePreparationState(runtimeState.value, next)) {
+    return;
+  }
   runtimeState.value = next;
   const nextPreparation = next.preparation;
   if (
@@ -407,13 +442,11 @@ async function runAction(name, action, { refreshOnError = false } = {}) {
     }
     return result;
   } catch (error) {
-    errorMessage.value = extractErrorMessage(
-      error,
-      t("common.operationFailed"),
-    );
+    const actionError = localizedOperationError(error);
     if (refreshOnError) {
       await refreshState();
     }
+    errorMessage.value = actionError;
     return null;
   } finally {
     busyAction.value = "";
@@ -421,7 +454,6 @@ async function runAction(name, action, { refreshOnError = false } = {}) {
 }
 
 async function wakeTouch() {
-  if (isWristbandEntry.value) return;
   idleAwakeRequested.value = true;
   const result = await runAction("wake", () => api.createPreparation());
   if (!result && view.value === "IDLE") {
@@ -430,9 +462,16 @@ async function wakeTouch() {
 }
 
 function handleWristbandScanned(payload) {
+  if (queuePanelOpen.value && canCollectQueueEntry.value) {
+    const scanned = String(payload?.wristbandId || "").trim();
+    if (/^\d{1,32}$/.test(scanned)) queueUid.value = scanned;
+    return;
+  }
   if (
     !isWristbandEntry.value ||
-    view.value !== "IDLE" ||
+    view.value !== "PREPARING" ||
+    !preparation.value?.sessionId ||
+    playerAccess.value ||
     busyAction.value ||
     wristbandRead.value
   ) {
@@ -440,26 +479,113 @@ function handleWristbandScanned(payload) {
   }
   const wristbandId = String(payload?.wristbandId || "").trim();
   if (!wristbandId) return;
-  idleAwakeRequested.value = true;
   wristbandRead.value = {
     wristbandId,
-    balance: payload?.balance ?? null,
   };
   clearTimeout(wristbandAdvanceTimer);
-  wristbandAdvanceTimer = setTimeout(() => {
-    void createWristbandPreparation(wristbandId);
-  }, 1200);
+  const sessionId = preparation.value.sessionId;
+  // The reader already emits one event per UID + Enter. Submit immediately so
+  // the access result is visible without requiring a second UI interaction.
+  void createWristbandPreparation(sessionId, wristbandId);
 }
 
-async function createWristbandPreparation(wristbandId) {
-  if (!api?.createWristbandPreparation || view.value !== "IDLE") return;
-  const result = await runAction("wristband", () =>
-    api.createWristbandPreparation(wristbandId),
-  );
-  if (!result && view.value === "IDLE") {
-    wristbandRead.value = null;
-    idleAwakeRequested.value = false;
+function openQueuePanel() {
+  if (!canCollectQueueEntry.value) return;
+  queueUid.value = "";
+  queueGameId.value = runtimeState.value.gameId;
+  queuePanelOpen.value = true;
+  errorMessage.value = "";
+}
+
+function closeQueuePanel() {
+  if (queueSubmitting.value) return;
+  queuePanelOpen.value = false;
+  queueUid.value = "";
+}
+
+async function submitQueueEntry() {
+  if (!api?.enqueueGame || !canCollectQueueEntry.value || !/^\d{1,32}$/.test(queueUid.value)) {
+    errorMessage.value = "Please scan a valid wristband UID first.";
+    return;
   }
+  if (!queueGameId.value) {
+    errorMessage.value = "Select a game for the waiting player.";
+    return;
+  }
+  queueSubmitting.value = true;
+  errorMessage.value = "";
+  try {
+    const result = await api.enqueueGame({
+      wristbandUid: queueUid.value,
+      gameId: queueGameId.value,
+      gameName: games.value.find((game) => game.id === queueGameId.value)?.name || runtimeState.value.gameName,
+      userCount: 1,
+      startLevelIndex: 0,
+      launchMethod: "wristband",
+      runtimeMode: runtimeState.value.runtimeMode,
+      idempotencyKey: `${queueGameId.value}:${queueUid.value}`,
+    });
+    applyRuntimeState(result?.data ?? result);
+    queuePanelOpen.value = false;
+    queueUid.value = "";
+  } catch (error) {
+    errorMessage.value = localizedOperationError(error);
+  } finally {
+    queueSubmitting.value = false;
+  }
+}
+
+async function cancelQueuedItem(itemId) {
+  if (!api?.cancelQueuedGame || !itemId) return;
+  const result = await runAction("queue-cancel", () => api.cancelQueuedGame(itemId), { refreshOnError: true });
+  if (result) applyRuntimeState(result?.data ?? result);
+}
+
+async function createWristbandPreparation(sessionId, wristbandId) {
+  if (
+    !api?.createWristbandPreparation ||
+    view.value !== "PREPARING" ||
+    preparation.value?.sessionId !== sessionId ||
+    playerAccess.value
+  ) return;
+  const result = await runAction(
+    "wristband",
+    () => api.createWristbandPreparation(sessionId, wristbandId),
+    { refreshOnError: true },
+  );
+  if (!result && view.value === "PREPARING" && !playerAccess.value) {
+    wristbandRead.value = null;
+  }
+}
+
+function localizedOperationError(error) {
+  const messageKey = wristbandErrorMessageKey(error);
+  return messageKey
+    ? t(messageKey)
+    : extractErrorMessage(error, t("common.operationFailed"));
+}
+
+function formatRemainingTime(value) {
+  if (value === null || value === undefined) return "--:--";
+  const seconds = Math.max(0, Math.floor(Number(value) || 0));
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const remainder = seconds % 60;
+  return hours > 0
+    ? `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(remainder).padStart(2, "0")}`
+    : `${String(minutes).padStart(2, "0")}:${String(remainder).padStart(2, "0")}`;
+}
+
+function formatAccessExpiry(value) {
+  const expiry = new Date(String(value || ""));
+  if (!Number.isFinite(expiry.getTime())) return "--";
+  return new Intl.DateTimeFormat(locale.value, {
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(expiry);
 }
 
 async function loadGames() {
@@ -657,6 +783,7 @@ function startGameCountdown() {
     !sessionId ||
     !selectedGameId.value ||
     !selectedWizardLevel.value ||
+    !canConfirm.value ||
     busyAction.value
   ) {
     return;
@@ -731,6 +858,7 @@ function preparationPatch() {
     stageFailurePolicy:
       draft.stageFailurePolicy === "RETRY" ? "RETRY" : "END_GAME",
     launchMethod: preparation.value?.options.launchMethod || "touch",
+    runtimeMode: runtimeState.value.runtimeMode,
   };
 }
 
@@ -756,11 +884,9 @@ async function confirmPreparation() {
       patch: preparationPatch(),
       applyState: applyRuntimeState,
       recover: async (error) => {
-        errorMessage.value = extractErrorMessage(
-          error,
-          t("common.operationFailed"),
-        );
+        const actionError = localizedOperationError(error);
         await refreshState();
+        errorMessage.value = actionError;
       },
     });
   } catch (_error) {
@@ -934,8 +1060,7 @@ async function confirmReturnToIdle() {
     <div
       v-else-if="view === 'IDLE'"
       class="touch-idle-action"
-      :class="{ 'wristband-entry': isWristbandEntry }"
-      :aria-disabled="Boolean(busyAction) || isWristbandEntry"
+      :aria-disabled="Boolean(busyAction)"
       role="button"
       tabindex="0"
       @click="wakeTouch"
@@ -992,6 +1117,14 @@ async function confirmReturnToIdle() {
       >
         {{ t("touch.returnIdle") }}
       </button>
+      <div
+        v-if="isWristbandEntry && !playerAccess"
+        class="touch-wristband-scan-banner"
+        aria-live="polite"
+      >
+        <strong>{{ t("touch.scanWristband") }}</strong>
+        <span>{{ t("touch.scanWristbandHint") }}</span>
+      </div>
 
       <div
         v-if="gamePreparationStep === 'players'"
@@ -1001,10 +1134,16 @@ async function confirmReturnToIdle() {
           <span>{{ t("touch.playerSetup") }}</span>
           <h1>{{ t("touch.selectPlayerCount") }}</h1>
           <i aria-hidden="true"></i>
-          <p v-if="activeWristbandId" class="touch-wizard-wristband">
-            {{ t("touch.wristbandId") }} {{ activeWristbandId }} ·
-            {{ t("touch.wristbandBalance") }}
-            {{ t("touch.balancePending") }}
+          <div v-if="showPlayerAccess" class="touch-player-access" aria-live="polite">
+            <span><small>{{ t("touch.member") }}</small><strong>{{ playerAccess.member.name || playerAccess.member.phone }}</strong></span>
+            <span><small>{{ t("touch.wristbandId") }}</small><strong>{{ playerAccess.access.uid }}</strong></span>
+            <span><small>{{ t("touch.accessStatus") }}</small><strong>{{ playerAccess.access.status }}</strong></span>
+            <span><small>{{ t("touch.purchasedTime") }}</small><strong>{{ t("touch.minutesCount", { value: playerAccess.access.durationMinutes }) }}</strong></span>
+            <span><small>{{ t("touch.expiryTime") }}</small><strong>{{ playerAccessExpiryLabel }}</strong></span>
+            <span><small>{{ t("touch.wristbandBalance") }}</small><strong>{{ playerAccessRemainingLabel }}</strong></span>
+          </div>
+          <p v-if="showPlayerAccess" class="touch-access-note">
+            {{ t("touch.activatedTimeContinues") }}
           </p>
         </header>
 
@@ -1188,7 +1327,7 @@ async function confirmReturnToIdle() {
           <button
             class="touch-wizard-start"
             type="button"
-            :disabled="!selectedWizardLevel || Boolean(busyAction)"
+            :disabled="!selectedWizardLevel || !canConfirm || Boolean(busyAction)"
             @click="startGameCountdown"
           >
             {{ t("touch.startGameAction") }}
@@ -1210,12 +1349,24 @@ async function confirmReturnToIdle() {
         <div>
           <span class="touch-kicker">PREPARING</span>
           <h1>{{ t("touch.chooseGame") }}</h1>
-          <p v-if="activeWristbandId" class="touch-preparing-wristband">
-            {{ t("touch.wristbandId") }} {{ activeWristbandId }}
-            <span
-              >{{ t("touch.wristbandBalance") }}
-              {{ t("touch.balancePending") }}</span
-            >
+          <div
+            v-if="isWristbandEntry && !playerAccess"
+            class="touch-wristband-scan-banner"
+            aria-live="polite"
+          >
+            <strong>{{ t("touch.scanWristband") }}</strong>
+            <span>{{ t("touch.scanWristbandHint") }}</span>
+          </div>
+          <div v-if="showPlayerAccess" class="touch-player-access" aria-live="polite">
+            <span><small>{{ t("touch.member") }}</small><strong>{{ playerAccess.member.name || playerAccess.member.phone }}</strong></span>
+            <span><small>{{ t("touch.wristbandId") }}</small><strong>{{ playerAccess.access.uid }}</strong></span>
+            <span><small>{{ t("touch.accessStatus") }}</small><strong>{{ playerAccess.access.status }}</strong></span>
+            <span><small>{{ t("touch.purchasedTime") }}</small><strong>{{ t("touch.minutesCount", { value: playerAccess.access.durationMinutes }) }}</strong></span>
+            <span><small>{{ t("touch.expiryTime") }}</small><strong>{{ playerAccessExpiryLabel }}</strong></span>
+            <span><small>{{ t("touch.wristbandBalance") }}</small><strong>{{ playerAccessRemainingLabel }}</strong></span>
+          </div>
+          <p v-if="showPlayerAccess" class="touch-access-note">
+            {{ t("touch.activatedTimeContinues") }}
           </p>
         </div>
         <button
@@ -1366,6 +1517,14 @@ async function confirmReturnToIdle() {
       <img :src="startingGear" alt="" aria-hidden="true" />
       <h1>{{ t("touch.gameStartingWait") }}</h1>
       <p>{{ t("touch.gameStartingWaitHint") }}</p>
+      <div v-if="showPlayerAccess" class="touch-player-access touch-player-access--center" aria-live="polite">
+        <span><small>{{ t("touch.member") }}</small><strong>{{ playerAccess.member.name || playerAccess.member.phone }}</strong></span>
+        <span><small>{{ t("touch.wristbandId") }}</small><strong>{{ playerAccess.access.uid }}</strong></span>
+        <span><small>{{ t("touch.purchasedTime") }}</small><strong>{{ t("touch.minutesCount", { value: playerAccess.access.durationMinutes }) }}</strong></span>
+        <span><small>{{ t("touch.expiryTime") }}</small><strong>{{ playerAccessExpiryLabel }}</strong></span>
+        <span><small>{{ t("touch.wristbandBalance") }}</small><strong>{{ playerAccessRemainingLabel }}</strong></span>
+      </div>
+       <button v-if="canCollectQueueEntry" class="touch-secondary-button queue-entry-button" type="button" @click="openQueuePanel">{{ t("touch.queueNext") }}</button>
     </section>
 
     <section v-else-if="view === 'STARTING'" class="touch-center touch-status-panel">
@@ -1378,6 +1537,13 @@ async function confirmReturnToIdle() {
         }}
       </h1>
       <p>{{ t("touch.startingHint") }}</p>
+      <div v-if="showPlayerAccess" class="touch-player-access touch-player-access--center" aria-live="polite">
+        <span><small>{{ t("touch.member") }}</small><strong>{{ playerAccess.member.name || playerAccess.member.phone }}</strong></span>
+        <span><small>{{ t("touch.wristbandId") }}</small><strong>{{ playerAccess.access.uid }}</strong></span>
+        <span><small>{{ t("touch.purchasedTime") }}</small><strong>{{ t("touch.minutesCount", { value: playerAccess.access.durationMinutes }) }}</strong></span>
+        <span><small>{{ t("touch.expiryTime") }}</small><strong>{{ playerAccessExpiryLabel }}</strong></span>
+        <span><small>{{ t("touch.wristbandBalance") }}</small><strong>{{ playerAccessRemainingLabel }}</strong></span>
+      </div>
     </section>
 
     <section
@@ -1393,6 +1559,13 @@ async function confirmReturnToIdle() {
         }}
       </h1>
       <p v-if="isGamePresentation">{{ t("touch.gameModeRunningHint") }}</p>
+      <div v-if="showPlayerAccess" class="touch-player-access touch-player-access--center" aria-live="polite">
+        <span><small>{{ t("touch.member") }}</small><strong>{{ playerAccess.member.name || playerAccess.member.phone }}</strong></span>
+        <span><small>{{ t("touch.wristbandId") }}</small><strong>{{ playerAccess.access.uid }}</strong></span>
+        <span><small>{{ t("touch.purchasedTime") }}</small><strong>{{ t("touch.minutesCount", { value: playerAccess.access.durationMinutes }) }}</strong></span>
+        <span><small>{{ t("touch.expiryTime") }}</small><strong>{{ playerAccessExpiryLabel }}</strong></span>
+        <span><small>{{ t("touch.wristbandBalance") }}</small><strong>{{ playerAccessRemainingLabel }}</strong></span>
+      </div>
       <div v-if="!isGamePresentation" class="touch-live-stats">
         <span
           >{{ t("touch.score") }}
@@ -1403,6 +1576,7 @@ async function confirmReturnToIdle() {
           <strong>{{ gameplay.life ?? "-" }}</strong></span
         >
       </div>
+       <button v-if="canCollectQueueEntry" class="touch-secondary-button queue-entry-button" type="button" @click="openQueuePanel">{{ t("touch.queueNext") }}</button>
       <button
         v-if="!isGamePresentation"
         class="touch-danger-button"
@@ -1465,6 +1639,33 @@ async function confirmReturnToIdle() {
       <button type="button" @click="errorMessage = ''">
         {{ t("common.close") }}
       </button>
+    </div>
+
+    <div v-if="queuePanelOpen" class="touch-return-idle-backdrop">
+      <section class="touch-return-idle-dialog" role="dialog" aria-modal="true">
+        <span class="touch-kicker">{{ t("touch.queueNext") }}</span>
+        <h2>{{ t("touch.queueScanTitle") }}</h2>
+        <!-- waiting players are not activated -->
+        <p>{{ t("touch.queueScanHint") }}</p>
+        <input v-model="queueUid" class="queue-uid-input" inputmode="numeric" pattern="[0-9]*" :placeholder="t('touch.queueUidPlaceholder')" />
+        <select v-model.number="queueGameId" class="queue-game-select">
+          <option v-for="game in games" :key="game.id" :value="game.id">{{ game.name }}</option>
+        </select>
+        <p v-if="queueSummary.waiting.length" class="queue-summary-line">{{ queueSummary.waiting.length }} player(s) waiting</p>
+        <div v-if="queueSummary.waiting.length" class="queue-waiting-list">
+          <div v-for="(item, index) in queueSummary.waiting" :key="item.id">
+            <span>{{ index + 1 }}. {{ item.wristbandUid }} / {{ item.gameName || item.gameId }}</span>
+            <button type="button" :disabled="queueSubmitting" @click="cancelQueuedItem(item.id)">Cancel</button>
+          </div>
+        </div>
+        <div class="touch-return-idle-actions">
+          <button type="button" @click="closeQueuePanel">{{ t("common.cancel") }}</button>
+          <button class="confirm" type="button" :disabled="queueSubmitting" @click="submitQueueEntry">{{ queueSubmitting ? t("touch.queueSubmitting") : t("touch.queueConfirm") }}</button>
+        </div>
+        <div v-if="queueSummary.failed.length" class="queue-failed-list">
+          <div v-for="item in queueSummary.failed" :key="item.id">{{ item.wristbandUid }}: {{ item.reason }}</div>
+        </div>
+      </section>
     </div>
 
     <div v-if="returnIdleDialogOpen" class="touch-return-idle-backdrop">
@@ -1657,11 +1858,6 @@ async function confirmReturnToIdle() {
   color: #f8fcff;
   background: rgba(7, 16, 24, 0.34);
   cursor: pointer;
-}
-
-.touch-idle-action.wristband-entry {
-  cursor: default;
-  opacity: 1;
 }
 
 .touch-idle-video {
@@ -1916,6 +2112,36 @@ async function confirmReturnToIdle() {
   width: 100%;
   height: 100%;
   overflow: hidden;
+}
+
+.touch-wristband-scan-banner {
+  display: grid;
+  gap: 3px;
+  width: fit-content;
+  margin-top: 12px;
+  padding: 10px 16px;
+  border: 1px solid rgba(255, 197, 91, 0.72);
+  border-radius: 7px;
+  color: #fff4cf;
+  background: rgba(49, 29, 4, 0.78);
+}
+
+.touch-wristband-scan-banner strong {
+  font-size: 18px;
+}
+
+.touch-wristband-scan-banner span {
+  color: #ffd88d;
+  font-size: 12px;
+}
+
+.touch-game-wizard > .touch-wristband-scan-banner {
+  position: absolute;
+  top: clamp(18px, 2.4vh, 34px);
+  left: 50%;
+  z-index: 4;
+  margin: 0;
+  transform: translateX(-50%);
 }
 
 .touch-wizard-screen {
@@ -2477,16 +2703,42 @@ async function confirmReturnToIdle() {
   font-size: 34px;
 }
 
-.touch-preparing-wristband {
+.touch-player-access {
   display: flex;
-  gap: 18px;
-  margin: 8px 0 0;
-  color: #d8f4ff;
-  font-size: 14px;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 14px;
 }
 
-.touch-preparing-wristband span {
-  color: #9fb3c0;
+.touch-player-access > span {
+  display: grid;
+  min-width: 132px;
+  padding: 9px 12px;
+  border: 1px solid rgba(116, 214, 255, 0.34);
+  border-radius: 6px;
+  background: rgba(5, 24, 37, 0.72);
+}
+
+.touch-player-access small {
+  color: #91b8cc;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.touch-player-access strong {
+  color: #f2fbff;
+  font-size: 16px;
+}
+
+.touch-player-access--center {
+  justify-content: center;
+}
+
+.touch-access-note {
+  margin: 8px 0 0;
+  color: #ffc979;
+  font-size: 12px;
 }
 
 .touch-preparing-body {
@@ -2939,6 +3191,50 @@ fieldset:disabled {
 .touch-return-idle-actions button:disabled {
   cursor: not-allowed;
   opacity: 0.55;
+}
+
+.queue-entry-button {
+  margin-top: 22px;
+}
+
+.queue-uid-input,
+.queue-game-select {
+  min-height: 48px;
+  padding: 0 12px;
+  border: 1px solid #35586e;
+  border-radius: 6px;
+  color: #eafaff;
+  background: #07131c;
+  font-size: 18px;
+}
+
+.queue-summary-line {
+  margin: 0;
+  color: #9bdff4;
+}
+
+.queue-waiting-list,
+.queue-failed-list {
+  display: grid;
+  gap: 6px;
+  color: #b9d6e2;
+  font-size: 13px;
+  text-align: left;
+}
+
+.queue-waiting-list > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.queue-waiting-list button {
+  border: 1px solid #526f7f;
+  border-radius: 4px;
+  color: #d9f6ff;
+  background: #153244;
+  cursor: pointer;
 }
 
 .touch-return-idle-dialog .touch-return-idle-error {

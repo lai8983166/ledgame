@@ -45,7 +45,7 @@ test("preparation creation maps every supported configured entry method", () => 
   assert.deepEqual(
     preparationRequest("create", null, {
       launchMethod: "wristband",
-      tokenList: ["2281487330"],
+      tokenList: ["2283055618"],
     }),
     {
       pathname: "/game/preparations",
@@ -53,7 +53,7 @@ test("preparation creation maps every supported configured entry method", () => 
         method: "POST",
         body: JSON.stringify({
           launchMethod: "wristband",
-          tokenList: ["2281487330"],
+          tokenList: ["2283055618"],
         }),
       },
     },

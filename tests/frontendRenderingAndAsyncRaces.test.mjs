@@ -80,6 +80,25 @@ test("SimpleMatrixCanvas uses the two-phase patch renderer and keeps full redraw
   assert.match(matrixCanvasSource, /lastGeometrySignature !== createGeometrySignature\(\)[\s\S]*drawBaseCanvas\(\)/);
 });
 
+test("debug simulation controls are gated by authoritative runtime mode", async () => {
+  const source = await readFile(new URL("../src/views/DemoView.vue", import.meta.url), "utf8");
+  assert.match(source, /runtimeMode === 'SIMULATION'/);
+  assert.match(source, /stageResult/);
+  assert.match(source, /nextStage/);
+  assert.match(source, /endGame/);
+});
+
+test("Touch queue entry uses the scanned UID and backend queue API", async () => {
+  const source = await readFile(new URL("../src/views/LedGameTouchView.vue", import.meta.url), "utf8");
+  const preload = await readFile(new URL("../electron/preload.cjs", import.meta.url), "utf8");
+  assert.match(source, /queuePanelOpen/);
+  assert.match(source, /api\.enqueueGame/);
+  assert.match(source, /wristbandUid: queueUid\.value/);
+  assert.match(source, /waiting players are not activated/i);
+  assert.match(preload, /game:queue:enqueue/);
+  assert.match(preload, /engine:debug-command/);
+});
+
 test("invalidating an async task prevents its delayed continuation from committing", async () => {
   const guard = createLatestAsyncTaskGuard();
   const ticket = guard.begin("editor-1");
