@@ -113,6 +113,7 @@ contextBridge.exposeInMainWorld('appLanguage', {
 
 contextBridge.exposeInMainWorld('appSettings', {
   get: () => ipcRenderer.invoke('app-settings:get'),
+  testMemberPlatform: (settings) => ipcRenderer.invoke('app-settings:test-member-platform', settings),
   ...(windowKind === 'main'
     ? { update: (patch) => ipcRenderer.invoke('app-settings:update', patch) }
     : {}),

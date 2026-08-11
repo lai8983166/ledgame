@@ -983,7 +983,30 @@ const baseMessages = {
   ...additionalMessages,
 };
 
-export const messages = deepMergeMessages(
+const mergedMessages = deepMergeMessages(
   deepMergeMessages(baseMessages, elc408Messages),
   kioskMessages,
 );
+
+const memberPlatformDefaults = {
+  title: "Member platform connection",
+  description: "Configure the member platform address.",
+  host: "Member platform host",
+  port: "Port",
+  test: "Test connection",
+  testing: "Testing",
+  testSuccess: "Member platform is reachable",
+  testFailed: "Unable to reach member platform",
+  invalid: "Check the host and port",
+};
+for (const catalog of Object.values(mergedMessages)) {
+  catalog.applicationSettings = {
+    ...catalog.applicationSettings,
+    memberPlatform: {
+      ...memberPlatformDefaults,
+      ...(catalog.applicationSettings?.memberPlatform || {}),
+    },
+  };
+}
+
+export const messages = mergedMessages;

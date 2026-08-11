@@ -24,6 +24,8 @@ test("application settings normalize missing and unsupported fields to safe defa
   assert.deepEqual(normalizeApplicationSettings(null), {
     entryMethod: "touch",
     mode: "debug",
+    memberPlatformHost: "127.0.0.1",
+    memberPlatformPort: 8090,
     secondaryDisplay: null,
     touchIdlePromptTexts: DEFAULT_PROMPT_TEXTS,
     touchIdlePromptFontSize: 72,
@@ -37,6 +39,8 @@ test("application settings normalize missing and unsupported fields to safe defa
     {
       entryMethod: "touch",
       mode: "game",
+      memberPlatformHost: "127.0.0.1",
+      memberPlatformPort: 8090,
       secondaryDisplay: null,
       touchIdlePromptTexts: DEFAULT_PROMPT_TEXTS,
       touchIdlePromptFontSize: 72,
@@ -88,6 +92,8 @@ test("application settings reject invalid writes and recover damaged JSON", asyn
     assert.deepEqual(await store.get(), {
       entryMethod: "touch",
       mode: "debug",
+      memberPlatformHost: "127.0.0.1",
+      memberPlatformPort: 8090,
       secondaryDisplay: null,
       touchIdlePromptTexts: DEFAULT_PROMPT_TEXTS,
       touchIdlePromptFontSize: 72,
@@ -110,6 +116,14 @@ test("application settings reject invalid writes and recover damaged JSON", asyn
     await assert.rejects(
       () => store.update({ touchIdlePromptFontSize: 201 }),
       /between 32 and 200/,
+    );
+    await assert.rejects(
+      () => store.update({ memberPlatformHost: "http://bad-host" }),
+      /member platform host/i,
+    );
+    await assert.rejects(
+      () => store.update({ memberPlatformPort: 70000 }),
+      /member platform port/i,
     );
   } finally {
     await rm(directory, { recursive: true, force: true });

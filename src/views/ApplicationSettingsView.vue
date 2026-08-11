@@ -14,15 +14,20 @@ const loading = ref(true);
 const saving = ref(false);
 const errorMessage = ref("");
 const savedMessage = ref("");
+const connectionTestStatus = ref("");
 const saved = ref({
   entryMethod: "touch",
   mode: "debug",
+  memberPlatformHost: "127.0.0.1",
+  memberPlatformPort: 8090,
   touchIdlePromptTexts: defaultPromptTexts(),
   touchIdlePromptFontSize: 72,
 });
 const draft = reactive({
   entryMethod: "touch",
   mode: "debug",
+  memberPlatformHost: "127.0.0.1",
+  memberPlatformPort: 8090,
   touchIdlePromptTexts: defaultPromptTexts(),
   touchIdlePromptFontSize: 72,
 });
@@ -39,8 +44,10 @@ const currentIdlePromptText = computed({
 });
 
 const dirty = computed(
-  () => draft.entryMethod !== saved.value.entryMethod
+    () => draft.entryMethod !== saved.value.entryMethod
     || draft.mode !== saved.value.mode
+    || draft.memberPlatformHost !== saved.value.memberPlatformHost
+    || Number(draft.memberPlatformPort) !== Number(saved.value.memberPlatformPort)
     || JSON.stringify(draft.touchIdlePromptTexts) !== JSON.stringify(saved.value.touchIdlePromptTexts)
     || draft.touchIdlePromptFontSize !== saved.value.touchIdlePromptFontSize,
 );
@@ -85,6 +92,13 @@ function applySettings(settings) {
       ? settings.entryMethod
       : "touch",
     mode: settings?.mode === "game" ? "game" : "debug",
+    memberPlatformHost: typeof settings?.memberPlatformHost === "string" && settings.memberPlatformHost.trim()
+      ? settings.memberPlatformHost.trim()
+      : "127.0.0.1",
+    memberPlatformPort: Number.isInteger(Number(settings?.memberPlatformPort))
+      && Number(settings.memberPlatformPort) >= 1 && Number(settings.memberPlatformPort) <= 65535
+      ? Number(settings.memberPlatformPort)
+      : 8090,
     touchIdlePromptTexts: promptTexts,
     touchIdlePromptFontSize: Number.isInteger(promptFontSize) && promptFontSize >= 32 && promptFontSize <= 200
       ? promptFontSize
@@ -93,6 +107,8 @@ function applySettings(settings) {
   saved.value = normalized;
   draft.entryMethod = normalized.entryMethod;
   draft.mode = normalized.mode;
+  draft.memberPlatformHost = normalized.memberPlatformHost;
+  draft.memberPlatformPort = normalized.memberPlatformPort;
   draft.touchIdlePromptTexts = normalized.touchIdlePromptTexts;
   draft.touchIdlePromptFontSize = normalized.touchIdlePromptFontSize;
 }
@@ -111,6 +127,28 @@ async function saveSettings() {
     errorMessage.value = error?.message || t("applicationSettings.saveFailed");
   } finally {
     saving.value = false;
+  }
+}
+
+async function testMemberPlatform() {
+  if (!api?.testMemberPlatform) {
+    connectionTestStatus.value = "unavailable";
+    return;
+  }
+  if (!draft.memberPlatformHost.trim() || !Number.isInteger(Number(draft.memberPlatformPort))
+    || Number(draft.memberPlatformPort) < 1 || Number(draft.memberPlatformPort) > 65535) {
+    connectionTestStatus.value = "invalid";
+    return;
+  }
+  connectionTestStatus.value = "testing";
+  try {
+    const result = await api.testMemberPlatform({
+      memberPlatformHost: draft.memberPlatformHost,
+      memberPlatformPort: Number(draft.memberPlatformPort),
+    });
+    connectionTestStatus.value = result?.reachable ? "success" : "failed";
+  } catch (_error) {
+    connectionTestStatus.value = "failed";
   }
 }
 </script>
@@ -179,6 +217,27 @@ async function saveSettings() {
           </select>
           <small>{{ t(`applicationSettings.modeHints.${draft.mode}`) }}</small>
         </label>
+
+        <fieldset class="application-settings-connection">
+          <legend>{{ t("applicationSettings.memberPlatform.title") }}</legend>
+          <p>{{ t("applicationSettings.memberPlatform.description") }}</p>
+          <label class="application-settings-field">
+            <span>{{ t("applicationSettings.memberPlatform.host") }}</span>
+            <input v-model.trim="draft.memberPlatformHost" type="text" autocomplete="off" />
+          </label>
+          <label class="application-settings-field">
+            <span>{{ t("applicationSettings.memberPlatform.port") }}</span>
+            <input v-model.number="draft.memberPlatformPort" type="number" min="1" max="65535" step="1" inputmode="numeric" />
+          </label>
+          <div class="application-settings-actions">
+            <button class="application-settings-secondary" type="button" :disabled="connectionTestStatus === 'testing'" @click="testMemberPlatform">
+              {{ connectionTestStatus === 'testing' ? t("applicationSettings.memberPlatform.testing") : t("applicationSettings.memberPlatform.test") }}
+            </button>
+            <span v-if="connectionTestStatus === 'success'" class="application-settings-success">{{ t("applicationSettings.memberPlatform.testSuccess") }}</span>
+            <span v-else-if="connectionTestStatus === 'failed'" class="application-settings-error">{{ t("applicationSettings.memberPlatform.testFailed") }}</span>
+            <span v-else-if="connectionTestStatus === 'invalid'" class="application-settings-error">{{ t("applicationSettings.memberPlatform.invalid") }}</span>
+          </div>
+        </fieldset>
 
         <div class="application-settings-actions">
           <button
@@ -280,6 +339,26 @@ async function saveSettings() {
   color: #7b8694;
 }
 
+.application-settings-connection {
+  display: grid;
+  gap: 14px;
+  max-width: 620px;
+  padding: 18px;
+  border: 1px solid #cfd7e1;
+  border-radius: 6px;
+}
+
+.application-settings-connection legend {
+  padding: 0 6px;
+  color: #354252;
+  font-weight: 720;
+}
+
+.application-settings-connection > p {
+  margin: 0;
+  color: #687483;
+}
+
 .application-settings-actions {
   display: flex;
   align-items: center;
@@ -301,6 +380,22 @@ async function saveSettings() {
   color: #929ba6;
   background: #dce2e8;
   cursor: not-allowed;
+}
+
+.application-settings-secondary {
+  min-height: 42px;
+  padding: 0 16px;
+  border: 1px solid #9eafc1;
+  border-radius: 6px;
+  color: #365f8c;
+  background: #fff;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.application-settings-secondary:disabled {
+  color: #929ba6;
+  cursor: wait;
 }
 
 .application-settings-success {

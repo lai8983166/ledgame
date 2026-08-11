@@ -152,6 +152,18 @@ function broadcastApplicationSettings(settings) {
 async function updateApplicationSettings(patch) {
   const settings = await applicationSettings.update(patch)
   currentEntryMethod = settings.entryMethod
+  if (
+    'memberPlatformHost' in (patch || {})
+    || 'memberPlatformPort' in (patch || {})
+  ) {
+    await backendRequest('/api/member-platform/connection', {
+      method: 'PUT',
+      body: JSON.stringify({
+        host: settings.memberPlatformHost,
+        port: settings.memberPlatformPort,
+      }),
+    })
+  }
   broadcastApplicationSettings(settings)
   await broadcastSecondaryDisplayStatus()
   return settings
@@ -1061,6 +1073,7 @@ async function startEmbeddedBackend() {
 
   const backendPort = await findAvailablePort(preferredBackendPort)
   const selectedBackendBaseUrl = `http://127.0.0.1:${backendPort}`
+  const savedApplicationSettings = await applicationSettings.get()
   const mediaRoot = getPackagedMediaRoot()
   const elc408ConfigDirectory = getElc408ConfigDirectory()
   const hasElc408Config =
@@ -1091,6 +1104,8 @@ async function startEmbeddedBackend() {
       SPRING_DATASOURCE_URL: `jdbc:h2:file:${getUserDatabaseBasePath()};MODE=MySQL;DATABASE_TO_LOWER=TRUE`,
       LED_MEDIA_ROOT: mediaRoot,
       LED_BRIDGE_ENABLED: process.env.LED_BRIDGE_ENABLED || 'false',
+      MEMBER_PLATFORM_BASE_URL: `http://${savedApplicationSettings.memberPlatformHost}:${savedApplicationSettings.memberPlatformPort}`,
+      LED_ROOM_CONNECTION_ENABLED: 'true',
     },
   })
   const spawnedBackend = embeddedBackendProcess
@@ -1806,6 +1821,17 @@ ipcMain.handle('app-language:get', () => languagePreferences.get())
 ipcMain.handle('app-language:set', (_event, locale) => setApplicationLanguage(locale))
 ipcMain.handle('app-settings:get', () => applicationSettings.get())
 ipcMain.handle('app-settings:update', (_event, patch) => updateApplicationSettings(patch))
+ipcMain.handle('app-settings:test-member-platform', async (_event, settings) => {
+  const current = await applicationSettings.get()
+  const draft = settings && typeof settings === 'object' ? settings : current
+  return backendRequest('/api/member-platform/connection/test', {
+    method: 'POST',
+    body: JSON.stringify({
+      host: draft.memberPlatformHost,
+      port: draft.memberPlatformPort,
+    }),
+  })
+})
 ipcMain.handle('touch:presentation-mode', () => touchPresentationMode)
 ipcMain.handle('touch:exit-fullscreen', (event, code) => exitTouchFullScreen(event, code))
 ipcMain.handle('secondary-display:list', () => getSecondaryDisplayState())

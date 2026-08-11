@@ -16,6 +16,8 @@ const TOUCH_IDLE_PROMPT_FONT_SIZE_MAX = 200
 const DEFAULT_APPLICATION_SETTINGS = Object.freeze({
   entryMethod: 'touch',
   mode: 'debug',
+  memberPlatformHost: '127.0.0.1',
+  memberPlatformPort: 8090,
   secondaryDisplay: null,
   touchIdlePromptTexts: TOUCH_IDLE_PROMPT_DEFAULTS,
   touchIdlePromptFontSize: TOUCH_IDLE_PROMPT_FONT_SIZE_DEFAULT,
@@ -73,6 +75,18 @@ function normalizeTouchIdlePromptFontSize(value) {
     : TOUCH_IDLE_PROMPT_FONT_SIZE_DEFAULT
 }
 
+function normalizeMemberPlatformHost(value) {
+  const host = typeof value === 'string' ? value.trim() : ''
+  return host && !host.includes('/') && !host.includes(':') ? host : DEFAULT_APPLICATION_SETTINGS.memberPlatformHost
+}
+
+function normalizeMemberPlatformPort(value) {
+  const port = Number(value)
+  return Number.isInteger(port) && port >= 1 && port <= 65535
+    ? port
+    : DEFAULT_APPLICATION_SETTINGS.memberPlatformPort
+}
+
 function normalizeApplicationSettings(value) {
   const source = value && typeof value === 'object' ? value : {}
   return {
@@ -82,6 +96,8 @@ function normalizeApplicationSettings(value) {
     mode: APPLICATION_MODES.includes(source.mode)
       ? source.mode
       : DEFAULT_APPLICATION_SETTINGS.mode,
+    memberPlatformHost: normalizeMemberPlatformHost(source.memberPlatformHost),
+    memberPlatformPort: normalizeMemberPlatformPort(source.memberPlatformPort),
     secondaryDisplay: normalizeSecondaryDisplay(source.secondaryDisplay),
     touchIdlePromptTexts: normalizeTouchIdlePromptTexts(
       source.touchIdlePromptTexts ?? source.touchIdlePromptText,
@@ -97,6 +113,13 @@ function validateSettingsPatch(value) {
   }
   if ('mode' in patch && !APPLICATION_MODES.includes(patch.mode)) {
     throw new Error(`Unsupported application mode: ${patch.mode}`)
+  }
+  if ('memberPlatformHost' in patch && (typeof patch.memberPlatformHost !== 'string'
+    || normalizeMemberPlatformHost(patch.memberPlatformHost) !== patch.memberPlatformHost.trim())) {
+    throw new Error('Member platform host is invalid')
+  }
+  if ('memberPlatformPort' in patch && normalizeMemberPlatformPort(patch.memberPlatformPort) !== Number(patch.memberPlatformPort)) {
+    throw new Error('Member platform port must be between 1 and 65535')
   }
   if ('touchIdlePromptTexts' in patch || 'touchIdlePromptText' in patch) {
     const value = patch.touchIdlePromptTexts ?? patch.touchIdlePromptText
