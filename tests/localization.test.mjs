@@ -4,7 +4,8 @@ import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { createRequire } from "node:module";
-import { messages } from "../src/i18n/messages.js";
+import { authoredMessages, messages } from "../src/i18n/messages.js";
+import { createMissingQueue, flattenCatalog } from "../scripts/i18n-workflow.mjs";
 import {
   applyLocale,
   DEFAULT_LOCALE,
@@ -64,14 +65,15 @@ test("locale catalogs expose identical key sets", () => {
 });
 
 test("renderer and main locale normalization share the same allowlist and fallback", () => {
-  assert.deepEqual(SUPPORTED_LOCALES, ["zh-CN", "en-US", "ru-RU", "ko-KR", "ja-JP"]);
+  assert.deepEqual(SUPPORTED_LOCALES, [
+    "zh-CN", "en-US", "es-ES", "pt-PT", "fr-FR", "de-DE", "pl-PL",
+    "ru-RU", "vi-VN", "it-IT", "cs-CZ", "ko-KR", "ro-RO", "ar-SA",
+  ]);
   assert.equal(DEFAULT_LOCALE, "zh-CN");
   assert.equal(normalizeLocale("en-US"), "en-US");
-  assert.equal(normalizeLocale("ru-RU"), "ru-RU");
-  assert.equal(normalizeLocale("ko-KR"), "ko-KR");
-  assert.equal(normalizeLocale("ja-JP"), "ja-JP");
-  assert.equal(normalizeLocale("fr-FR"), "zh-CN");
-  assert.equal(normalizeMainLocale("fr-FR"), "zh-CN");
+  assert.equal(normalizeLocale("ar-SA"), "ar-SA");
+  assert.equal(normalizeLocale("ja-JP"), "zh-CN");
+  assert.equal(normalizeMainLocale("ja-JP"), "zh-CN");
 });
 
 test("language preference store persists valid locale atomically", async () => {
@@ -85,7 +87,7 @@ test("language preference store persists valid locale atomically", async () => {
       assert.equal(await store.set(locale), locale);
       assert.deepEqual(JSON.parse(await readFile(settingsPath, "utf8")), { locale });
     }
-    assert.equal(await createLanguagePreferenceStore({ fs, settingsPath }).get(), "ja-JP");
+    assert.equal(await createLanguagePreferenceStore({ fs, settingsPath }).get(), "ar-SA");
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
@@ -99,7 +101,7 @@ test("language preference store rejects unknown locale and recovers damaged JSON
     await writeFile(settingsPath, "not-json", "utf8");
     const store = createLanguagePreferenceStore({ fs, settingsPath });
     assert.equal(await store.get(), "zh-CN");
-    await assert.rejects(() => store.set("de-DE"), /Unsupported application locale/);
+    await assert.rejects(() => store.set("ja-JP"), /Unsupported application locale/);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
@@ -114,20 +116,39 @@ test("preload exposes removable language listeners without filesystem access", a
   assert.doesNotMatch(preload, /require\(['"]node:fs/);
 });
 
-test("language view exposes all supported locales with country flags", async () => {
+test("language view exposes all supported locales with native labels and bundled SVG flags", async () => {
   const source = await readFile(new URL("../src/views/LanguageView.vue", import.meta.url), "utf8");
   const panel = await readFile(new URL("../src/components/LanguageSelectionPanel.vue", import.meta.url), "utf8");
   const options = await readFile(new URL("../src/lib/applicationLanguages.js", import.meta.url), "utf8");
+  const flagUrls = await readFile(new URL("../src/lib/localeFlags.js", import.meta.url), "utf8");
   for (const locale of SUPPORTED_LOCALES) {
     assert.match(options, new RegExp(locale));
   }
-  for (const flag of ["cn.svg", "us.svg", "ru.svg", "kr.svg", "jp.svg"]) {
-    assert.match(options, new RegExp(`assets/flags/${flag.replace(".", "\\.")}`));
-  }
+  assert.match(options, /flagCode: "cn"/);
+  assert.match(options, /flagCode: "sa"/);
+  assert.doesNotMatch(options, /ja-JP|jp\.svg/);
   assert.match(source, /LanguageSelectionPanel/);
-  assert.match(panel, /<img class="language-option-flag"/);
+  assert.match(flagUrls, /flag-icons\/flags\/4x3\/cn\.svg/);
+  assert.match(flagUrls, /flag-icons\/flags\/4x3\/sa\.svg/);
+  assert.match(panel, /LOCALE_FLAG_URLS\[option\.flagCode\]/);
   assert.match(panel, /setApplicationLocale/);
   assert.match(panel, /language-option-flag/);
+});
+
+test("authored coverage reports fallback copy and excludes completed translations", () => {
+  const base = flattenCatalog(authoredMessages["en-US"]);
+  const queue = createMissingQueue(base, authoredMessages);
+  const [missingKey] = Object.keys(queue.targets["es-ES"]);
+  assert.ok(missingKey);
+  assert.equal(flattenCatalog(messages["es-ES"])[missingKey], base[missingKey]);
+  assert.equal(queue.targets["es-ES"]["language.title"], undefined);
+
+  const completed = structuredClone(authoredMessages);
+  const segments = missingKey.split(".");
+  let cursor = completed["es-ES"];
+  for (const segment of segments.slice(0, -1)) cursor = cursor[segment] ||= {};
+  cursor[segments.at(-1)] = "Traducción revisada";
+  assert.equal(createMissingQueue(base, completed).targets["es-ES"][missingKey], undefined);
 });
 
 test("Touch idle prompt reads the active application locale", async () => {
@@ -165,6 +186,23 @@ test("renderer applies locale immediately, preserves draft state, and cleans rep
   applyLocale(DEFAULT_LOCALE);
 });
 
+test("Arabic keeps the shell LTR and exposes a text-direction marker", () => {
+  const previousDocument = globalThis.document;
+  globalThis.document = { documentElement: { lang: "", dir: "", dataset: {} } };
+  try {
+    assert.equal(applyLocale("ar-SA"), "ar-SA");
+    assert.equal(document.documentElement.lang, "ar-SA");
+    assert.equal(document.documentElement.dir, "ltr");
+    assert.equal(document.documentElement.dataset.languageDirection, "rtl");
+    assert.equal(applyLocale("de-DE"), "de-DE");
+    assert.equal(document.documentElement.dir, "ltr");
+    assert.equal(document.documentElement.dataset.languageDirection, "ltr");
+  } finally {
+    globalThis.document = previousDocument;
+    applyLocale(DEFAULT_LOCALE);
+  }
+});
+
 test("renderer initialization failure and unknown locale safely fall back to zh-CN", async () => {
   await initializeApplicationLocale({
     get: async () => { throw new Error("settings unavailable"); },
@@ -183,6 +221,7 @@ test("Vue UI keeps Han interface copy inside the locale catalog", async () => {
     "i18n/additional-messages.js",
     "i18n/elc408-messages.js",
     "i18n/kiosk-messages.js",
+    "lib/applicationLanguages.js",
   ]);
   const violations = [];
 

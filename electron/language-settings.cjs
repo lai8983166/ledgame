@@ -1,7 +1,10 @@
 const path = require('node:path')
 
 const DEFAULT_LOCALE = 'zh-CN'
-const SUPPORTED_LOCALES = Object.freeze(['zh-CN', 'en-US', 'ru-RU', 'ko-KR', 'ja-JP'])
+const SUPPORTED_LOCALES = Object.freeze([
+  'zh-CN', 'en-US', 'es-ES', 'pt-PT', 'fr-FR', 'de-DE', 'pl-PL',
+  'ru-RU', 'vi-VN', 'it-IT', 'cs-CZ', 'ko-KR', 'ro-RO', 'ar-SA',
+])
 
 function normalizeLocale(value) {
   return SUPPORTED_LOCALES.includes(value) ? value : DEFAULT_LOCALE

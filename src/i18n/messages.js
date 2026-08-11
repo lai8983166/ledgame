@@ -1,6 +1,7 @@
 import { additionalMessages } from "./additional-messages.js";
 import { elc408Messages } from "./elc408-messages.js";
 import { kioskMessages } from "./kiosk-messages.js";
+import { generatedTranslations } from "./generated-translations.js";
 
 function deepMergeMessages(base, addition) {
   const result = { ...base };
@@ -988,6 +989,31 @@ const mergedMessages = deepMergeMessages(
   kioskMessages,
 );
 
+export const canonicalLocales = [
+  "zh-CN", "en-US", "es-ES", "pt-PT", "fr-FR", "de-DE", "pl-PL",
+  "ru-RU", "vi-VN", "it-IT", "cs-CZ", "ko-KR", "ro-RO", "ar-SA",
+];
+const languageCopy = {
+  "es-ES": { title: "Idioma", subtitle: "Idioma de la aplicación", description: "Selecciona el idioma de la interfaz. El cambio se aplica inmediatamente a todas las ventanas abiertas.", current: "Idioma actual", saveError: "No se pudo guardar el idioma" },
+  "pt-PT": { title: "Idioma", subtitle: "Idioma da aplicação", description: "Selecione o idioma da interface. A alteração é aplicada imediatamente a todas as janelas abertas.", current: "Idioma atual", saveError: "Não foi possível guardar o idioma" },
+  "fr-FR": { title: "Langue", subtitle: "Langue de l’application", description: "Sélectionnez la langue de l’interface. Le changement s’applique immédiatement à toutes les fenêtres ouvertes.", current: "Langue actuelle", saveError: "Impossible d’enregistrer la langue" },
+  "de-DE": { title: "Sprache", subtitle: "Anwendungssprache", description: "Wählen Sie die Sprache der Benutzeroberfläche. Die Änderung wird sofort auf alle geöffneten Fenster angewendet.", current: "Aktuelle Sprache", saveError: "Sprache konnte nicht gespeichert werden" },
+  "pl-PL": { title: "Język", subtitle: "Język aplikacji", description: "Wybierz język interfejsu. Zmiana zostanie natychmiast zastosowana we wszystkich otwartych oknach.", current: "Bieżący język", saveError: "Nie udało się zapisać języka" },
+  "vi-VN": { title: "Ngôn ngữ", subtitle: "Ngôn ngữ ứng dụng", description: "Chọn ngôn ngữ giao diện. Thay đổi được áp dụng ngay cho mọi cửa sổ đang mở.", current: "Ngôn ngữ hiện tại", saveError: "Không thể lưu ngôn ngữ" },
+  "it-IT": { title: "Lingua", subtitle: "Lingua dell’applicazione", description: "Seleziona la lingua dell’interfaccia. La modifica viene applicata subito a tutte le finestre aperte.", current: "Lingua attuale", saveError: "Impossibile salvare la lingua" },
+  "cs-CZ": { title: "Jazyk", subtitle: "Jazyk aplikace", description: "Vyberte jazyk rozhraní. Změna se okamžitě použije ve všech otevřených oknech.", current: "Aktuální jazyk", saveError: "Jazyk se nepodařilo uložit" },
+  "ro-RO": { title: "Limbă", subtitle: "Limba aplicației", description: "Selectați limba interfeței. Modificarea se aplică imediat tuturor ferestrelor deschise.", current: "Limba curentă", saveError: "Limba nu a putut fi salvată" },
+  "ar-SA": { title: "اللغة", subtitle: "لغة التطبيق", description: "اختر لغة الواجهة. يُطبّق التغيير فورًا على جميع النوافذ المفتوحة.", current: "اللغة الحالية", saveError: "تعذر حفظ اللغة" },
+};
+for (const locale of canonicalLocales) {
+  if (languageCopy[locale]) {
+    mergedMessages[locale] = mergeCatalog(mergedMessages[locale] || {}, { language: languageCopy[locale] });
+  }
+  if (generatedTranslations[locale]) {
+    mergedMessages[locale] = mergeCatalog(mergedMessages[locale] || {}, generatedTranslations[locale]);
+  }
+}
+
 const memberPlatformDefaults = {
   title: "Member platform connection",
   description: "Configure the member platform address.",
@@ -999,14 +1025,23 @@ const memberPlatformDefaults = {
   testFailed: "Unable to reach member platform",
   invalid: "Check the host and port",
 };
-for (const catalog of Object.values(mergedMessages)) {
-  catalog.applicationSettings = {
-    ...catalog.applicationSettings,
-    memberPlatform: {
-      ...memberPlatformDefaults,
-      ...(catalog.applicationSettings?.memberPlatform || {}),
-    },
-  };
-}
+mergedMessages["en-US"].applicationSettings = {
+  ...mergedMessages["en-US"].applicationSettings,
+  memberPlatform: {
+    ...memberPlatformDefaults,
+    ...(mergedMessages["en-US"].applicationSettings?.memberPlatform || {}),
+  },
+};
 
-export const messages = mergedMessages;
+export const authoredMessages = Object.fromEntries(
+  canonicalLocales.map((locale) => [locale, mergedMessages[locale] || {}]),
+);
+
+export const messages = Object.fromEntries(
+  canonicalLocales.map((locale) => [
+    locale,
+    locale === "en-US"
+      ? authoredMessages["en-US"]
+      : mergeCatalog(authoredMessages["en-US"], authoredMessages[locale]),
+  ]),
+);

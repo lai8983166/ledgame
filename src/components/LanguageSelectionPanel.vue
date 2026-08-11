@@ -3,6 +3,7 @@ import { ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { setApplicationLocale } from "../i18n/index.js";
 import { APPLICATION_LANGUAGE_OPTIONS } from "../lib/applicationLanguages.js";
+import { LOCALE_FLAG_URLS } from "../lib/localeFlags.js";
 
 defineProps({
   compact: {
@@ -57,8 +58,8 @@ async function selectLanguage(value) {
           type="radio"
           @change="selectLanguage(option.value)"
         />
-        <img class="language-option-flag" :src="option.flag" alt="" aria-hidden="true" />
-        <span>{{ t(option.labelKey) }}</span>
+        <img class="language-option-flag" :src="LOCALE_FLAG_URLS[option.flagCode]" alt="" />
+        <span>{{ option.label }}</span>
         <small>{{ option.value }}</small>
       </label>
     </div>

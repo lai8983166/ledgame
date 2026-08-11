@@ -15,9 +15,18 @@ const {
 const DEFAULT_PROMPT_TEXTS = {
   "zh-CN": "开始游戏",
   "en-US": "Start Game",
+  "es-ES": "Iniciar juego",
+  "pt-PT": "Iniciar jogo",
+  "fr-FR": "Démarrer le jeu",
+  "de-DE": "Spiel starten",
+  "pl-PL": "Rozpocznij grę",
   "ru-RU": "Начать игру",
+  "vi-VN": "Bắt đầu trò chơi",
+  "it-IT": "Avvia gioco",
+  "cs-CZ": "Spustit hru",
   "ko-KR": "게임 시작",
-  "ja-JP": "ゲームを開始",
+  "ro-RO": "Pornește jocul",
+  "ar-SA": "ابدأ اللعبة",
 };
 
 test("application settings normalize missing and unsupported fields to safe defaults", () => {

@@ -673,13 +673,18 @@ button:disabled {
 }
 
 .language-option-flag {
+  display: block;
   width: 36px;
   height: 24px;
   grid-row: 1 / span 2;
-  border: 1px solid rgba(80, 94, 110, 0.24);
   border-radius: 3px;
   object-fit: cover;
   box-shadow: 0 2px 5px rgba(54, 65, 78, 0.16);
+}
+
+html[data-language-direction="rtl"] :is(input, textarea) {
+  direction: rtl;
+  text-align: right;
 }
 
 .language-option span {

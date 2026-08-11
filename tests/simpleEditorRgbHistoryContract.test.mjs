@@ -134,7 +134,7 @@ test("level reorder tooltips and editor-only disabled styling are visible", () =
 });
 
 test("all supported locales provide RGB history labels", () => {
-  for (const locale of ["zh-CN", "en-US", "ru-RU", "ko-KR", "ja-JP"]) {
+  for (const locale of Object.keys(messages)) {
     const simple = messages[locale]?.simple;
     assert.ok(simple?.undoRgb, `${locale} undoRgb`);
     assert.ok(simple?.redoRgb, `${locale} redoRgb`);

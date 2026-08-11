@@ -2,7 +2,10 @@ import { createI18n } from "vue-i18n";
 import { messages } from "./messages.js";
 
 export const DEFAULT_LOCALE = "zh-CN";
-export const SUPPORTED_LOCALES = Object.freeze(["zh-CN", "en-US", "ru-RU", "ko-KR", "ja-JP"]);
+export const SUPPORTED_LOCALES = Object.freeze([
+  "zh-CN", "en-US", "es-ES", "pt-PT", "fr-FR", "de-DE", "pl-PL",
+  "ru-RU", "vi-VN", "it-IT", "cs-CZ", "ko-KR", "ro-RO", "ar-SA",
+]);
 const STORAGE_KEY = "led-game.locale";
 const CHANNEL_NAME = "led-game-language";
 
@@ -28,6 +31,8 @@ export function applyLocale(value) {
   i18n.global.locale.value = locale;
   if (typeof document !== "undefined") {
     document.documentElement.lang = locale;
+    document.documentElement.dir = "ltr";
+    document.documentElement.dataset.languageDirection = locale === "ar-SA" ? "rtl" : "ltr";
   }
   return locale;
 }

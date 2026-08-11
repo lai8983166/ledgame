@@ -5,9 +5,18 @@ const APPLICATION_MODES = Object.freeze(['debug', 'game'])
 const TOUCH_IDLE_PROMPT_DEFAULTS = Object.freeze({
   'zh-CN': '开始游戏',
   'en-US': 'Start Game',
+  'es-ES': 'Iniciar juego',
+  'pt-PT': 'Iniciar jogo',
+  'fr-FR': 'Démarrer le jeu',
+  'de-DE': 'Spiel starten',
+  'pl-PL': 'Rozpocznij grę',
   'ru-RU': 'Начать игру',
+  'vi-VN': 'Bắt đầu trò chơi',
+  'it-IT': 'Avvia gioco',
+  'cs-CZ': 'Spustit hru',
   'ko-KR': '게임 시작',
-  'ja-JP': 'ゲームを開始',
+  'ro-RO': 'Pornește jocul',
+  'ar-SA': 'ابدأ اللعبة',
 })
 const TOUCH_IDLE_PROMPT_MAX_LENGTH = 48
 const TOUCH_IDLE_PROMPT_FONT_SIZE_DEFAULT = 72

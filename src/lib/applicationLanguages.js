@@ -1,16 +1,19 @@
-import flagChina from "../assets/flags/cn.svg";
-import flagJapan from "../assets/flags/jp.svg";
-import flagKorea from "../assets/flags/kr.svg";
-import flagRussia from "../assets/flags/ru.svg";
-import flagUnitedStates from "../assets/flags/us.svg";
 import { SUPPORTED_LOCALES } from "../i18n/index.js";
-
 const LANGUAGE_OPTIONS = [
-  { value: "zh-CN", labelKey: "language.chinese", flag: flagChina },
-  { value: "en-US", labelKey: "language.english", flag: flagUnitedStates },
-  { value: "ru-RU", labelKey: "language.russian", flag: flagRussia },
-  { value: "ko-KR", labelKey: "language.korean", flag: flagKorea },
-  { value: "ja-JP", labelKey: "language.japanese", flag: flagJapan },
+  { value: "zh-CN", label: "中文", flag: "🇨🇳", flagCode: "cn" },
+  { value: "en-US", label: "English", flag: "🇺🇸", flagCode: "us" },
+  { value: "es-ES", label: "Español", flag: "🇪🇸", flagCode: "es" },
+  { value: "pt-PT", label: "Português", flag: "🇵🇹", flagCode: "pt" },
+  { value: "fr-FR", label: "Français", flag: "🇫🇷", flagCode: "fr" },
+  { value: "de-DE", label: "Deutsch", flag: "🇩🇪", flagCode: "de" },
+  { value: "pl-PL", label: "Polski", flag: "🇵🇱", flagCode: "pl" },
+  { value: "ru-RU", label: "Русский", flag: "🇷🇺", flagCode: "ru" },
+  { value: "vi-VN", label: "Tiếng Việt", flag: "🇻🇳", flagCode: "vn" },
+  { value: "it-IT", label: "Italiano", flag: "🇮🇹", flagCode: "it" },
+  { value: "cs-CZ", label: "Čeština", flag: "🇨🇿", flagCode: "cz" },
+  { value: "ko-KR", label: "한국어", flag: "🇰🇷", flagCode: "kr" },
+  { value: "ro-RO", label: "Română", flag: "🇷🇴", flagCode: "ro" },
+  { value: "ar-SA", label: "العربية", flag: "🇸🇦", flagCode: "sa" },
 ];
 
 export const APPLICATION_LANGUAGE_OPTIONS = Object.freeze(

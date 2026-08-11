@@ -46,7 +46,7 @@ import {
 const api = window.ledGame;
 const mediaApi = window.mediaLibrary;
 const { t, locale } = useI18n({ useScope: "global" });
-const defaultIdlePrompt = () => t("touch.defaultIdlePrompt");
+const defaultIdlePrompt = () => t("applicationSettings.defaultIdlePrompt");
 const TOUCH_IDLE_VIDEO_ASSET = "dashboard/idle.mp4";
 const TOUCH_GAME_BACKGROUND_ASSET = "touch/background.png";
 const runtimeState = ref(normalizeRuntimeState(null));
