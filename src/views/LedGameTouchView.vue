@@ -1012,8 +1012,10 @@ async function confirmReturnToIdle() {
 <template>
   <main
     class="touch-shell"
+    data-testid="game-touch"
     :class="{ 'touch-game-presentation': isGamePresentation }"
     :data-state="view"
+    :data-preparation-step="gamePreparationStep"
     @pointerup.capture="handleReturnIdleEdgeTap"
   >
     <TouchMatrixCanvas
@@ -1060,6 +1062,7 @@ async function confirmReturnToIdle() {
     <div
       v-else-if="view === 'IDLE'"
       class="touch-idle-action"
+      data-testid="game-touch-idle"
       :aria-disabled="Boolean(busyAction)"
       role="button"
       tabindex="0"
@@ -1120,6 +1123,7 @@ async function confirmReturnToIdle() {
       <div
         v-if="isWristbandEntry && !playerAccess"
         class="touch-wristband-scan-banner"
+        data-testid="game-wristband-prompt"
         aria-live="polite"
       >
         <strong>{{ t("touch.scanWristband") }}</strong>
@@ -1134,7 +1138,7 @@ async function confirmReturnToIdle() {
           <span>{{ t("touch.playerSetup") }}</span>
           <h1>{{ t("touch.selectPlayerCount") }}</h1>
           <i aria-hidden="true"></i>
-          <div v-if="showPlayerAccess" class="touch-player-access" aria-live="polite">
+          <div v-if="showPlayerAccess" class="touch-player-access" data-testid="game-player-access" :data-wristband-uid="playerAccess.access.uid" :data-status="playerAccess.access.status" aria-live="polite">
             <span><small>{{ t("touch.member") }}</small><strong>{{ playerAccess.member.name || playerAccess.member.phone }}</strong></span>
             <span><small>{{ t("touch.wristbandId") }}</small><strong>{{ playerAccess.access.uid }}</strong></span>
             <span><small>{{ t("touch.accessStatus") }}</small><strong>{{ playerAccess.access.status }}</strong></span>
@@ -1151,6 +1155,7 @@ async function confirmReturnToIdle() {
           <button
             v-for="(count, index) in TOUCH_PLAYER_COUNTS"
             :key="count"
+            :data-testid="`game-player-count-${count}`"
             class="touch-player-option"
             :class="{ selected: draft.userCount === count }"
             type="button"
@@ -1166,6 +1171,7 @@ async function confirmReturnToIdle() {
         <div class="touch-wizard-actions touch-wizard-actions-end">
           <button
             class="touch-wizard-next"
+            data-testid="game-player-next"
             type="button"
             :disabled="!TOUCH_PLAYER_COUNTS.includes(draft.userCount)"
             @click="showGameSelection"
@@ -1222,6 +1228,7 @@ async function confirmReturnToIdle() {
             <button
               v-for="slot in carouselSlots"
               :key="slot.key"
+              :data-testid="`game-carousel-${slot.item.id}`"
               class="touch-carousel-card"
               :class="{
                 current: slot.offset === 0,
@@ -1265,6 +1272,7 @@ async function confirmReturnToIdle() {
           </button>
           <button
             class="touch-wizard-next"
+            data-testid="game-game-next"
             type="button"
             :disabled="!carouselGame || Boolean(busyAction)"
             @click="showLevelSelection"
@@ -1305,6 +1313,7 @@ async function confirmReturnToIdle() {
             <button
               v-for="level in gameLevels"
               :key="level.index"
+              :data-testid="`game-level-${level.index}`"
               type="button"
               :class="{ selected: draft.startLevelIndex === level.index }"
               :aria-pressed="draft.startLevelIndex === level.index"
@@ -1326,6 +1335,7 @@ async function confirmReturnToIdle() {
           </button>
           <button
             class="touch-wizard-start"
+            data-testid="game-start"
             type="button"
             :disabled="!selectedWizardLevel || !canConfirm || Boolean(busyAction)"
             @click="startGameCountdown"
@@ -1352,12 +1362,13 @@ async function confirmReturnToIdle() {
           <div
             v-if="isWristbandEntry && !playerAccess"
             class="touch-wristband-scan-banner"
+            data-testid="game-wristband-prompt"
             aria-live="polite"
           >
             <strong>{{ t("touch.scanWristband") }}</strong>
             <span>{{ t("touch.scanWristbandHint") }}</span>
           </div>
-          <div v-if="showPlayerAccess" class="touch-player-access" aria-live="polite">
+          <div v-if="showPlayerAccess" class="touch-player-access" data-testid="game-player-access" :data-wristband-uid="playerAccess.access.uid" :data-status="playerAccess.access.status" aria-live="polite">
             <span><small>{{ t("touch.member") }}</small><strong>{{ playerAccess.member.name || playerAccess.member.phone }}</strong></span>
             <span><small>{{ t("touch.wristbandId") }}</small><strong>{{ playerAccess.access.uid }}</strong></span>
             <span><small>{{ t("touch.accessStatus") }}</small><strong>{{ playerAccess.access.status }}</strong></span>
@@ -1405,6 +1416,7 @@ async function confirmReturnToIdle() {
             <button
               v-for="game in games"
               :key="game.id"
+              :data-testid="`game-option-${game.id}`"
               class="touch-game-card"
               :class="{ selected: game.id === selectedGameId }"
               type="button"
@@ -1492,6 +1504,7 @@ async function confirmReturnToIdle() {
             </button>
             <button
               class="touch-primary-button"
+              data-testid="game-start"
               type="button"
               :disabled="!canConfirm || Boolean(busyAction)"
               @click="confirmPreparation"
@@ -1517,14 +1530,14 @@ async function confirmReturnToIdle() {
       <img :src="startingGear" alt="" aria-hidden="true" />
       <h1>{{ t("touch.gameStartingWait") }}</h1>
       <p>{{ t("touch.gameStartingWaitHint") }}</p>
-      <div v-if="showPlayerAccess" class="touch-player-access touch-player-access--center" aria-live="polite">
+      <div v-if="showPlayerAccess" class="touch-player-access touch-player-access--center" data-testid="game-player-access" :data-wristband-uid="playerAccess.access.uid" :data-status="playerAccess.access.status" aria-live="polite">
         <span><small>{{ t("touch.member") }}</small><strong>{{ playerAccess.member.name || playerAccess.member.phone }}</strong></span>
         <span><small>{{ t("touch.wristbandId") }}</small><strong>{{ playerAccess.access.uid }}</strong></span>
         <span><small>{{ t("touch.purchasedTime") }}</small><strong>{{ t("touch.minutesCount", { value: playerAccess.access.durationMinutes }) }}</strong></span>
         <span><small>{{ t("touch.expiryTime") }}</small><strong>{{ playerAccessExpiryLabel }}</strong></span>
         <span><small>{{ t("touch.wristbandBalance") }}</small><strong>{{ playerAccessRemainingLabel }}</strong></span>
       </div>
-       <button v-if="canCollectQueueEntry" class="touch-secondary-button queue-entry-button" type="button" @click="openQueuePanel">{{ t("touch.queueNext") }}</button>
+       <button v-if="canCollectQueueEntry" class="touch-secondary-button queue-entry-button" data-testid="game-queue-open" type="button" @click="openQueuePanel">{{ t("touch.queueNext") }}</button>
     </section>
 
     <section v-else-if="view === 'STARTING'" class="touch-center touch-status-panel">
@@ -1537,7 +1550,7 @@ async function confirmReturnToIdle() {
         }}
       </h1>
       <p>{{ t("touch.startingHint") }}</p>
-      <div v-if="showPlayerAccess" class="touch-player-access touch-player-access--center" aria-live="polite">
+      <div v-if="showPlayerAccess" class="touch-player-access touch-player-access--center" data-testid="game-player-access" :data-wristband-uid="playerAccess.access.uid" :data-status="playerAccess.access.status" aria-live="polite">
         <span><small>{{ t("touch.member") }}</small><strong>{{ playerAccess.member.name || playerAccess.member.phone }}</strong></span>
         <span><small>{{ t("touch.wristbandId") }}</small><strong>{{ playerAccess.access.uid }}</strong></span>
         <span><small>{{ t("touch.purchasedTime") }}</small><strong>{{ t("touch.minutesCount", { value: playerAccess.access.durationMinutes }) }}</strong></span>
@@ -1559,7 +1572,7 @@ async function confirmReturnToIdle() {
         }}
       </h1>
       <p v-if="isGamePresentation">{{ t("touch.gameModeRunningHint") }}</p>
-      <div v-if="showPlayerAccess" class="touch-player-access touch-player-access--center" aria-live="polite">
+      <div v-if="showPlayerAccess" class="touch-player-access touch-player-access--center" data-testid="game-player-access" :data-wristband-uid="playerAccess.access.uid" :data-status="playerAccess.access.status" aria-live="polite">
         <span><small>{{ t("touch.member") }}</small><strong>{{ playerAccess.member.name || playerAccess.member.phone }}</strong></span>
         <span><small>{{ t("touch.wristbandId") }}</small><strong>{{ playerAccess.access.uid }}</strong></span>
         <span><small>{{ t("touch.purchasedTime") }}</small><strong>{{ t("touch.minutesCount", { value: playerAccess.access.durationMinutes }) }}</strong></span>
@@ -1576,7 +1589,7 @@ async function confirmReturnToIdle() {
           <strong>{{ gameplay.life ?? "-" }}</strong></span
         >
       </div>
-       <button v-if="canCollectQueueEntry" class="touch-secondary-button queue-entry-button" type="button" @click="openQueuePanel">{{ t("touch.queueNext") }}</button>
+       <button v-if="canCollectQueueEntry" class="touch-secondary-button queue-entry-button" data-testid="game-queue-open" type="button" @click="openQueuePanel">{{ t("touch.queueNext") }}</button>
       <button
         v-if="!isGamePresentation"
         class="touch-danger-button"
@@ -1634,7 +1647,7 @@ async function confirmReturnToIdle() {
       </button>
     </section>
 
-    <div v-if="errorMessage" class="touch-error" role="alert">
+    <div v-if="errorMessage" class="touch-error" data-testid="game-error" role="alert">
       <span>{{ errorMessage }}</span>
       <button type="button" @click="errorMessage = ''">
         {{ t("common.close") }}
@@ -1642,27 +1655,27 @@ async function confirmReturnToIdle() {
     </div>
 
     <div v-if="queuePanelOpen" class="touch-return-idle-backdrop">
-      <section class="touch-return-idle-dialog" role="dialog" aria-modal="true">
+      <section class="touch-return-idle-dialog" data-testid="game-queue-dialog" role="dialog" aria-modal="true">
         <span class="touch-kicker">{{ t("touch.queueNext") }}</span>
         <h2>{{ t("touch.queueScanTitle") }}</h2>
         <!-- waiting players are not activated -->
         <p>{{ t("touch.queueScanHint") }}</p>
-        <input v-model="queueUid" class="queue-uid-input" inputmode="numeric" pattern="[0-9]*" :placeholder="t('touch.queueUidPlaceholder')" />
-        <select v-model.number="queueGameId" class="queue-game-select">
+        <input v-model="queueUid" class="queue-uid-input" data-testid="game-queue-uid" inputmode="numeric" pattern="[0-9]*" :placeholder="t('touch.queueUidPlaceholder')" />
+        <select v-model.number="queueGameId" class="queue-game-select" data-testid="game-queue-game">
           <option v-for="game in games" :key="game.id" :value="game.id">{{ game.name }}</option>
         </select>
         <p v-if="queueSummary.waiting.length" class="queue-summary-line">{{ queueSummary.waiting.length }} player(s) waiting</p>
-        <div v-if="queueSummary.waiting.length" class="queue-waiting-list">
-          <div v-for="(item, index) in queueSummary.waiting" :key="item.id">
+        <div v-if="queueSummary.waiting.length" class="queue-waiting-list" data-testid="game-queue-waiting">
+          <div v-for="(item, index) in queueSummary.waiting" :key="item.id" :data-testid="`game-queue-item-${item.wristbandUid}`">
             <span>{{ index + 1 }}. {{ item.wristbandUid }} / {{ item.gameName || item.gameId }}</span>
             <button type="button" :disabled="queueSubmitting" @click="cancelQueuedItem(item.id)">Cancel</button>
           </div>
         </div>
         <div class="touch-return-idle-actions">
-          <button type="button" @click="closeQueuePanel">{{ t("common.cancel") }}</button>
-          <button class="confirm" type="button" :disabled="queueSubmitting" @click="submitQueueEntry">{{ queueSubmitting ? t("touch.queueSubmitting") : t("touch.queueConfirm") }}</button>
+          <button data-testid="game-queue-close" type="button" @click="closeQueuePanel">{{ t("common.cancel") }}</button>
+          <button class="confirm" data-testid="game-queue-submit" type="button" :disabled="queueSubmitting" @click="submitQueueEntry">{{ queueSubmitting ? t("touch.queueSubmitting") : t("touch.queueConfirm") }}</button>
         </div>
-        <div v-if="queueSummary.failed.length" class="queue-failed-list">
+        <div v-if="queueSummary.failed.length" class="queue-failed-list" data-testid="game-queue-failed">
           <div v-for="item in queueSummary.failed" :key="item.id">{{ item.wristbandUid }}: {{ item.reason }}</div>
         </div>
       </section>

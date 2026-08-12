@@ -132,7 +132,7 @@ function emitLightCell(x, y) {
 </script>
 
 <template>
-  <main v-if="isDebugWindow" class="debug-shell">
+  <main v-if="isDebugWindow" class="debug-shell" data-testid="game-debug-panel" :data-engine-state="engineState" :data-runtime-mode="runtimeMode">
     <header class="debug-topbar">
       <div>
         <h1>{{ t("debug.ledPreview") }}</h1>
@@ -185,11 +185,11 @@ function emitLightCell(x, y) {
             </div>
           </div>
           <div class="simulation-button-grid">
-            <button type="button" @click="$emit('debug-command', { command: 'stageResult', result: 'success' })">Stage success</button>
-            <button type="button" @click="$emit('debug-command', { command: 'stageResult', result: 'failure' })">Stage failure</button>
-            <button type="button" @click="$emit('debug-command', { command: 'retry' })">Retry</button>
-            <button type="button" @click="$emit('debug-command', { command: 'nextStage' })">Next stage</button>
-            <button class="danger" type="button" @click="$emit('debug-command', { command: 'endGame' })">End game</button>
+            <button data-testid="game-debug-stage-success" type="button" @click="$emit('debug-command', { command: 'stageResult', result: 'success' })">Stage success</button>
+            <button data-testid="game-debug-stage-failure" type="button" @click="$emit('debug-command', { command: 'stageResult', result: 'failure' })">Stage failure</button>
+            <button data-testid="game-debug-retry" type="button" @click="$emit('debug-command', { command: 'retry' })">Retry</button>
+            <button data-testid="game-debug-next-stage" type="button" @click="$emit('debug-command', { command: 'nextStage' })">Next stage</button>
+            <button class="danger" data-testid="game-debug-end" type="button" @click="$emit('debug-command', { command: 'endGame' })">End game</button>
           </div>
         </section>
 

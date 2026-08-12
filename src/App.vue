@@ -513,6 +513,7 @@ function formatRuntimeValue(value, fallback = "-") {
       <nav class="nav-tabs">
         <button
           class="nav-tab"
+          data-testid="game-enter-flow"
           type="button"
           :disabled="busyAction === 'game-flow'"
           @click="enterGameFlow"
