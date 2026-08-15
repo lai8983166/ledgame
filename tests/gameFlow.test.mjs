@@ -404,3 +404,32 @@ test("Debug gameplay input applies the runtime response through the shared state
   assert.match(sendRuntimeGameInput, /applyState\(result\?\.data \?\? result\)/);
   assert.doesNotMatch(sendRuntimeGameInput, /applyGameRuntimeResult/);
 });
+
+test("Debug Panel exposes a deterministic natural-completion action through production input", async () => {
+  const appSource = await readFile(new URL("../src/App.vue", import.meta.url), "utf8");
+  const floorInputSource = await readFile(new URL("../src/lib/floorInput.js", import.meta.url), "utf8");
+  const source = await readFile(new URL("../src/views/DemoView.vue", import.meta.url), "utf8");
+
+  assert.match(source, /data-testid="game-debug-complete-natural"/);
+  assert.match(source, /\$emit\('game-input', 0, 0\)/);
+  assert.match(appSource, /await sendFloorTap\(api\.sendGameInput, x, y/);
+  assert.match(floorInputSource, /type:\s*"tile"/);
+  assert.match(floorInputSource, /normalizedAction === "DOWN" \? 1 : 0/);
+  assert.match(floorInputSource, /const down = await sendInput[\s\S]*const up = await sendInput/);
+  assert.doesNotMatch(floorInputSource, /type:\s*"click"/);
+  assert.doesNotMatch(
+    source.match(/<button data-testid="game-debug-complete-natural"[^>]*>/)?.[0] || "",
+    /debug-command|endGame|stageResult/,
+  );
+});
+
+test("runtime state query does not masquerade as a gameplay input", async () => {
+  const source = await readFile(new URL("../electron/main.cjs", import.meta.url), "utf8");
+  const requestCurrentGameState = source.slice(
+    source.indexOf("function requestCurrentGameState()"),
+    source.indexOf("const ACTIVE_DATABASE_REFRESH_STATES"),
+  );
+
+  assert.match(requestCurrentGameState, /engineStateRequest\('\/engine\/game\/state'\)/);
+  assert.doesNotMatch(requestCurrentGameState, /type:\s*'state'/);
+});

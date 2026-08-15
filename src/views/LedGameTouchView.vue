@@ -1627,6 +1627,7 @@ async function confirmReturnToIdle() {
       </div>
       <button
         class="touch-primary-button"
+        data-testid="game-return-idle"
         type="button"
         :disabled="Boolean(busyAction)"
         @click="returnToIdle"

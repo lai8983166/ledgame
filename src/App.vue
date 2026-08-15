@@ -2,6 +2,7 @@
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import DemoView from "./views/DemoView.vue";
+import { sendFloorTap } from "./lib/floorInput.js";
 import GameListView from "./views/GameListView.vue";
 import MediaLibraryView from "./views/MediaLibraryView.vue";
 import SimpleGameEditorView from "./views/SimpleGameEditorView.vue";
@@ -424,24 +425,19 @@ function lightCell(x, y, color) {
   sendCellInput("set", x, y, color);
 }
 
-function sendRuntimeGameInput(x, y) {
+async function sendRuntimeGameInput(x, y) {
   setHoverCell(x, y);
   if (!api?.sendGameInput) {
     errorMessage.value = "Game runtime input API is unavailable";
     return;
   }
-  api
-    .sendGameInput({
-      type: "click",
-      x,
-      y,
-    })
-    .then((result) => {
+  try {
+    await sendFloorTap(api.sendGameInput, x, y, (result) => {
       applyState(result?.data ?? result);
-    })
-    .catch((error) => {
-      errorMessage.value = error.message || String(error);
     });
+  } catch (error) {
+    errorMessage.value = error.message || String(error);
+  }
 }
 
 function sendDebugCommand(command) {

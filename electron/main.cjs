@@ -1218,10 +1218,7 @@ async function engineStateRequest(pathname, options = {}) {
 }
 
 function requestCurrentGameState() {
-  return engineStateRequest('/engine/game/input', {
-    method: 'POST',
-    body: JSON.stringify({ type: 'state' }),
-  })
+  return engineStateRequest('/engine/game/state')
 }
 
 const ACTIVE_DATABASE_REFRESH_STATES = new Set(['PREPARING', 'STARTING', 'RUNNING', 'SETTLING'])

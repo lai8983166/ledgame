@@ -185,6 +185,7 @@ function emitLightCell(x, y) {
             </div>
           </div>
           <div class="simulation-button-grid">
+            <button data-testid="game-debug-complete-natural" type="button" @click="$emit('game-input', 0, 0)">{{ t("debug.inputDemo") }} · (0,0)</button>
             <button data-testid="game-debug-stage-success" type="button" @click="$emit('debug-command', { command: 'stageResult', result: 'success' })">Stage success</button>
             <button data-testid="game-debug-stage-failure" type="button" @click="$emit('debug-command', { command: 'stageResult', result: 'failure' })">Stage failure</button>
             <button data-testid="game-debug-retry" type="button" @click="$emit('debug-command', { command: 'retry' })">Retry</button>
