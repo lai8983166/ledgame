@@ -38,6 +38,7 @@ import {
   moveTouchCarousel,
   normalizeTouchGameDocument,
   normalizeTouchPlayerCount,
+  hasRequiredWristbandParticipants,
   TOUCH_GAME_COUNTDOWN_SECONDS,
   TOUCH_PLAYER_COUNTS,
   touchCarouselSlots,
@@ -123,7 +124,7 @@ const canConfirm = computed(() =>
   Boolean(
     preparation.value?.sessionId &&
       selectedGameId.value &&
-      (!isWristbandEntry.value || Boolean(playerAccess.value)),
+      hasRequiredPlayers.value,
   ),
 );
 const terminated = computed(() => hasTermination(runtimeState.value));
@@ -131,7 +132,25 @@ const resultSucceeded = computed(() => runtimeState.value.success === true);
 const gameplay = computed(() => runtimeState.value.gameplay || {});
 const isGamePresentation = computed(() => presentationMode.value === "game");
 const isWristbandEntry = computed(() => entryMethod.value === "wristband");
-const playerAccess = computed(() => runtimeState.value.playerAccess);
+const playerAccesses = computed(() => runtimeState.value.playerAccesses || []);
+const playerAccess = computed(() => playerAccesses.value[0] || null);
+const requiredPlayerCount = computed(() =>
+  normalizeTouchPlayerCount(
+    preparation.value?.options?.userCount ?? draft.userCount,
+    draft.userCount,
+  ),
+);
+const hasRequiredPlayers = computed(() =>
+  !isWristbandEntry.value ||
+  hasRequiredWristbandParticipants(
+    playerAccesses.value,
+    requiredPlayerCount.value,
+  ),
+);
+const needsMoreWristbands = computed(() =>
+  isWristbandEntry.value && !hasRequiredPlayers.value,
+);
+const canChangePlayerCount = computed(() => playerAccesses.value.length === 0);
 const queueSummary = computed(() => runtimeState.value.queueSummary || { current: null, waiting: [], failed: [] });
 const canCollectQueueEntry = computed(() =>
   isWristbandEntry.value && ["STARTING", "RUNNING"].includes(view.value),
@@ -139,7 +158,7 @@ const canCollectQueueEntry = computed(() =>
 const showPlayerAccess = computed(() =>
   Boolean(
     isWristbandEntry.value &&
-      playerAccess.value &&
+      playerAccesses.value.length > 0 &&
       ["PREPARING", "STARTING", "RUNNING"].includes(view.value),
   ),
 );
@@ -471,7 +490,8 @@ function handleWristbandScanned(payload) {
     !isWristbandEntry.value ||
     view.value !== "PREPARING" ||
     !preparation.value?.sessionId ||
-    playerAccess.value ||
+    (isGamePresentation.value && gamePreparationStep.value !== "players") ||
+    hasRequiredPlayers.value ||
     busyAction.value ||
     wristbandRead.value
   ) {
@@ -546,16 +566,14 @@ async function createWristbandPreparation(sessionId, wristbandId) {
     !api?.createWristbandPreparation ||
     view.value !== "PREPARING" ||
     preparation.value?.sessionId !== sessionId ||
-    playerAccess.value
+    hasRequiredPlayers.value
   ) return;
   const result = await runAction(
     "wristband",
     () => api.createWristbandPreparation(sessionId, wristbandId),
     { refreshOnError: true },
   );
-  if (!result && view.value === "PREPARING" && !playerAccess.value) {
-    wristbandRead.value = null;
-  }
+  wristbandRead.value = null;
 }
 
 function localizedOperationError(error) {
@@ -673,13 +691,36 @@ function resetGamePreparationWizard(sessionId) {
   gameCarouselIndex.value = currentGameIndex >= 0 ? currentGameIndex : 0;
 }
 
-function selectPlayerCount(count) {
-  if (busyAction.value) return;
+async function selectPlayerCount(count) {
+  if (busyAction.value || !canChangePlayerCount.value) return;
   draft.userCount = normalizeTouchPlayerCount(count, draft.userCount);
+  await syncPlayerCount();
+}
+
+async function syncPlayerCount() {
+  if (
+    !isWristbandEntry.value ||
+    !canChangePlayerCount.value ||
+    !preparation.value?.sessionId ||
+    busyAction.value
+  ) return;
+  const sessionId = preparation.value.sessionId;
+  await runAction(
+    "player-count",
+    () => api.updatePreparation(sessionId, {
+      userCount: normalizeTouchPlayerCount(draft.userCount, 1),
+      launchMethod: "wristband",
+      runtimeMode: runtimeState.value.runtimeMode,
+    }),
+    { refreshOnError: true },
+  );
 }
 
 function showGameSelection() {
-  if (!TOUCH_PLAYER_COUNTS.includes(draft.userCount)) return;
+  if (
+    !TOUCH_PLAYER_COUNTS.includes(draft.userCount) ||
+    !hasRequiredPlayers.value
+  ) return;
   gamePreparationStep.value = "game";
 }
 
@@ -1121,7 +1162,7 @@ async function confirmReturnToIdle() {
         {{ t("touch.returnIdle") }}
       </button>
       <div
-        v-if="isWristbandEntry && !playerAccess"
+        v-if="needsMoreWristbands && gamePreparationStep === 'players'"
         class="touch-wristband-scan-banner"
         data-testid="game-wristband-prompt"
         aria-live="polite"
@@ -1138,13 +1179,32 @@ async function confirmReturnToIdle() {
           <span>{{ t("touch.playerSetup") }}</span>
           <h1>{{ t("touch.selectPlayerCount") }}</h1>
           <i aria-hidden="true"></i>
-          <div v-if="showPlayerAccess" class="touch-player-access" data-testid="game-player-access" :data-wristband-uid="playerAccess.access.uid" :data-status="playerAccess.access.status" aria-live="polite">
-            <span><small>{{ t("touch.member") }}</small><strong>{{ playerAccess.member.name || playerAccess.member.phone }}</strong></span>
-            <span><small>{{ t("touch.wristbandId") }}</small><strong>{{ playerAccess.access.uid }}</strong></span>
-            <span><small>{{ t("touch.accessStatus") }}</small><strong>{{ playerAccess.access.status }}</strong></span>
-            <span><small>{{ t("touch.purchasedTime") }}</small><strong>{{ t("touch.minutesCount", { value: playerAccess.access.durationMinutes }) }}</strong></span>
-            <span><small>{{ t("touch.expiryTime") }}</small><strong>{{ playerAccessExpiryLabel }}</strong></span>
-            <span><small>{{ t("touch.wristbandBalance") }}</small><strong>{{ playerAccessRemainingLabel }}</strong></span>
+          <div
+            v-if="isWristbandEntry"
+            class="touch-participant-progress"
+            data-testid="game-player-access"
+            :data-player-progress="`${playerAccesses.length}/${requiredPlayerCount}`"
+            aria-live="polite"
+          >
+            <strong>{{ playerAccesses.length }}/{{ requiredPlayerCount }}</strong>
+            <div class="touch-participant-slots">
+              <div
+                v-for="slot in requiredPlayerCount"
+                :key="slot"
+                class="touch-participant-slot"
+                :class="{ accepted: Boolean(playerAccesses[slot - 1]) }"
+                :data-testid="`game-player-slot-${slot}`"
+              >
+                <template v-if="playerAccesses[slot - 1]">
+                  <span>{{ playerAccesses[slot - 1].member.name || playerAccesses[slot - 1].member.phone }}</span>
+                  <small>{{ playerAccesses[slot - 1].access.uid }}</small>
+                </template>
+                <template v-else>
+                  <span>{{ slot }}P</span>
+                  <small>{{ t("touch.scanWristband") }}</small>
+                </template>
+              </div>
+            </div>
           </div>
           <p v-if="showPlayerAccess" class="touch-access-note">
             {{ t("touch.activatedTimeContinues") }}
@@ -1160,7 +1220,7 @@ async function confirmReturnToIdle() {
             :class="{ selected: draft.userCount === count }"
             type="button"
             :aria-pressed="draft.userCount === count"
-            :disabled="Boolean(busyAction)"
+            :disabled="Boolean(busyAction) || !canChangePlayerCount"
             @click="selectPlayerCount(count)"
           >
             <img :src="TOUCH_PLAYER_ASSETS[index]" :alt="`${count}P`" />
@@ -1173,7 +1233,7 @@ async function confirmReturnToIdle() {
             class="touch-wizard-next"
             data-testid="game-player-next"
             type="button"
-            :disabled="!TOUCH_PLAYER_COUNTS.includes(draft.userCount)"
+            :disabled="!TOUCH_PLAYER_COUNTS.includes(draft.userCount) || !hasRequiredPlayers || Boolean(busyAction)"
             @click="showGameSelection"
           >
             {{ t("touch.nextStep") }}
@@ -1360,7 +1420,7 @@ async function confirmReturnToIdle() {
           <span class="touch-kicker">PREPARING</span>
           <h1>{{ t("touch.chooseGame") }}</h1>
           <div
-            v-if="isWristbandEntry && !playerAccess"
+            v-if="needsMoreWristbands"
             class="touch-wristband-scan-banner"
             data-testid="game-wristband-prompt"
             aria-live="polite"
@@ -1368,13 +1428,25 @@ async function confirmReturnToIdle() {
             <strong>{{ t("touch.scanWristband") }}</strong>
             <span>{{ t("touch.scanWristbandHint") }}</span>
           </div>
-          <div v-if="showPlayerAccess" class="touch-player-access" data-testid="game-player-access" :data-wristband-uid="playerAccess.access.uid" :data-status="playerAccess.access.status" aria-live="polite">
-            <span><small>{{ t("touch.member") }}</small><strong>{{ playerAccess.member.name || playerAccess.member.phone }}</strong></span>
-            <span><small>{{ t("touch.wristbandId") }}</small><strong>{{ playerAccess.access.uid }}</strong></span>
-            <span><small>{{ t("touch.accessStatus") }}</small><strong>{{ playerAccess.access.status }}</strong></span>
-            <span><small>{{ t("touch.purchasedTime") }}</small><strong>{{ t("touch.minutesCount", { value: playerAccess.access.durationMinutes }) }}</strong></span>
-            <span><small>{{ t("touch.expiryTime") }}</small><strong>{{ playerAccessExpiryLabel }}</strong></span>
-            <span><small>{{ t("touch.wristbandBalance") }}</small><strong>{{ playerAccessRemainingLabel }}</strong></span>
+          <div
+            v-if="isWristbandEntry"
+            class="touch-player-access"
+            data-testid="game-player-access"
+            :data-player-progress="`${playerAccesses.length}/${requiredPlayerCount}`"
+            aria-live="polite"
+          >
+            <span
+              v-for="(participant, index) in playerAccesses"
+              :key="participant.access.uid"
+              :data-testid="`game-player-access-${index + 1}`"
+            >
+              <small>{{ index + 1 }}P · {{ participant.access.uid }}</small>
+              <strong>{{ participant.member.name || participant.member.phone }}</strong>
+            </span>
+            <span v-if="needsMoreWristbands">
+              <small>{{ t("touch.scanWristband") }}</small>
+              <strong>{{ playerAccesses.length }}/{{ requiredPlayerCount }}</strong>
+            </span>
           </div>
           <p v-if="showPlayerAccess" class="touch-access-note">
             {{ t("touch.activatedTimeContinues") }}
@@ -1452,12 +1524,14 @@ async function confirmReturnToIdle() {
             <span>{{ t("touch.playerCount") }}</span>
             <input
               v-model.number="draft.userCount"
+              data-testid="game-player-count-input"
               type="number"
               inputmode="numeric"
               min="1"
-              max="32"
+              max="6"
               step="1"
-              :disabled="!selectedGameId"
+              :disabled="!selectedGameId || (isWristbandEntry && !canChangePlayerCount)"
+              @change="syncPlayerCount"
             />
           </label>
 
@@ -2747,6 +2821,52 @@ async function confirmReturnToIdle() {
 
 .touch-player-access--center {
   justify-content: center;
+}
+
+.touch-participant-progress {
+  display: grid;
+  gap: 10px;
+  width: min(760px, 92vw);
+  margin-top: 14px;
+}
+
+.touch-participant-progress > strong {
+  color: #75e5ff;
+  font-size: 24px;
+  letter-spacing: 0.08em;
+}
+
+.touch-participant-slots {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.touch-participant-slot {
+  display: grid;
+  min-height: 54px;
+  padding: 8px 10px;
+  border: 1px dashed rgba(116, 214, 255, 0.4);
+  border-radius: 7px;
+  background: rgba(5, 24, 37, 0.55);
+}
+
+.touch-participant-slot.accepted {
+  border-style: solid;
+  border-color: rgba(102, 242, 173, 0.72);
+  background: rgba(15, 72, 60, 0.62);
+}
+
+.touch-participant-slot span {
+  overflow: hidden;
+  color: #f2fbff;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.touch-participant-slot small {
+  color: #91b8cc;
 }
 
 .touch-access-note {

@@ -79,6 +79,25 @@ function normalizeRuntimeMode(value) {
   return String(value || '').toUpperCase() === 'SIMULATION' ? 'SIMULATION' : 'PRODUCTION'
 }
 
+function appendPreparationWristband(state, value) {
+  const uid = String(value || '').trim()
+  if (!/^\d{1,32}$/.test(uid)) throw new Error('WRISTBAND_ID_INVALID')
+  const source = state && typeof state === 'object' ? state : {}
+  const participants = Array.isArray(source.playerAccesses)
+    ? source.playerAccesses
+    : source.playerAccess
+      ? [source.playerAccess]
+      : []
+  const accepted = participants
+    .map((participant) => String(participant?.access?.uid || '').trim())
+    .filter((item) => /^\d{1,32}$/.test(item))
+  if (accepted.includes(uid)) throw new Error('DUPLICATE_WRISTBAND')
+  const selected = Number(source.preparation?.options?.userCount)
+  const required = Number.isInteger(selected) && selected > 0 ? selected : 1
+  if (accepted.length >= required) throw new Error('WRISTBAND_PARTICIPANT_LIMIT')
+  return [...accepted, uid]
+}
+
 function queueRequest(kind, itemId, payload) {
   if (kind === 'enqueue') {
     return jsonRequest('/engine/game/queue', 'POST', payload)
@@ -135,6 +154,7 @@ function detectWindowKind(search) {
 }
 
 module.exports = {
+  appendPreparationWristband,
   detectWindowKind,
   debugGameSplitBounds,
   gameFlowWindowPlan,

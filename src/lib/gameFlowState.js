@@ -24,6 +24,12 @@ export function normalizeRuntimeState(value) {
   const engineState = normalizeLifecycleState(state.engineState);
   const preparation = normalizePreparation(state.preparation);
   const queueSummary = normalizeQueueSummary(state.queueSummary);
+  const legacyPlayerAccess = normalizePlayerAccess(state.playerAccess);
+  const playerAccesses = Array.isArray(state.playerAccesses)
+    ? state.playerAccesses.map(normalizePlayerAccess).filter(Boolean)
+    : legacyPlayerAccess
+      ? [legacyPlayerAccess]
+      : [];
   return {
     ...state,
     engineState,
@@ -44,7 +50,8 @@ export function normalizeRuntimeState(value) {
     preparation,
     runtimeMode: normalizeRuntimeMode(state.runtimeMode ?? preparation?.options.runtimeMode),
     queueSummary,
-    playerAccess: normalizePlayerAccess(state.playerAccess),
+    playerAccesses,
+    playerAccess: playerAccesses[0] ?? null,
     gameplay: state.gameplay && typeof state.gameplay === "object" ? { ...state.gameplay } : null,
   };
 }
@@ -91,8 +98,10 @@ export function shouldIgnoreStalePreparationState(currentValue, nextValue) {
   if (next.preparation.revision < current.preparation.revision) {
     return true;
   }
-  return Boolean(current.playerAccess && !next.playerAccess &&
-    next.preparation.revision <= current.preparation.revision);
+  return Boolean(
+    next.preparation.revision <= current.preparation.revision &&
+      next.playerAccesses.length < current.playerAccesses.length,
+  );
 }
 
 export function normalizeQueueSummary(value) {

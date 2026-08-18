@@ -19,6 +19,7 @@ import {
 const require = createRequire(import.meta.url);
 const {
   detectWindowKind,
+  appendPreparationWristband,
   preparationPath,
   preparationRequest,
   queueRequest,
@@ -75,6 +76,66 @@ test("normalizeRuntimeState replaces and clears authoritative playerAccess", () 
 
   assert.deepEqual(normalizeRuntimeState({ engineState: "PREPARING", playerAccess }).playerAccess, playerAccess);
   assert.equal(normalizeRuntimeState({ engineState: "IDLE" }).playerAccess, null);
+});
+
+test("normalizeRuntimeState prefers ordered playerAccesses and falls back to legacy playerAccess", () => {
+  const first = {
+    member: { id: 12, phone: "13800138000", name: "多人甲", status: "ACTIVE" },
+    access: { bindingId: 9, uid: "2283055618", status: "ACTIVE", durationMinutes: 60, remainingSeconds: 3598 },
+  };
+  const second = {
+    member: { id: 13, phone: "13800138001", name: "多人乙", status: "ACTIVE" },
+    access: { bindingId: 10, uid: "2283055619", status: "ACTIVE", durationMinutes: 60, remainingSeconds: 3598 },
+  };
+
+  const multiplayer = normalizeRuntimeState({
+    engineState: "PREPARING",
+    playerAccess: first,
+    playerAccesses: [first, second],
+  });
+  assert.deepEqual(
+    multiplayer.playerAccesses.map((participant) => participant.access.uid),
+    ["2283055618", "2283055619"],
+  );
+  assert.equal(multiplayer.playerAccess.access.uid, "2283055618");
+  const legacy = normalizeRuntimeState({ engineState: "PREPARING", playerAccess: first });
+  assert.deepEqual(legacy.playerAccesses.map((participant) => participant.access.uid), ["2283055618"]);
+});
+
+test("stale preparation broadcasts cannot remove newly accepted multiplayer participants", () => {
+  const access = (id, uid) => ({
+    member: { id, phone: `1380013800${id}` },
+    access: { bindingId: id, uid, status: "ACTIVE", durationMinutes: 60, remainingSeconds: 3000 },
+  });
+  const current = normalizeRuntimeState({
+    engineState: "PREPARING",
+    preparation: { sessionId: "prep-multi", revision: 4, options: { userCount: 3 } },
+    playerAccesses: [access(1, "2283055618"), access(2, "2283055619")],
+  });
+  const stale = normalizeRuntimeState({
+    engineState: "PREPARING",
+    preparation: { sessionId: "prep-multi", revision: 4, options: { userCount: 3 } },
+    playerAccesses: [access(1, "2283055618")],
+  });
+  assert.equal(shouldIgnoreStalePreparationState(current, stale), true);
+});
+
+test("Electron preparation wristband append uses authoritative order and count gate", () => {
+  const state = {
+    preparation: { options: { userCount: 3 } },
+    playerAccesses: [
+      { access: { uid: "2283055618" } },
+      { access: { uid: "2283055619" } },
+    ],
+  };
+  assert.deepEqual(appendPreparationWristband(state, "2283055620"), [
+    "2283055618", "2283055619", "2283055620",
+  ]);
+  assert.throws(() => appendPreparationWristband(state, "2283055618"), /DUPLICATE_WRISTBAND/);
+  assert.throws(() => appendPreparationWristband({
+    ...state,
+    preparation: { options: { userCount: 2 } },
+  }, "2283055620"), /WRISTBAND_PARTICIPANT_LIMIT/);
 });
 
 test("stale preparation broadcasts cannot erase a scanned wristband", () => {
@@ -306,9 +367,9 @@ test("wristband scan binds UID to the current PREPARING session and gates confir
   assert.match(ipcHandler, /sessionId, value/);
   assert.match(ipcHandler, /executePreparationRequest\('update', sessionId/);
   assert.match(ipcHandler, /launchMethod:\s*'wristband'/);
-  assert.match(ipcHandler, /tokenList:\s*\[wristbandId\]/);
+  assert.match(ipcHandler, /tokenList:\s*appendPreparationWristband\(latestEngineState, wristbandId\)/);
   assert.match(preloadSource, /createWristbandPreparation:\s*\(sessionId, wristbandId\)/);
-  assert.match(touchSource, /!isWristbandEntry\.value \|\| Boolean\(playerAccess\.value\)/);
+  assert.match(touchSource, /hasRequiredWristbandParticipants/);
   assert.match(touchSource, /touch\.scanWristbandHint/);
 });
 
@@ -341,7 +402,8 @@ test("Touch preparation options require a game but remain focusable during async
 
   assert.ok(playerInput);
   assert.ok(startLevelInput);
-  assert.match(playerInput, /:disabled="!selectedGameId"/);
+  assert.match(playerInput, /data-testid="game-player-count-input"/);
+  assert.match(playerInput, /canChangePlayerCount/);
   assert.match(startLevelInput, /:disabled="!selectedGameId"/);
   assert.doesNotMatch(playerInput, /busyAction/);
   assert.doesNotMatch(startLevelInput, /busyAction/);

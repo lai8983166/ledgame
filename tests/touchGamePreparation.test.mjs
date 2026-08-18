@@ -6,6 +6,7 @@ import {
   normalizeTouchGameDocument,
   normalizeTouchPlayerCount,
   touchCarouselSlots,
+  hasRequiredWristbandParticipants,
 } from "../src/lib/touchGamePreparation.js";
 
 test("Touch game preparation constrains players and wraps the game carousel", () => {
@@ -23,6 +24,19 @@ test("Touch game preparation constrains players and wraps the game carousel", ()
       ["normal", 1],
     ],
   );
+});
+
+test("Touch multiplayer wristband gate requires the selected number of authoritative players", () => {
+  assert.equal(hasRequiredWristbandParticipants([], 2), false);
+  assert.equal(hasRequiredWristbandParticipants([{ access: { uid: "1" } }], 2), false);
+  assert.equal(hasRequiredWristbandParticipants([
+    { access: { uid: "1" } },
+    { access: { uid: "2" } },
+  ], 2), true);
+  assert.equal(hasRequiredWristbandParticipants([
+    { access: { uid: "1" } },
+    { access: { uid: "2" } },
+  ], 3), false);
 });
 
 test("Touch game preparation exposes real level indexes and normalized limits", () => {

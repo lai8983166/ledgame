@@ -15,6 +15,14 @@ export function normalizeTouchPlayerCount(value, fallback = 1) {
     : 1;
 }
 
+export function hasRequiredWristbandParticipants(participants, userCount) {
+  const required = normalizeTouchPlayerCount(userCount, 1);
+  const accepted = Array.isArray(participants)
+    ? participants.filter((participant) => participant?.access?.uid).length
+    : 0;
+  return accepted === required;
+}
+
 export function wrapTouchCarouselIndex(index, itemCount) {
   const count = Math.max(0, Math.floor(Number(itemCount) || 0));
   if (!count) return 0;

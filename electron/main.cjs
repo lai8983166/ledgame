@@ -6,6 +6,7 @@ const fs = require('node:fs/promises')
 const { pathToFileURL } = require('node:url')
 const { app, BrowserWindow, dialog, ipcMain, Menu, protocol, net: electronNet, screen } = require('electron')
 const {
+  appendPreparationWristband,
   debugGameSplitBounds,
   gameFlowWindowPlan,
   isTouchExitCode,
@@ -470,11 +471,15 @@ function createTouchWindow(mode = 'debug', layoutBounds = null) {
   const wristbandReader = createKeyboardWristbandReader()
 
   createdTouchWindow.webContents.on('before-input-event', (event, input) => {
+    const acceptedPlayers = Array.isArray(latestEngineState?.playerAccesses)
+      ? latestEngineState.playerAccesses.length
+      : latestEngineState?.playerAccess ? 1 : 0
+    const configuredPlayers = Math.max(1, Number(latestEngineState?.preparation?.options?.userCount) || 1)
     if (
       currentEntryMethod !== 'wristband' ||
       !['PREPARING', 'STARTING', 'RUNNING'].includes(String(latestEngineState?.engineState || '').toUpperCase()) ||
       (String(latestEngineState?.engineState || '').toUpperCase() === 'PREPARING' &&
-        (!latestEngineState?.preparation?.sessionId || latestEngineState?.playerAccess))
+        (!latestEngineState?.preparation?.sessionId || acceptedPlayers >= configuredPlayers))
     ) {
       wristbandReader.reset()
       return
@@ -1727,8 +1732,7 @@ ipcMain.handle('game:preparation:create-wristband', async (event, sessionId, val
   }
   if (
     String(latestEngineState?.engineState || '').toUpperCase() !== 'PREPARING' ||
-    latestEngineState?.preparation?.sessionId !== String(sessionId || '') ||
-    latestEngineState?.playerAccess
+    latestEngineState?.preparation?.sessionId !== String(sessionId || '')
   ) {
     throw new Error('WRISTBAND_SCAN_NOT_ALLOWED')
   }
@@ -1738,7 +1742,7 @@ ipcMain.handle('game:preparation:create-wristband', async (event, sessionId, val
   }
   return executePreparationRequest('update', sessionId, {
     launchMethod: 'wristband',
-    tokenList: [wristbandId],
+    tokenList: appendPreparationWristband(latestEngineState, wristbandId),
   })
 })
 ipcMain.handle('game:preparation:select', (_event, sessionId, gameId) =>
