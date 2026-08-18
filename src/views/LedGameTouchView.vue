@@ -697,7 +697,7 @@ async function selectPlayerCount(count) {
   await syncPlayerCount();
 }
 
-async function syncPlayerCount() {
+async function syncPlayerCount(event) {
   if (
     !isWristbandEntry.value ||
     !canChangePlayerCount.value ||
@@ -714,6 +714,11 @@ async function syncPlayerCount() {
     }),
     { refreshOnError: true },
   );
+  event?.target?.blur?.();
+}
+
+function blurNumericInput(event) {
+  event?.target?.blur?.();
 }
 
 function showGameSelection() {
@@ -1531,7 +1536,7 @@ async function confirmReturnToIdle() {
               max="6"
               step="1"
               :disabled="!selectedGameId || (isWristbandEntry && !canChangePlayerCount)"
-              @change="syncPlayerCount"
+              @change="syncPlayerCount($event)"
             />
           </label>
 
@@ -1539,11 +1544,13 @@ async function confirmReturnToIdle() {
             <span>{{ t("touch.startLevel") }}</span>
             <input
               v-model.number="draft.startLevelIndex"
+              data-testid="game-start-level-input"
               type="number"
               inputmode="numeric"
               min="0"
               step="1"
               :disabled="!selectedGameId"
+              @change="blurNumericInput"
             />
           </label>
 

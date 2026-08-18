@@ -97,6 +97,7 @@ let touchWindow
 let secondaryWindow
 let secondaryWindowDisplayId = null
 let touchPresentationMode = 'debug'
+let touchKeyboardEditableFocused = false
 let currentEntryMethod = 'touch'
 let backendBaseUrl = process.env.LED_BACKEND_URL || 'http://127.0.0.1:8080'
 let runtimeStateStreamUrl = process.env.LED_RUNTIME_STATE_URL || defaultRuntimeStateStreamUrl(backendBaseUrl)
@@ -468,9 +469,14 @@ function createTouchWindow(mode = 'debug', layoutBounds = null) {
   })
   touchWindow.setMenuBarVisibility(false)
   const createdTouchWindow = touchWindow
+  touchKeyboardEditableFocused = false
   const wristbandReader = createKeyboardWristbandReader()
 
   createdTouchWindow.webContents.on('before-input-event', (event, input) => {
+    if (touchKeyboardEditableFocused) {
+      wristbandReader.reset()
+      return
+    }
     const acceptedPlayers = Array.isArray(latestEngineState?.playerAccesses)
       ? latestEngineState.playerAccesses.length
       : latestEngineState?.playerAccess ? 1 : 0
@@ -507,6 +513,7 @@ function createTouchWindow(mode = 'debug', layoutBounds = null) {
   touchWindow.on('closed', () => {
     if (touchWindow === createdTouchWindow) {
       touchWindow = null
+      touchKeyboardEditableFocused = false
     }
   })
 
@@ -1638,6 +1645,13 @@ ipcMain.handle('window:restore-focus', (event) => {
   setImmediate(focusWindow)
   setTimeout(focusWindow, 50)
   return true
+})
+ipcMain.on('game:editable-focus', (event, focused) => {
+  const targetWindow = BrowserWindow.fromWebContents(event.sender)
+  if (!targetWindow || targetWindow !== touchWindow || targetWindow.isDestroyed()) {
+    return
+  }
+  touchKeyboardEditableFocused = Boolean(focused)
 })
 ipcMain.handle('game-flow:enter', () => enterGameFlow())
 

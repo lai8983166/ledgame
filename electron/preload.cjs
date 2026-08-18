@@ -7,6 +7,27 @@ function detectWindowKind(search) {
 
 const windowKind = detectWindowKind(window.location.search)
 
+function isEditableElement(target) {
+  return Boolean(
+    target &&
+      typeof target.closest === 'function' &&
+      target.closest('input, textarea, select, [contenteditable="true"]'),
+  )
+}
+
+function reportEditableFocus(target) {
+  if (windowKind === 'touch') {
+    ipcRenderer.send('game:editable-focus', isEditableElement(target))
+  }
+}
+
+if (windowKind === 'touch') {
+  window.addEventListener('focusin', (event) => reportEditableFocus(event.target))
+  window.addEventListener('focusout', () => {
+    setTimeout(() => reportEditableFocus(document.activeElement), 0)
+  })
+}
+
 function onEngineState(callback) {
   const listener = (_event, state) => callback(state)
   ipcRenderer.on('engine-state', listener)

@@ -281,6 +281,20 @@ test("wristband IPC exposes the scanned UID only", async () => {
   assert.doesNotMatch(scanHandler, /binding\s*:/);
 });
 
+test("focused Touch numeric fields suspend keyboard wristband capture", async () => {
+  const mainSource = await readFile(new URL("../electron/main.cjs", import.meta.url), "utf8");
+  const preloadSource = await readFile(new URL("../electron/preload.cjs", import.meta.url), "utf8");
+  const readerGate = mainSource.slice(
+    mainSource.indexOf("const wristbandReader = createKeyboardWristbandReader()"),
+    mainSource.indexOf("touchWindow.once('ready-to-show'")
+  );
+
+  assert.match(readerGate, /touchKeyboardEditableFocused/);
+  assert.match(readerGate, /if \(touchKeyboardEditableFocused\)/);
+  assert.match(preloadSource, /focusin/);
+  assert.match(preloadSource, /game:editable-focus/);
+});
+
 test("Touch wristband flow renders only authoritative playerAccess balance and recovery copy", async () => {
   const source = await readFile(
     new URL("../src/views/LedGameTouchView.vue", import.meta.url),
@@ -403,8 +417,11 @@ test("Touch preparation options require a game but remain focusable during async
   assert.ok(playerInput);
   assert.ok(startLevelInput);
   assert.match(playerInput, /data-testid="game-player-count-input"/);
+  assert.match(startLevelInput, /data-testid="game-start-level-input"/);
   assert.match(playerInput, /canChangePlayerCount/);
+  assert.match(playerInput, /@change="syncPlayerCount\(\$event\)"/);
   assert.match(startLevelInput, /:disabled="!selectedGameId"/);
+  assert.match(startLevelInput, /@change="blurNumericInput"/);
   assert.doesNotMatch(playerInput, /busyAction/);
   assert.doesNotMatch(startLevelInput, /busyAction/);
   assert.match(source, /<fieldset class="touch-fieldset" :disabled="!selectedGameId">/);
