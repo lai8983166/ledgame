@@ -1718,6 +1718,7 @@ ipcMain.handle('engine:game-input', (_event, input) =>
 ipcMain.handle('engine:stop', () => engineStateRequest('/engine/demo/stop', { method: 'POST' }))
 ipcMain.handle('engine:state', () => engineStateRequest('/engine/demo/state'))
 ipcMain.handle('game:list', () => backendRequest('/game'))
+ipcMain.handle('game:playable-list', () => backendRequest('/games/playable'))
 ipcMain.handle('database:refresh-availability', () => databaseRefreshAvailability())
 ipcMain.handle('database:refresh', () => refreshDatabase())
 ipcMain.handle('game:state', () => requestCurrentGameState())
@@ -1803,6 +1804,9 @@ ipcMain.handle('dev:seed-simple-demo', () =>
 ipcMain.handle('dev:seed-simple-variants', () =>
   backendRequest('/dev/seed/simple-variants', { method: 'POST' }),
 )
+ipcMain.handle('dev:seed-rank-type1', () =>
+  backendRequest('/dev/seed/rank-type1', { method: 'POST' }),
+)
 ipcMain.handle('game-editor:get', (_event, gameId) =>
   backendRequest(`/game-editor/${gameId}`),
 )
@@ -1854,6 +1858,27 @@ ipcMain.handle('touch:exit-fullscreen', (event, code) => exitTouchFullScreen(eve
 ipcMain.handle('secondary-display:list', () => getSecondaryDisplayState())
 ipcMain.handle('secondary-display:select', (_event, displayId) =>
   selectSecondaryDisplay(displayId),
+)
+ipcMain.handle('rank-game-editor:get', (_event, gameId) =>
+  backendRequest(`/rank-game-editor/${gameId}`),
+)
+ipcMain.handle('rank-game-editor:validate', (_event, document) =>
+  backendRequest('/rank-game-editor/validate', {
+    method: 'POST',
+    body: JSON.stringify(document),
+  }),
+)
+ipcMain.handle('rank-game-editor:save', (_event, gameId, document) =>
+  backendRequest(`/rank-game-editor/${gameId}`, {
+    method: 'PUT',
+    body: JSON.stringify(document),
+  }),
+)
+ipcMain.handle('game:metadata-update', (_event, gameId, patch) =>
+  backendRequest(`/games/${gameId}/metadata`, {
+    method: 'PATCH',
+    body: JSON.stringify(patch || {}),
+  }),
 )
 ipcMain.handle('secondary-display:open', () => openSecondaryDisplay())
 

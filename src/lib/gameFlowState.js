@@ -133,10 +133,21 @@ export function normalizeGameSummary(value) {
   return {
     id,
     name: nullableText(value.name) || `Game ${id}`,
+    displayName: nullableText(value.displayName) || nullableText(value.name) || `Game ${id}`,
     type: nullableText(value.type),
     mode: nullableText(value.mode),
     cover: nullableText(value.cover),
-    participants: nullableNumber(value.participants),
+    description: nullableText(value.description),
+    participants: nullableNumber(value.participants ?? value.maxPlayers),
+    minPlayers: nullableNumber(value.minPlayers) ?? 1,
+    maxPlayers: nullableNumber(value.maxPlayers ?? value.participants) ?? 1,
+    width: nullableNumber(value.width),
+    height: nullableNumber(value.height),
+    levels: Array.isArray(value.levels) ? value.levels.map((level, index) => ({
+      index: nonNegativeInteger(level?.index, index),
+      label: nullableText(level?.label) || `Level ${index + 1}`,
+      durationSeconds: nullableNumber(level?.durationSeconds),
+    })) : [],
   };
 }
 

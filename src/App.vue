@@ -2,10 +2,11 @@
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import DemoView from "./views/DemoView.vue";
-import { sendFloorTap } from "./lib/floorInput.js";
+import { sendFloorClick } from "./lib/floorInput.js";
 import GameListView from "./views/GameListView.vue";
 import MediaLibraryView from "./views/MediaLibraryView.vue";
 import SimpleGameEditorView from "./views/SimpleGameEditorView.vue";
+import RankGameEditorView from "./views/RankGameEditorView.vue";
 import SpiritLibraryView from "./views/SpiritLibraryView.vue";
 import LedGameTouchView from "./views/LedGameTouchView.vue";
 import LanguageView from "./views/LanguageView.vue";
@@ -259,9 +260,19 @@ function enterGameFlow() {
   return runAction("game-flow", () => api.enterGameFlow());
 }
 
-function openSimpleEditor(game) {
-  selectedEditorGame.value = game ? { id: game.id, name: game.name } : null;
-  activeView.value = "simple-editor";
+function openGameEditor(game) {
+  selectedEditorGame.value = game
+    ? { id: game.id, name: game.name, displayName: game.displayName, type: game.type }
+    : null;
+  if (game?.type === "rank") {
+    activeView.value = "rank-editor";
+  } else if (game?.type === "default") {
+    activeView.value = "simple-editor";
+  } else {
+    selectedEditorGame.value = null;
+    errorMessage.value = t("rank.unsupportedEditor");
+    activeView.value = "games";
+  }
 }
 
 function toggleSecondaryMenu() {
@@ -432,7 +443,7 @@ async function sendRuntimeGameInput(x, y) {
     return;
   }
   try {
-    await sendFloorTap(api.sendGameInput, x, y, (result) => {
+    await sendFloorClick(api.sendGameInput, x, y, (result) => {
       applyState(result?.data ?? result);
     });
   } catch (error) {
@@ -526,7 +537,7 @@ function formatRuntimeValue(value, fallback = "-") {
         </button>
         <button
           class="nav-tab"
-          :class="{ active: activeView === 'games' || activeView === 'simple-editor' }"
+          :class="{ active: ['games', 'simple-editor', 'rank-editor'].includes(activeView) }"
           type="button"
           @click="activeView = 'games'"
         >
@@ -672,12 +683,19 @@ function formatRuntimeValue(value, fallback = "-") {
       @stop-engine="stopEngine"
     />
 
-    <GameListView v-else-if="activeView === 'games'" @open-game="openSimpleEditor" />
+    <GameListView v-else-if="activeView === 'games'" @open-game="openGameEditor" />
 
     <SimpleGameEditorView
       v-else-if="activeView === 'simple-editor'"
       :game-id="selectedEditorGame?.id"
       :game-name="selectedEditorGame?.name"
+      @back="backToGameList"
+    />
+
+    <RankGameEditorView
+      v-else-if="activeView === 'rank-editor'"
+      :game-id="selectedEditorGame?.id"
+      :game-name="selectedEditorGame?.displayName || selectedEditorGame?.name"
       @back="backToGameList"
     />
 

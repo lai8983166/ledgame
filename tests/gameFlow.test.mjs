@@ -169,7 +169,12 @@ test("stale preparation broadcasts cannot erase a scanned wristband", () => {
 });
 
 test("normalizeGameList unwraps backend Result data", () => {
-  assert.deepEqual(normalizeGameList({ data: gameListFixture }), gameListFixture);
+  const [game] = normalizeGameList({ data: gameListFixture });
+  assert.equal(game.id, gameListFixture[0].id);
+  assert.equal(game.name, gameListFixture[0].name);
+  assert.equal(game.displayName, gameListFixture[0].name);
+  assert.equal(game.maxPlayers, gameListFixture[0].participants);
+  assert.deepEqual(game.levels, []);
 });
 
 test("termination and error helpers preserve backend meaning", () => {
@@ -491,11 +496,9 @@ test("Debug Panel exposes a deterministic natural-completion action through prod
 
   assert.match(source, /data-testid="game-debug-complete-natural"/);
   assert.match(source, /\$emit\('game-input', 0, 0\)/);
-  assert.match(appSource, /await sendFloorTap\(api\.sendGameInput, x, y/);
-  assert.match(floorInputSource, /type:\s*"tile"/);
-  assert.match(floorInputSource, /normalizedAction === "DOWN" \? 1 : 0/);
-  assert.match(floorInputSource, /const down = await sendInput[\s\S]*const up = await sendInput/);
-  assert.doesNotMatch(floorInputSource, /type:\s*"click"/);
+  assert.match(appSource, /await sendFloorClick\(api\.sendGameInput, x, y/);
+  assert.match(floorInputSource, /type:\s*"click"/);
+  assert.match(floorInputSource, /const response = await sendInput\(floorClickPayload\(x, y\)\)/);
   assert.doesNotMatch(
     source.match(/<button data-testid="game-debug-complete-natural"[^>]*>/)?.[0] || "",
     /debug-command|endGame|stageResult/,

@@ -11,13 +11,15 @@ export function floorInputPayload(action, x, y) {
   };
 }
 
-export async function sendFloorTap(sendInput, x, y, onResponse = () => {}) {
+export function floorClickPayload(x, y) {
+  return { type: "click", x, y };
+}
+
+export async function sendFloorClick(sendInput, x, y, onResponse = () => {}) {
   if (typeof sendInput !== "function") {
     throw new Error("Game runtime input API is unavailable");
   }
-  const down = await sendInput(floorInputPayload("DOWN", x, y));
-  onResponse(down);
-  const up = await sendInput(floorInputPayload("UP", x, y));
-  onResponse(up);
-  return up;
+  const response = await sendInput(floorClickPayload(x, y));
+  onResponse(response);
+  return response;
 }

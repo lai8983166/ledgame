@@ -18,7 +18,7 @@ import {
   shouldIgnoreStalePreparationState,
   touchViewForState,
 } from "../lib/gameFlowState.js";
-import { loadSimpleGameVariants } from "../lib/simpleGameVariants.js";
+import { loadSupportedGames } from "../lib/gameCatalog.js";
 import {
   playerAccessRemainingSeconds,
   wristbandErrorMessageKey,
@@ -612,7 +612,7 @@ async function loadGames() {
   errorMessage.value = "";
   gameInitializationWarning.value = "";
   try {
-    const result = await loadSimpleGameVariants(api);
+    const result = await loadSupportedGames(api);
     games.value = result.games;
     if (result.initializationError) {
       gameInitializationWarning.value = t("games.seedWarning", {
@@ -776,24 +776,31 @@ function handleCarouselPointerUp(event) {
 async function showLevelSelection() {
   const game = carouselGame.value;
   const sessionId = preparation.value?.sessionId;
-  if (!game || !sessionId || busyAction.value || !api?.getGameEditor) return;
-  const selectedPlayers = normalizeTouchPlayerCount(draft.userCount, 1);
+  if (!game || !sessionId || busyAction.value) return;
+  const selectedPlayers = Math.min(
+    Math.max(normalizeTouchPlayerCount(draft.userCount, 1), game.minPlayers || 1),
+    game.maxPlayers || 6,
+  );
   busyAction.value = "wizard-game";
   errorMessage.value = "";
   try {
     const selection = await api.selectPreparationGame(sessionId, game.id);
     applyRuntimeState(selection?.data ?? selection);
     draft.userCount = selectedPlayers;
-    const detail = await api.getGameEditor(game.id);
+    const detail = game.type === "rank"
+      ? rankTouchDocument(game)
+      : await api.getGameEditor(game.id);
     const normalized = normalizeTouchGameDocument(detail, game);
     if (!normalized.levels.length) {
       throw new Error(t("touch.noSelectableLevels"));
     }
     gameDocument.value = normalized;
-    draft.startLevelIndex = Math.min(
-      Math.max(0, Math.floor(Number(draft.startLevelIndex) || 0)),
-      normalized.levels.length - 1,
-    );
+    draft.startLevelIndex = game.type === "rank"
+      ? 0
+      : Math.min(
+          Math.max(0, Math.floor(Number(draft.startLevelIndex) || 0)),
+          normalized.levels.length - 1,
+        );
     gamePreparationStep.value = "level";
   } catch (error) {
     errorMessage.value = extractErrorMessage(
@@ -806,7 +813,29 @@ async function showLevelSelection() {
   }
 }
 
+function rankTouchDocument(game) {
+  return {
+    id: game.id,
+    name: game.displayName || game.name,
+    description: game.description || "",
+    globalTimeLimit: false,
+    levels: (game.levels || []).slice(0, 1).map((level) => ({
+      label: level.label,
+      option: {
+        timeLimit: true,
+        timeLimitMode: "CYCLE_SECONDS",
+        timeLimitValue: level.durationSeconds,
+        lifeLimitMode: "UNLIMITED",
+      },
+    })),
+  };
+}
+
 function selectWizardLevel(index) {
+  if (selectedGame.value?.type === "rank") {
+    draft.startLevelIndex = 0;
+    return;
+  }
   const normalized = Math.floor(Number(index));
   if (normalized < 0 || normalized >= gameLevels.value.length) return;
   draft.startLevelIndex = normalized;
@@ -897,10 +926,9 @@ function levelLifeText(level) {
 function preparationPatch() {
   return {
     userCount: Math.max(1, Math.floor(Number(draft.userCount) || 1)),
-    startLevelIndex: Math.max(
-      0,
-      Math.floor(Number(draft.startLevelIndex) || 0),
-    ),
+    startLevelIndex: selectedGame.value?.type === "rank"
+      ? 0
+      : Math.max(0, Math.floor(Number(draft.startLevelIndex) || 0)),
     stageFailurePolicy:
       draft.stageFailurePolicy === "RETRY" ? "RETRY" : "END_GAME",
     launchMethod: preparation.value?.options.launchMethod || "touch",
@@ -1307,13 +1335,13 @@ async function confirmReturnToIdle() {
               <img
                 v-if="coverUrls[slot.item.id]"
                 :src="coverUrls[slot.item.id]"
-                :alt="slot.item.name"
+                :alt="slot.item.displayName || slot.item.name"
                 draggable="false"
               />
               <span v-else class="touch-carousel-fallback">
-                {{ slot.item.name.slice(0, 1) }}
+                {{ (slot.item.displayName || slot.item.name).slice(0, 1) }}
               </span>
-              <strong>{{ slot.item.name }}</strong>
+              <strong>{{ slot.item.displayName || slot.item.name }}</strong>
             </button>
           </div>
           <button
@@ -1353,7 +1381,7 @@ async function confirmReturnToIdle() {
       >
         <header class="touch-level-heading">
           <span class="touch-level-help">? &nbsp; {{ t("touch.howToPlay") }}</span>
-          <h1>{{ gameDocument?.name || selectedGame?.name }}</h1>
+          <h1>{{ gameDocument?.name || selectedGame?.displayName || selectedGame?.name }}</h1>
         </header>
 
         <div class="touch-game-description">

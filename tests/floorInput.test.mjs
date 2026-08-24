@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { floorInputPayload, sendFloorTap } from "../src/lib/floorInput.js";
+import { floorClickPayload, floorInputPayload, sendFloorClick } from "../src/lib/floorInput.js";
 
 test("floor input payload exposes production tile DOWN and UP semantics", () => {
   assert.deepEqual(floorInputPayload("DOWN", 2, 3), {
@@ -19,29 +19,17 @@ test("floor input payload exposes production tile DOWN and UP semantics", () => 
   assert.throws(() => floorInputPayload("CLICK", 2, 3), /Unsupported floor input action/);
 });
 
-test("Debug floor tap waits for DOWN before sending UP and applies both responses", async () => {
+test("Debug floor click is one atomic request and applies its response", async () => {
   const calls = [];
   const responses = [];
-  let releaseDown;
-  const downPending = new Promise((resolve) => {
-    releaseDown = resolve;
-  });
   const sendInput = async (payload) => {
     calls.push(payload);
-    if (payload.value === 1) {
-      await downPending;
-    }
-    return { data: { value: payload.value } };
+    return { data: { accepted: true } };
   };
 
-  const tap = sendFloorTap(sendInput, 0, 0, (response) => responses.push(response));
-  await Promise.resolve();
-  assert.equal(calls.length, 1);
-  assert.equal(calls[0].value, 1);
+  const result = await sendFloorClick(sendInput, 0, 1, (response) => responses.push(response));
 
-  releaseDown();
-  await tap;
-
-  assert.deepEqual(calls.map((call) => call.value), [1, 0]);
-  assert.deepEqual(responses.map((response) => response.data.value), [1, 0]);
+  assert.deepEqual(floorClickPayload(0, 1), { type: "click", x: 0, y: 1 });
+  assert.deepEqual(calls, [{ type: "click", x: 0, y: 1 }]);
+  assert.deepEqual(responses, [result]);
 });

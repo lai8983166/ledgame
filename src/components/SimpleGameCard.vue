@@ -31,7 +31,7 @@ watch(
         <img
           v-if="coverUrl"
           :src="coverUrl"
-          :alt="t('games.coverAlt', { game: game.name })"
+          :alt="t('games.coverAlt', { game: game.displayName || game.name })"
           @error="coverFailed = true"
         />
         <span v-else class="game-card-cover-placeholder">
@@ -40,7 +40,8 @@ watch(
         </span>
       </span>
       <span class="game-card-copy">
-        <h2>{{ game.name }}</h2>
+        <h2>{{ game.displayName || game.name }}</h2>
+        <small v-if="game.type === 'rank'" class="game-card-badge">{{ t("rank.typeLabel") }}</small>
         <small v-if="game.name === 'simple-demo'" class="game-card-badge">
           {{ t("games.testOnly") }}
         </small>

@@ -4,7 +4,7 @@ import GameInfoEditDialog from "../components/GameInfoEditDialog.vue";
 import SimpleGameCard from "../components/SimpleGameCard.vue";
 import { useI18n } from "vue-i18n";
 import { extractErrorMessage } from "../lib/gameFlowState.js";
-import { loadSimpleGameVariants } from "../lib/simpleGameVariants.js";
+import { loadSupportedGames } from "../lib/gameCatalog.js";
 
 const { t } = useI18n({ useScope: "global" });
 const api = window.ledGame;
@@ -27,7 +27,7 @@ async function loadGames() {
   errorMessage.value = "";
   warningMessage.value = "";
   try {
-    const result = await loadSimpleGameVariants(api);
+    const result = await loadSupportedGames(api);
     games.value = result.games;
     if (result.initializationError) {
       warningMessage.value = t("games.seedWarning", {
@@ -50,23 +50,10 @@ function openGame(game) {
   emit("open-game", game);
 }
 
-async function editGame(game) {
+function editGame(game) {
   editingGame.value = game;
   editCover.value = game.cover || "";
   editError.value = "";
-  editLoading.value = true;
-  try {
-    const result = await api.getGameEditor(game.id);
-    const document = result?.data ?? result;
-    if (!document || Number(document.id) !== Number(game.id)) {
-      throw new Error(t("games.gameInfoMismatch"));
-    }
-    editCover.value = document.cover || "";
-  } catch (error) {
-    editError.value = extractErrorMessage(error, t("games.loadGameInfoFailed"));
-  } finally {
-    editLoading.value = false;
-  }
 }
 
 function closeGameInfo() {
@@ -86,19 +73,8 @@ async function saveGameInfo() {
   editSaving.value = true;
   editError.value = "";
   try {
-    const result = await api.getGameEditor(game.id);
-    const latestDocument = result?.data ?? result;
-    if (!latestDocument || Number(latestDocument.id) !== Number(game.id)) {
-      throw new Error(t("games.gameInfoMismatch"));
-    }
     const cover = editCover.value || "";
-    const saveResult = await api.saveGameEditor(game.id, {
-      ...latestDocument,
-      cover,
-    });
-    if (saveResult?.data?.saved === false) {
-      throw new Error(t("games.saveGameInfoFailed"));
-    }
+    await api.updateGameMetadata(game.id, { cover });
     games.value = games.value.map((item) =>
       Number(item.id) === Number(game.id) ? { ...item, cover } : item,
     );

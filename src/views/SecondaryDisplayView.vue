@@ -12,6 +12,10 @@ let removeStateListener = null;
 
 const gameplay = computed(() => runtimeState.value.gameplay || {});
 const lifecycle = computed(() => runtimeState.value.engineState);
+const isRank = computed(() => runtimeState.value.gameType === "rank");
+const rankPlayers = computed(() =>
+  Array.isArray(gameplay.value.players) ? gameplay.value.players : [],
+);
 const terminated = computed(() => hasTermination(runtimeState.value));
 const resultLabel = computed(() =>
   runtimeState.value.success === true
@@ -71,7 +75,30 @@ function displayValue(value) {
         <strong>{{ t(`secondaryDisplay.states.${lifecycle}`) }}</strong>
       </header>
 
-      <div class="secondary-runtime-stats">
+      <section v-if="isRank" class="rank-scoreboard">
+        <div class="rank-round-summary">
+          <span>{{ t("rankSecondary.round", { value: displayValue(gameplay.roundId) }) }}</span>
+          <span>{{ t("rankSecondary.remainingTargets", { value: displayValue(gameplay.remainingTargets) }) }}</span>
+          <span>{{ t("rankSecondary.remainingTime", { value: displayValue(gameplay.remainingMillis) }) }}</span>
+        </div>
+        <div class="rank-player-grid">
+          <article
+            v-for="player in rankPlayers"
+            :key="player.playerNumber"
+            class="rank-player-card"
+            :style="{ '--player-color': player.color || '#38a4d8' }"
+          >
+            <header>
+              <strong>{{ player.playerNumber }}P</strong>
+              <span>{{ player.tied ? t("rankSecondary.tiedRank", { value: player.rank }) : t("rankSecondary.rank", { value: player.rank }) }}</span>
+            </header>
+            <div><span>{{ t("rankSecondary.stageScore") }}</span><strong>{{ displayValue(player.stageScore) }}</strong></div>
+            <div><span>{{ t("rankSecondary.totalScore") }}</span><strong>{{ displayValue(player.totalScore) }}</strong></div>
+          </article>
+        </div>
+      </section>
+
+      <div v-else class="secondary-runtime-stats">
         <article>
           <span>{{ t("touch.score") }}</span>
           <strong>{{ displayValue(gameplay.score) }}</strong>
@@ -87,7 +114,7 @@ function displayValue(value) {
         <strong>{{ displayValue(gameplay.phase || lifecycle) }}</strong>
       </div>
 
-      <section v-if="lifecycle === 'STOPPED' && terminated" class="secondary-runtime-result">
+      <section v-if="!isRank && lifecycle === 'STOPPED' && terminated" class="secondary-runtime-result">
         <span>{{ t("secondaryDisplay.result") }}</span>
         <strong>{{ resultLabel }}</strong>
         <p>{{ t("secondaryDisplay.finalScore", { score: displayValue(gameplay.score) }) }}</p>
@@ -221,6 +248,65 @@ function displayValue(value) {
 
 .secondary-runtime-stage strong {
   font-size: clamp(24px, 3vw, 48px);
+}
+
+.rank-scoreboard {
+  min-height: 0;
+  display: grid;
+  gap: 2.5vh;
+}
+
+.rank-round-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 28px;
+  color: #9ed8f4;
+  font-size: clamp(16px, 1.6vw, 26px);
+  font-weight: 750;
+}
+
+.rank-player-grid {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: clamp(10px, 1.5vw, 24px);
+}
+
+.rank-player-card {
+  min-width: 0;
+  padding: clamp(14px, 2vw, 28px);
+  border-top: 7px solid var(--player-color);
+  background: #0c1c29;
+}
+
+.rank-player-card header,
+.rank-player-card > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.rank-player-card header {
+  margin-bottom: 2vh;
+  color: var(--player-color);
+}
+
+.rank-player-card header strong {
+  font-size: clamp(28px, 3vw, 52px);
+}
+
+.rank-player-card > div span {
+  color: #a4b5c2;
+  font-weight: 700;
+}
+
+.rank-player-card > div strong {
+  font-size: clamp(30px, 4vw, 68px);
+}
+
+@media (max-width: 900px) {
+  .rank-player-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 .secondary-runtime-result {

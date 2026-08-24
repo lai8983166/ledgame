@@ -51,15 +51,13 @@ test("game information dialog uses the image-only media picker", () => {
   assert.match(dialogSource, /emit\("update:cover"/);
 });
 
-test("cover save reloads the latest document and changes only cover", () => {
+test("cover save uses metadata-only API and changes only the local cover summary", () => {
   const saveFunction = listSource.slice(
     listSource.indexOf("async function saveGameInfo()"),
     listSource.indexOf("</script>"),
   );
-  const readIndex = saveFunction.indexOf("api.getGameEditor(game.id)");
-  const saveIndex = saveFunction.indexOf("api.saveGameEditor(game.id");
-  assert.ok(readIndex >= 0 && readIndex < saveIndex);
-  assert.match(saveFunction, /\{\s*\.\.\.latestDocument,\s*cover,\s*\}/s);
+  assert.match(saveFunction, /api\.updateGameMetadata\(game\.id, \{ cover \}\)/);
+  assert.doesNotMatch(saveFunction, /getGameEditor|saveGameEditor|saveRankGameEditor/);
   assert.match(saveFunction, /games\.value = games\.value\.map/);
   assert.match(saveFunction, /catch \(error\)[\s\S]*editError\.value/);
   assert.match(listSource, /v-if="editingGame"/);
