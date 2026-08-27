@@ -43,6 +43,19 @@ test("normalizeRuntimeState restores preparation options and legacy defaults", (
   assert.equal(normalizeRuntimeState({ engineState: "RUNNING" }).startLevelIndex, 0);
 });
 
+test("normalizeRuntimeState validates generic stage status fields", () => {
+  const state = normalizeRuntimeState({
+    engineState: "SETTLING",
+    currentStageIndex: 2.9,
+    stageOutcome: "retry",
+  });
+  assert.equal(state.currentStageIndex, 2);
+  assert.equal(state.stageOutcome, "RETRY");
+  assert.equal(normalizeRuntimeState({ currentStageIndex: -3 }).currentStageIndex, 0);
+  assert.equal(normalizeRuntimeState({ stageOutcome: "IN_PROGRESS" }).stageOutcome, null);
+  assert.equal(normalizeRuntimeState({}).currentStageIndex, null);
+});
+
 test("normalizeRuntimeState exposes explicit simulation mode and queue summary", () => {
   const state = normalizeRuntimeState({
     engineState: "RUNNING",

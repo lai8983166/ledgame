@@ -39,6 +39,8 @@ export function normalizeRuntimeState(value) {
     running: engineState === "RUNNING",
     success: typeof state.success === "boolean" ? state.success : null,
     terminationReason: nullableText(state.terminationReason),
+    currentStageIndex: nullableNonNegativeInteger(state.currentStageIndex),
+    stageOutcome: normalizeStageOutcome(state.stageOutcome),
     stageFailurePolicy: nullableText(
       state.stageFailurePolicy ?? preparation?.options.stageFailurePolicy,
     ),
@@ -205,6 +207,17 @@ function nullableText(value) {
   }
   const text = String(value).trim();
   return text || null;
+}
+
+function nullableNonNegativeInteger(value) {
+  return value === null || value === undefined || value === ""
+    ? null
+    : nonNegativeInteger(value, null);
+}
+
+function normalizeStageOutcome(value) {
+  const outcome = String(value || "").trim().toUpperCase();
+  return ["SUCCESS", "RETRY", "FAILURE"].includes(outcome) ? outcome : null;
 }
 
 function normalizeRuntimeMode(value) {

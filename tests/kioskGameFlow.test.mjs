@@ -90,7 +90,7 @@ test("secondary renderer is read-only and restores runtime state before broadcas
   assert.match(source, /api\?\.onEngineState/);
   assert.doesNotMatch(
     source,
-    /stopTouchGame|stopGame|confirmPreparation|sendGameInput|nextStage|retry/,
+    /api\??\.(?:stopTouchGame|stopGame|confirmPreparation|sendGameInput|nextStage|retryStage)/,
   );
 });
 
