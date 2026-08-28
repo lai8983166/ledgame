@@ -127,6 +127,6 @@ test("Electron exposes an embedded-only refresh IPC flow and Help entry", async 
   assert.match(preloadSource, /refreshDatabase: \(\) => ipcRenderer\.invoke\(['"]database:refresh['"]\)/);
   assert.match(appSource, /t\("nav\.dataUpdate"\)/);
   assert.match(appSource, /activeView === 'database-refresh'/);
-  assert.match(viewSource, /window\.confirm\(t\("databaseRefresh\.confirm"\)\)/);
+  assert.match(viewSource, /confirmWithRendererFocus\(t\("databaseRefresh\.confirm"\)\)/);
   assert.match(viewSource, /window\.location\.reload\(\)/);
 });

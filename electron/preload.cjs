@@ -26,6 +26,9 @@ if (windowKind === 'touch') {
   window.addEventListener('focusout', () => {
     setTimeout(() => reportEditableFocus(document.activeElement), 0)
   })
+  window.addEventListener('focus', () => {
+    setTimeout(() => reportEditableFocus(document.activeElement), 0)
+  })
 }
 
 function onEngineState(callback) {

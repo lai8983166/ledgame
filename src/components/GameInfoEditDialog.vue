@@ -42,13 +42,14 @@ function close() {
 }
 
 function handleKeydown(event) {
-  if (event.key === "Escape") {
-    if (!pickerOpen.value) {
-      close();
-    }
+  if (pickerOpen.value) {
     return;
   }
-  if (event.key !== "Tab" || pickerOpen.value) {
+  if (event.key === "Escape") {
+    close();
+    return;
+  }
+  if (event.key !== "Tab") {
     return;
   }
   const focusable = [

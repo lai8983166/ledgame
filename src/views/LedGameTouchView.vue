@@ -43,6 +43,7 @@ import {
   TOUCH_PLAYER_COUNTS,
   touchCarouselSlots,
 } from "../lib/touchGamePreparation.js";
+import { confirmWithRendererFocus } from "../lib/rendererFocus.js";
 
 const api = window.ledGame;
 const mediaApi = window.mediaLibrary;
@@ -984,7 +985,7 @@ async function returnToIdle() {
 }
 
 async function stopGame() {
-  if (!window.confirm(t("touch.stopConfirm"))) return;
+  if (!confirmWithRendererFocus(t("touch.stopConfirm"))) return;
   await runAction("stop", () => api.stopTouchGame());
 }
 

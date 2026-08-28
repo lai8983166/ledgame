@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
+import { confirmWithRendererFocus } from "../lib/rendererFocus.js";
 
 const { t } = useI18n({ useScope: "global" });
 const api = window.ledGame;
@@ -37,7 +38,7 @@ async function refreshDatabase() {
     };
     return;
   }
-  const confirmed = window.confirm(t("databaseRefresh.confirm"));
+  const confirmed = confirmWithRendererFocus(t("databaseRefresh.confirm"));
   if (!confirmed) {
     result.value = { status: "CANCELED" };
     return;

@@ -149,11 +149,10 @@ function handleSave() {
 const canSave = computed(() => !props.saving);
 
 function handleKeydown(event) {
+  if (picker.value) {
+    return;
+  }
   if (event.key === "Escape") {
-    // Let the nested media picker handle Escape when it is open.
-    if (picker.value) {
-      return;
-    }
     if (audioPlayer.value) {
       audioPlayer.value = null;
       return;

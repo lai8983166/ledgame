@@ -40,7 +40,7 @@ test("whole-frame overwrite confirms before any frame mutation", () => {
     editorSource.indexOf("function executeWholeFrameCopy(mode)"),
     editorSource.indexOf("function replaceFrameObjects"),
   );
-  const confirmIndex = executeCopy.indexOf("confirmDestructiveAction(message)");
+  const confirmIndex = executeCopy.indexOf("confirmWithRendererFocus(message)");
   assert.ok(confirmIndex > 0);
   assert.ok(confirmIndex < executeCopy.indexOf("level.frameList.splice"));
   assert.ok(confirmIndex < executeCopy.indexOf("replaceFrameObjects"));
@@ -59,7 +59,7 @@ test("object copy operations remain outside destructive confirmation", () => {
     editorSource.indexOf("function copySelectedObjectToPreviousFrame"),
     editorSource.indexOf("function copyCurrentFrameToPreviousFrame"),
   );
-  assert.doesNotMatch(objectCopy, /confirmDestructiveAction/);
+  assert.doesNotMatch(objectCopy, /confirmWithRendererFocus/);
 });
 
 test("Simple editor uses fit scaling without outer scrollbars or excess bottom padding", () => {

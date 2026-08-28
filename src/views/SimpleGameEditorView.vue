@@ -25,6 +25,7 @@ import {
   MERGE_ERROR,
   mergeSameColorObjects,
 } from "../lib/simpleObjectMerge.js";
+import { confirmWithRendererFocus, restoreRendererFocus } from "../lib/rendererFocus.js";
 
 const { t } = useI18n({ useScope: "global" });
 
@@ -1487,24 +1488,6 @@ function selectFrame(index) {
   scheduleMatrixCacheWarmup(index);
 }
 
-function restoreEditorFocus() {
-  const restoreWindowFocus = window.ledGame?.restoreFocus?.();
-  window.focus?.();
-  const activeElement = window.document?.activeElement;
-  if (activeElement && typeof activeElement.blur === "function") {
-    activeElement.blur();
-  }
-  if (restoreWindowFocus && typeof restoreWindowFocus.then === "function") {
-    restoreWindowFocus.then(() => {
-      window.focus?.();
-      const currentActiveElement = window.document?.activeElement;
-      if (currentActiveElement && typeof currentActiveElement.blur === "function") {
-        currentActiveElement.blur();
-      }
-    }).catch(() => {});
-  }
-}
-
 function getFrameIndexFromPointer(event) {
   if (!frames.value.length) {
     return activeFrameIndex.value;
@@ -1597,7 +1580,7 @@ function deleteCurrentLevel() {
   }
   const levelName = level.label || `Level ${activeLevelIndex.value + 1}`;
   const frameCount = level.frameList?.length || 0;
-  if (!confirmDestructiveAction(t("simple.deleteLevelConfirm", { name: levelName, count: frameCount }))) {
+  if (!confirmWithRendererFocus(t("simple.deleteLevelConfirm", { name: levelName, count: frameCount }))) {
     return;
   }
 
@@ -1613,7 +1596,7 @@ function deleteCurrentLevel() {
   stopSelectionMode();
   syncSelectedObject();
   scheduleMatrixCacheWarmup(0);
-  nextTick(restoreEditorFocus);
+  nextTick(restoreRendererFocus);
   statusMessage.value = t("simple.levelDeleted", { name: levelName });
 }
 
@@ -1651,7 +1634,7 @@ function deleteCurrentFrame() {
   if (!level?.frameList?.length) {
     return;
   }
-  if (!confirmDestructiveAction(t("simple.deleteFrameConfirm", { number: activeFrameIndex.value + 1 }))) {
+  if (!confirmWithRendererFocus(t("simple.deleteFrameConfirm", { number: activeFrameIndex.value + 1 }))) {
     return;
   }
   level.frameList.splice(activeFrameIndex.value, 1);
@@ -1663,13 +1646,7 @@ function deleteCurrentFrame() {
   clearRgbEditHistory();
   syncSelectedObject();
   scheduleMatrixCacheWarmup(activeFrameIndex.value);
-  nextTick(restoreEditorFocus);
-}
-
-function confirmDestructiveAction(message) {
-  const confirmed = window.confirm(message);
-  restoreEditorFocus();
-  return confirmed;
+  nextTick(restoreRendererFocus);
 }
 
 function applyCurrentRepeatTimesToAllFrames() {
@@ -1935,7 +1912,7 @@ function deleteSelectedObject() {
   if (index < 0) {
     return;
   }
-  if (!confirmDestructiveAction(t("simple.deleteObjectConfirm"))) {
+  if (!confirmWithRendererFocus(t("simple.deleteObjectConfirm"))) {
     return;
   }
   runRgbEdit(currentFrameRgbHistoryTargets(), "delete-object", () => {
@@ -1945,7 +1922,7 @@ function deleteSelectedObject() {
     stopSelectionMode();
     stopAnchorEdit();
   });
-  nextTick(restoreEditorFocus);
+  nextTick(restoreRendererFocus);
 }
 
 function moveSelectedObjectLayerUp() {
@@ -2139,7 +2116,7 @@ function executeWholeFrameCopy(mode) {
     const message = mode === "all"
       ? t("simple.frameOverwriteManyConfirm", { count: plan.overwriteIndices.length })
       : t("simple.frameOverwriteConfirm", { number: plan.overwriteIndices[0] + 1 });
-    if (!confirmDestructiveAction(message)) {
+    if (!confirmWithRendererFocus(message)) {
       return;
     }
   }
@@ -2157,7 +2134,7 @@ function executeWholeFrameCopy(mode) {
 
   if (mode === "next") {
     selectFrame(plan.targetIndices[0]);
-    nextTick(restoreEditorFocus);
+    nextTick(restoreRendererFocus);
   }
   statusMessage.value = mode === "all"
     ? t("simple.frameCopiedMany", { count: plan.targetIndices.length })

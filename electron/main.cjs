@@ -50,6 +50,10 @@ const {
   createKeyboardWristbandReader,
   normalizeWristbandId,
 } = require('./wristband-reader.cjs')
+const {
+  restoreBrowserWindowFocus,
+  showNativeDialogWithFocusRestore,
+} = require('./window-focus.cjs')
 
 const isDev = Boolean(process.env.VITE_DEV_SERVER_URL)
 const shouldUseEmbeddedBackend = !isDev && !process.env.LED_BACKEND_URL
@@ -1621,30 +1625,7 @@ ipcMain.handle('open-debug-panel', () => {
 })
 ipcMain.handle('window:restore-focus', (event) => {
   const targetWindow = BrowserWindow.fromWebContents(event.sender)
-  if (!targetWindow || targetWindow.isDestroyed()) {
-    return false
-  }
-
-  const focusWindow = () => {
-    if (targetWindow.isDestroyed()) {
-      return
-    }
-    targetWindow.setFocusable(true)
-    if (targetWindow.isMinimized()) {
-      targetWindow.restore()
-    }
-    if (!targetWindow.isVisible()) {
-      targetWindow.show()
-    }
-    targetWindow.moveTop()
-    targetWindow.focus()
-    targetWindow.webContents.focus()
-  }
-
-  focusWindow()
-  setImmediate(focusWindow)
-  setTimeout(focusWindow, 50)
-  return true
+  return restoreBrowserWindowFocus(targetWindow)
 })
 ipcMain.on('game:editable-focus', (event, focused) => {
   const targetWindow = BrowserWindow.fromWebContents(event.sender)
@@ -1656,11 +1637,17 @@ ipcMain.on('game:editable-focus', (event, focused) => {
 ipcMain.handle('game-flow:enter', () => enterGameFlow())
 
 ipcMain.handle('frame:latest', () => latestFrame)
-ipcMain.handle('frame:export-json', async (_event, payload) => {
-  const result = await dialog.showSaveDialog({
+ipcMain.handle('frame:export-json', async (event, payload) => {
+  const result = await showNativeDialogWithFocusRestore({
+    BrowserWindow,
+    dialog,
+    event,
+    method: 'showSaveDialog',
+    options: {
     title: '导出帧',
     defaultPath: payload?.defaultFileName || 'led-frame.json',
     filters: [{ name: 'JSON', extensions: ['json'] }],
+    },
   })
   if (result.canceled || !result.filePath) {
     return { canceled: true }
@@ -1668,11 +1655,17 @@ ipcMain.handle('frame:export-json', async (_event, payload) => {
   await fs.writeFile(result.filePath, payload?.content ?? '', 'utf8')
   return { canceled: false, filePath: result.filePath }
 })
-ipcMain.handle('frame:import-json', async () => {
-  const result = await dialog.showOpenDialog({
+ipcMain.handle('frame:import-json', async (event) => {
+  const result = await showNativeDialogWithFocusRestore({
+    BrowserWindow,
+    dialog,
+    event,
+    method: 'showOpenDialog',
+    options: {
     title: '导入帧',
     properties: ['openFile'],
     filters: [{ name: 'JSON', extensions: ['json'] }],
+    },
   })
   if (result.canceled || !result.filePaths?.length) {
     return { canceled: true }
@@ -1681,15 +1674,21 @@ ipcMain.handle('frame:import-json', async () => {
   const content = await fs.readFile(filePath, 'utf8')
   return { canceled: false, filePath, content }
 })
-ipcMain.handle('level:save-gif', async (_event, payload) => {
+ipcMain.handle('level:save-gif', async (event, payload) => {
   const bytes = payload?.bytes
   if (!bytes || typeof bytes.byteLength !== 'number' || bytes.byteLength === 0) {
     throw new Error('GIF 数据为空')
   }
-  const result = await dialog.showSaveDialog({
+  const result = await showNativeDialogWithFocusRestore({
+    BrowserWindow,
+    dialog,
+    event,
+    method: 'showSaveDialog',
+    options: {
     title: '导出当前关卡 GIF',
     defaultPath: payload?.defaultFileName || 'simple-level.gif',
     filters: [{ name: 'GIF', extensions: ['gif'] }],
+    },
   })
   if (result.canceled || !result.filePath) {
     return { canceled: true }
@@ -1950,7 +1949,7 @@ ipcMain.handle('elc408:debug-logs', (_event, after, limit) =>
 ipcMain.handle('elc408:debug-clear-logs', () =>
   backendRequest('/hardware/elc408/debug/logs', { method: 'DELETE' }),
 )
-ipcMain.handle('elc408:save-generated-file', async (_event, payload) => {
+ipcMain.handle('elc408:save-generated-file', async (event, payload) => {
   const result = normalizeSaveFilePayload(payload)
   if (!result.ok) {
     throw new Error(result.error)
@@ -1958,10 +1957,16 @@ ipcMain.handle('elc408:save-generated-file', async (_event, payload) => {
   const { kind, suggestedFileName, content } = result
   const configDirectory = getElc408ConfigDirectory()
   await fs.mkdir(configDirectory, { recursive: true })
-  const dialogResult = await dialog.showSaveDialog({
+  const dialogResult = await showNativeDialogWithFocusRestore({
+    BrowserWindow,
+    dialog,
+    event,
+    method: 'showSaveDialog',
+    options: {
     title: kind === 'wiring' ? '保存 wiring.json' : '保存 conf.json',
     defaultPath: path.join(configDirectory, suggestedFileName),
     filters: [{ name: 'JSON', extensions: ['json'] }],
+    },
   })
   if (dialogResult.canceled || !dialogResult.filePath) {
     return { canceled: true }

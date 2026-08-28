@@ -3,6 +3,7 @@ import { computed, nextTick, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { extractErrorMessage } from "../lib/gameFlowState.js";
 import { createRankEditorPayload } from "../lib/rankGameEditor.js";
+import { confirmWithRendererFocus } from "../lib/rendererFocus.js";
 
 const props = defineProps({
   gameId: { type: [Number, String], required: true },
@@ -207,7 +208,7 @@ async function startTest() {
 }
 
 function goBack() {
-  if (dirty.value && !window.confirm(t("rank.confirmLeave"))) return;
+  if (dirty.value && !confirmWithRendererFocus(t("rank.confirmLeave"))) return;
   emit("back");
 }
 </script>

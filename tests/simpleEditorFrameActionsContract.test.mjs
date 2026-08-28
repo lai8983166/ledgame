@@ -16,6 +16,10 @@ const mainSource = await readFile(
   new URL("../electron/main.cjs", import.meta.url),
   "utf8",
 );
+const rendererFocusSource = await readFile(
+  new URL("../src/lib/rendererFocus.js", import.meta.url),
+  "utf8",
+);
 
 function functionSource(name, nextName) {
   const start = editorSource.indexOf(`function ${name}`);
@@ -75,26 +79,23 @@ test("copying a frame remounts repeat input and selects a newly created next fra
 });
 
 test("destructive confirmation restores renderer focus after Electron dialogs", () => {
-  const confirmation = functionSource("confirmDestructiveAction", "applyCurrentRepeatTimesToAllFrames");
-  assert.match(confirmation, /const confirmed = window\.confirm\(message\)/);
-  assert.match(confirmation, /restoreEditorFocus\(\)/);
-  const focus = functionSource("restoreEditorFocus", "getFrameIndexFromPointer");
-  assert.match(focus, /window\.ledGame\?\.restoreFocus\?\.\(\)/);
-  assert.match(focus, /window\.focus\?\.\(\)/);
-  assert.match(focus, /activeElement\.blur\(\)/);
+  assert.match(editorSource, /import \{ confirmWithRendererFocus, restoreRendererFocus \}/);
+  assert.match(rendererFocusSource, /targetWindow\.confirm\(message\)/);
+  assert.match(rendererFocusSource, /targetWindow\?\.ledGame\?\.restoreFocus\?\.\(\)/);
+  assert.match(rendererFocusSource, /targetWindow\?\.focus\?\.\(\)/);
+  assert.match(rendererFocusSource, /activeElement\.blur\(\)/);
   assert.match(preloadSource, /restoreFocus: \(\) => ipcRenderer\.invoke\('window:restore-focus'\)/);
   assert.match(mainSource, /ipcMain\.handle\('window:restore-focus', \(event\) =>/);
-  assert.match(mainSource, /targetWindow\.focus\(\)/);
-  assert.match(mainSource, /targetWindow\.webContents\.focus\(\)/);
+  assert.match(mainSource, /restoreBrowserWindowFocus\(targetWindow\)/);
 
   for (const [name, nextName] of [
     ["deleteCurrentLevel", "addFrame"],
-    ["deleteCurrentFrame", "confirmDestructiveAction"],
+    ["deleteCurrentFrame", "applyCurrentRepeatTimesToAllFrames"],
     ["deleteSelectedObject", "moveSelectedObjectLayerUp"],
   ]) {
     assert.match(
       functionSource(name, nextName),
-      /nextTick\(restoreEditorFocus\)/,
+      /nextTick\(restoreRendererFocus\)/,
       `${name} must restore renderer focus after Vue updates`,
     );
   }

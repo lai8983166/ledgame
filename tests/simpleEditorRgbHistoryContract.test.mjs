@@ -63,7 +63,7 @@ test("matrix edits use RGB transactions while frame and level structure clear hi
     ["moveActiveLevel", "deleteCurrentLevel"],
     ["deleteCurrentLevel", "addFrame"],
     ["addFrame", "deleteCurrentFrame"],
-    ["deleteCurrentFrame", "confirmDestructiveAction"],
+    ["deleteCurrentFrame", "applyCurrentRepeatTimesToAllFrames"],
     ["executeWholeFrameCopy", "replaceFrameObjects"],
   ];
   for (const [name, nextName] of structuralFunctions) {
@@ -87,7 +87,7 @@ test("RGB history restores only matrices and refreshes derived editor state", ()
 
 test("level deletion is confirmed and disabled when only one level remains", () => {
   const deletion = functionSource("deleteCurrentLevel", "addFrame");
-  assert.match(deletion, /confirmDestructiveAction\(t\("simple\.deleteLevelConfirm"/);
+  assert.match(deletion, /confirmWithRendererFocus\(t\("simple\.deleteLevelConfirm"/);
   assert.match(deletion, /deleteLevelAt\(document\.value\.levels, activeLevelIndex\.value\)/);
   assert.match(deletion, /activeFrameIndex\.value = 0/);
   assert.match(deletion, /clearRgbEditHistory\(\)/);
