@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node --check electron/main.cjs)",
+      "Bash(pnpm build *)",
+      "Bash(openspec validate *)"
+    ]
+  }
+}

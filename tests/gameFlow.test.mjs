@@ -56,6 +56,30 @@ test("normalizeRuntimeState validates generic stage status fields", () => {
   assert.equal(normalizeRuntimeState({}).currentStageIndex, null);
 });
 
+test("normalizeRuntimeState validates the cross-game global timing projection", () => {
+  assert.deepEqual(normalizeRuntimeState({
+    engineState: "RUNNING",
+    gameTime: { mode: "limited", remainingMillis: 12_345.9, running: true },
+  }).gameTime, {
+    mode: "LIMITED",
+    remainingMillis: 12_345.9,
+    running: true,
+  });
+  assert.deepEqual(normalizeRuntimeState({
+    engineState: "SETTLING",
+    gameTime: { mode: "UNLIMITED", remainingMillis: 99_999, running: false },
+  }).gameTime, {
+    mode: "UNLIMITED",
+    remainingMillis: null,
+    running: false,
+  });
+  assert.equal(normalizeRuntimeState({ engineState: "RUNNING" }).gameTime, null);
+  assert.equal(normalizeRuntimeState({
+    engineState: "RUNNING",
+    gameTime: { mode: "LIMITED", remainingMillis: "bad", running: true },
+  }).gameTime, null);
+});
+
 test("normalizeRuntimeState exposes explicit simulation mode and queue summary", () => {
   const state = normalizeRuntimeState({
     engineState: "RUNNING",

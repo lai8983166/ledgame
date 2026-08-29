@@ -61,7 +61,7 @@ export const rankMessages = {
     rankSecondary: {
       round: "第 {value} 轮",
       remainingTargets: "剩余目标 {value}",
-      remainingTime: "剩余 {value} 毫秒",
+      roundRemainingTime: "本回合剩余 {value}",
       rank: "第 {value} 名",
       tiedRank: "并列第 {value} 名",
       stageScore: "关卡分",
@@ -130,7 +130,7 @@ export const rankMessages = {
     rankSecondary: {
       round: "Round {value}",
       remainingTargets: "{value} targets left",
-      remainingTime: "{value} ms left",
+      roundRemainingTime: "Round time left {value}",
       rank: "Rank {value}",
       tiedRank: "Tied rank {value}",
       stageScore: "Stage",

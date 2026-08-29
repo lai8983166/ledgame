@@ -54,7 +54,30 @@ export function normalizeRuntimeState(value) {
     queueSummary,
     playerAccesses,
     playerAccess: playerAccesses[0] ?? null,
+    gameTime: normalizeGameTime(state.gameTime),
     gameplay: state.gameplay && typeof state.gameplay === "object" ? { ...state.gameplay } : null,
+  };
+}
+
+export function normalizeGameTime(value) {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+  const mode = String(value.mode || "").trim().toUpperCase();
+  if (mode === "UNLIMITED") {
+    return { mode, remainingMillis: null, running: Boolean(value.running) };
+  }
+  if (mode !== "LIMITED") {
+    return null;
+  }
+  const remainingMillis = nullableNumber(value.remainingMillis);
+  if (remainingMillis === null) {
+    return null;
+  }
+  return {
+    mode,
+    remainingMillis: Math.max(0, remainingMillis),
+    running: Boolean(value.running),
   };
 }
 

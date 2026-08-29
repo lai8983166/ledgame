@@ -16,9 +16,15 @@ const api = window.ledGame;
 const runtimeState = ref(normalizeRuntimeState(null));
 const loading = ref(true);
 const errorMessage = ref("");
+const stateObservedAt = ref(Date.now());
+const clockNow = ref(Date.now());
 let removeStateListener = null;
+let clockTimer = null;
 
-const presentation = computed(() => createSecondaryDisplayPresentation(runtimeState.value));
+const presentation = computed(() => createSecondaryDisplayPresentation(runtimeState.value, {
+  observedAt: stateObservedAt.value,
+  now: clockNow.value,
+}));
 const gameplay = computed(() => presentation.value.state.gameplay || {});
 const lifecycle = computed(() => presentation.value.state.engineState);
 const isResultVisible = computed(() => presentation.value.mode !== SECONDARY_DISPLAY_MODES.HUD);
@@ -26,6 +32,16 @@ const isGameResult = computed(() => [
   SECONDARY_DISPLAY_MODES.GAME_SUCCESS,
   SECONDARY_DISPLAY_MODES.GAME_FAILURE,
 ].includes(presentation.value.mode));
+const gameTimeText = computed(() => presentation.value.gameTime.mode === "UNLIMITED"
+  ? t("secondaryDisplay.unlimited")
+  : presentation.value.gameTime.text);
+
+function applyRuntimeState(state) {
+  const observedAt = Date.now();
+  runtimeState.value = normalizeRuntimeState(state);
+  stateObservedAt.value = observedAt;
+  clockNow.value = observedAt;
+}
 
 const resultVisual = computed(() => {
   switch (presentation.value.mode) {
@@ -54,15 +70,18 @@ const resultVisual = computed(() => {
 
 onMounted(async () => {
   removeStateListener = api?.onEngineState?.((state) => {
-    runtimeState.value = normalizeRuntimeState(state);
+    applyRuntimeState(state);
   });
+  clockTimer = window.setInterval(() => {
+    clockNow.value = Date.now();
+  }, 250);
   if (!api?.touchGameState) {
     loading.value = false;
     errorMessage.value = t("secondaryDisplay.runtimeUnavailable");
     return;
   }
   try {
-    runtimeState.value = normalizeRuntimeState(await api.touchGameState());
+    applyRuntimeState(await api.touchGameState());
   } catch (error) {
     errorMessage.value = error?.message || t("secondaryDisplay.runtimeReadFailed");
   } finally {
@@ -72,6 +91,7 @@ onMounted(async () => {
 
 onUnmounted(() => {
   removeStateListener?.();
+  if (clockTimer) window.clearInterval(clockTimer);
 });
 
 function displayValue(value) {
@@ -101,6 +121,10 @@ function displayValue(value) {
           <h1>{{ presentation.state.gameName || t("touch.gameFallback") }}</h1>
         </div>
         <div class="header-status">
+          <div v-if="presentation.gameTime.visible" class="game-time-label">
+            <span>{{ t("secondaryDisplay.gameRemaining") }}</span>
+            <strong>{{ gameTimeText }}</strong>
+          </div>
           <div class="stage-label">
             <span>{{ t("secondaryDisplay.currentStage") }}</span>
             <strong>{{ displayValue(presentation.stageNumber) }}</strong>
@@ -114,7 +138,7 @@ function displayValue(value) {
           <div class="rank-round-summary">
             <span>{{ t("rankSecondary.round", { value: displayValue(gameplay.roundId) }) }}</span>
             <span>{{ t("rankSecondary.remainingTargets", { value: displayValue(gameplay.remainingTargets) }) }}</span>
-            <span>{{ t("rankSecondary.remainingTime", { value: displayValue(gameplay.remainingMillis) }) }}</span>
+            <span>{{ t("rankSecondary.roundRemainingTime", { value: displayValue(presentation.rankRemainingTimeText) }) }}</span>
           </div>
           <div class="rank-player-grid">
             <article
@@ -191,10 +215,12 @@ function displayValue(value) {
 .game-heading { min-width: 0; }
 .game-heading h1 { max-width: 58vw; overflow: hidden; margin: 7px 0 0; font-size: clamp(34px, 4.5vw, 72px); line-height: 1.05; text-overflow: ellipsis; white-space: nowrap; }
 .header-status { display: flex; align-items: stretch; gap: 12px; }
-.stage-label, .lifecycle-label { border: 1px solid #315672; border-radius: 6px; background: #102535; }
+.stage-label, .game-time-label, .lifecycle-label { border: 1px solid #315672; border-radius: 6px; background: #102535; }
 .stage-label { display: flex; align-items: baseline; gap: 12px; padding: 9px 16px; }
-.stage-label span { color: #93b5c8; font-weight: 700; }
-.stage-label strong { color: #f4cf64; font-size: clamp(24px, 2.4vw, 40px); }
+.stage-label span, .game-time-label span { color: #93b5c8; font-weight: 700; }
+.stage-label strong, .game-time-label strong { color: #f4cf64; font-size: clamp(24px, 2.4vw, 40px); }
+.game-time-label { display: grid; align-content: center; gap: 2px; min-width: 150px; padding: 7px 16px; }
+.game-time-label strong { color: #7be2f3; font-variant-numeric: tabular-nums; }
 .lifecycle-label { display: grid; place-items: center; padding: 10px 17px; color: #9ed8f4; }
 .secondary-runtime-main { min-height: 0; transition: opacity 220ms ease, filter 220ms ease; }
 .secondary-runtime-main.is-obscured { opacity: 0.18; filter: saturate(0.5); }

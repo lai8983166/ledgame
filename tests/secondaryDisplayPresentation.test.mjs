@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   createSecondaryDisplayPresentation,
+  formatGameTime,
   SECONDARY_DISPLAY_MODES,
 } from "../src/lib/secondaryDisplayPresentation.js";
 
@@ -68,4 +69,46 @@ test("secondary display preserves Rank players while adding generic stage contex
   assert.equal(presentation.isRank, true);
   assert.equal(presentation.stageNumber, 2);
   assert.deepEqual(presentation.rankPlayers, players);
+});
+
+test("secondary display presents finite, paused, unlimited and unavailable global game time", () => {
+  const running = createSecondaryDisplayPresentation({
+    engineState: "RUNNING",
+    gameTime: { mode: "LIMITED", remainingMillis: 61_000, running: true },
+  }, { observedAt: 10_000, now: 11_100 });
+  assert.deepEqual(running.gameTime, {
+    visible: true,
+    mode: "LIMITED",
+    remainingMillis: 59_900,
+    text: "01:00",
+  });
+
+  const paused = createSecondaryDisplayPresentation({
+    engineState: "SETTLING",
+    gameTime: { mode: "LIMITED", remainingMillis: 61_000, running: false },
+  }, { observedAt: 10_000, now: 50_000 });
+  assert.equal(paused.gameTime.text, "01:01");
+
+  const unlimited = createSecondaryDisplayPresentation({
+    engineState: "RUNNING",
+    gameTime: { mode: "UNLIMITED", running: true },
+  });
+  assert.equal(unlimited.gameTime.mode, "UNLIMITED");
+  assert.equal(unlimited.gameTime.text, null);
+
+  assert.deepEqual(createSecondaryDisplayPresentation({
+    engineState: "RUNNING",
+  }).gameTime, { visible: true, mode: "UNKNOWN", remainingMillis: null, text: "--" });
+  assert.equal(createSecondaryDisplayPresentation({
+    engineState: "STOPPED",
+    gameTime: { mode: "LIMITED", remainingMillis: 20_000, running: false },
+  }).gameTime.visible, false);
+});
+
+test("global game time formatting preserves positive partial seconds and hours", () => {
+  assert.equal(formatGameTime(0), "00:00");
+  assert.equal(formatGameTime(1), "00:01");
+  assert.equal(formatGameTime(999), "00:01");
+  assert.equal(formatGameTime(60_000), "01:00");
+  assert.equal(formatGameTime(3_661_000), "01:01:01");
 });

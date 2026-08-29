@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
+import { readFile } from "node:fs/promises";
 
 const require = createRequire(import.meta.url);
 const {
@@ -61,4 +62,14 @@ test("secondary display matching never falls back to primary or an unrelated scr
     }),
     null,
   );
+});
+
+test("secondary runtime view shows generic game time without treating Rank milliseconds as global time", async () => {
+  const source = await readFile(new URL("../src/views/SecondaryDisplayView.vue", import.meta.url), "utf8");
+
+  assert.match(source, /secondaryDisplay\.gameRemaining/);
+  assert.match(source, /presentation\.gameTime\.visible/);
+  assert.match(source, /presentation(?:\.value)?\.gameTime\.mode === "UNLIMITED"/);
+  assert.match(source, /secondaryDisplay\.unlimited/);
+  assert.doesNotMatch(source, /rankSecondary\.remainingTime[^\n]*gameplay\.remainingMillis/);
 });

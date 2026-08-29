@@ -9,13 +9,15 @@ export const SECONDARY_DISPLAY_MODES = Object.freeze({
   GAME_FAILURE: "GAME_FAILURE",
 });
 
-export function createSecondaryDisplayPresentation(value) {
+export function createSecondaryDisplayPresentation(value, options = {}) {
   const state = normalizeRuntimeState(value);
   const gameplay = state.gameplay || {};
   const fallbackStageIndex = nullableNonNegativeInteger(gameplay.levelIndex);
   const stageIndex = state.currentStageIndex ?? fallbackStageIndex;
   const score = nullableFiniteNumber(gameplay.score);
   const life = nullableNonNegativeInteger(gameplay.life);
+  const now = finiteNumber(options.now, Date.now());
+  const observedAt = finiteNumber(options.observedAt, now);
 
   return {
     state,
@@ -27,6 +29,46 @@ export function createSecondaryDisplayPresentation(value) {
     retrying: state.engineState === "SETTLING" && state.stageOutcome === "RETRY",
     isRank: state.gameType === "rank",
     rankPlayers: Array.isArray(gameplay.players) ? gameplay.players : [],
+    rankRemainingTimeText: nullableFiniteNumber(gameplay.remainingMillis) === null
+      ? null
+      : formatGameTime(gameplay.remainingMillis),
+    gameTime: gameTimePresentation(state, now, observedAt),
+  };
+}
+
+export function formatGameTime(value) {
+  const milliseconds = Math.max(0, finiteNumber(value, 0));
+  const totalSeconds = milliseconds > 0 ? Math.ceil(milliseconds / 1_000) : 0;
+  const seconds = totalSeconds % 60;
+  const totalMinutes = Math.floor(totalSeconds / 60);
+  const minutes = totalMinutes % 60;
+  const hours = Math.floor(totalMinutes / 60);
+  const minuteText = String(hours > 0 ? minutes : totalMinutes).padStart(2, "0");
+  const secondText = String(seconds).padStart(2, "0");
+  return hours > 0
+    ? `${String(hours).padStart(2, "0")}:${minuteText}:${secondText}`
+    : `${minuteText}:${secondText}`;
+}
+
+function gameTimePresentation(state, now, observedAt) {
+  const visible = ["STARTING", "RUNNING", "SETTLING"].includes(state.engineState);
+  const gameTime = state.gameTime;
+  if (!visible) {
+    return { visible: false, mode: gameTime?.mode || "UNKNOWN", remainingMillis: null, text: null };
+  }
+  if (!gameTime) {
+    return { visible: true, mode: "UNKNOWN", remainingMillis: null, text: "--" };
+  }
+  if (gameTime.mode === "UNLIMITED") {
+    return { visible: true, mode: "UNLIMITED", remainingMillis: null, text: null };
+  }
+  const elapsed = gameTime.running ? Math.max(0, now - observedAt) : 0;
+  const remainingMillis = Math.max(0, gameTime.remainingMillis - elapsed);
+  return {
+    visible: true,
+    mode: "LIMITED",
+    remainingMillis,
+    text: formatGameTime(remainingMillis),
   };
 }
 
@@ -55,6 +97,11 @@ function nullableFiniteNumber(value) {
   }
   const number = Number(value);
   return Number.isFinite(number) ? number : null;
+}
+
+function finiteNumber(value, fallback) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : fallback;
 }
 
 function nullableNonNegativeInteger(value) {
