@@ -2,11 +2,15 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   createTouchCountdown,
+  createTouchPreparationStepTimeout,
+  isTouchPreparationStepTimeoutCurrent,
+  isTouchPreparationStepTimeoutActive,
   moveTouchCarousel,
   normalizeTouchGameDocument,
   normalizeTouchPlayerCount,
   touchCarouselSlots,
   hasRequiredWristbandParticipants,
+  TOUCH_PREPARATION_STEP_TIMEOUT_SECONDS,
 } from "../src/lib/touchGamePreparation.js";
 
 test("Touch game preparation constrains players and wraps the game carousel", () => {
@@ -115,4 +119,98 @@ test("Touch countdown completes only after every tick and cancellation prevents 
   cancelledCallback();
   assert.equal(cancelledCompletion, false);
   cancel();
+});
+
+test("Game presentation preparation times only the three interactive wizard steps", () => {
+  const active = (step, overrides = {}) =>
+    isTouchPreparationStepTimeoutActive({
+      presentationMode: "game",
+      runtimeView: "PREPARING",
+      sessionId: "preparation-1",
+      step,
+      ...overrides,
+    });
+
+  assert.equal(TOUCH_PREPARATION_STEP_TIMEOUT_SECONDS, 20);
+  assert.equal(active("players"), true);
+  assert.equal(active("game"), true);
+  assert.equal(active("level"), true);
+  assert.equal(active("countdown"), false);
+  assert.equal(active("players", { presentationMode: "debug" }), false);
+  assert.equal(active("players", { runtimeView: "IDLE" }), false);
+  assert.equal(active("players", { sessionId: null }), false);
+});
+
+test("Preparation step timeout identity rejects stale steps and sessions", () => {
+  const current = {
+    presentationMode: "game",
+    runtimeView: "PREPARING",
+    sessionId: "preparation-2",
+    step: "game",
+  };
+
+  assert.equal(
+    isTouchPreparationStepTimeoutCurrent(
+      { sessionId: "preparation-2", step: "game" },
+      current,
+    ),
+    true,
+  );
+  assert.equal(
+    isTouchPreparationStepTimeoutCurrent(
+      { sessionId: "preparation-1", step: "game" },
+      current,
+    ),
+    false,
+  );
+  assert.equal(
+    isTouchPreparationStepTimeoutCurrent(
+      { sessionId: "preparation-2", step: "players" },
+      current,
+    ),
+    false,
+  );
+});
+
+test("Preparation step timeout ticks to zero once and can be cancelled", () => {
+  const scheduled = [];
+  const ticks = [];
+  let timeouts = 0;
+  const stop = createTouchPreparationStepTimeout({
+    seconds: 3,
+    onTick: (value) => ticks.push(value),
+    onTimeout: () => {
+      timeouts += 1;
+    },
+    schedule: (callback) => {
+      scheduled.push(callback);
+      return scheduled.length - 1;
+    },
+    cancelSchedule: () => {},
+  });
+
+  assert.deepEqual(ticks, [3]);
+  scheduled[0]();
+  scheduled[1]();
+  scheduled[2]();
+  assert.deepEqual(ticks, [3, 2, 1, 0]);
+  assert.equal(timeouts, 1);
+
+  let cancelledCallback = null;
+  let cancelledTimeout = false;
+  const cancel = createTouchPreparationStepTimeout({
+    seconds: 2,
+    onTimeout: () => {
+      cancelledTimeout = true;
+    },
+    schedule: (callback) => {
+      cancelledCallback = callback;
+      return 1;
+    },
+    cancelSchedule: () => {},
+  });
+  cancel();
+  cancelledCallback();
+  assert.equal(cancelledTimeout, false);
+  stop();
 });

@@ -3,6 +3,35 @@ import { normalizeLevelOption } from "./simpleLevelOptions.js";
 
 export const TOUCH_PLAYER_COUNTS = Object.freeze([1, 2, 3, 4, 5, 6]);
 export const TOUCH_GAME_COUNTDOWN_SECONDS = 5;
+export const TOUCH_PREPARATION_STEP_TIMEOUT_SECONDS = 20;
+export const TOUCH_PREPARATION_TIMED_STEPS = Object.freeze([
+  "players",
+  "game",
+  "level",
+]);
+
+export function isTouchPreparationStepTimeoutActive({
+  presentationMode,
+  runtimeView,
+  sessionId,
+  step,
+} = {}) {
+  return Boolean(
+    presentationMode === "game" &&
+      runtimeView === "PREPARING" &&
+      sessionId &&
+      TOUCH_PREPARATION_TIMED_STEPS.includes(step),
+  );
+}
+
+export function isTouchPreparationStepTimeoutCurrent(expected, current) {
+  return Boolean(
+    expected?.sessionId &&
+      expected.sessionId === current?.sessionId &&
+      expected.step === current?.step &&
+      isTouchPreparationStepTimeoutActive(current),
+  );
+}
 
 export function normalizeTouchPlayerCount(value, fallback = 1) {
   const number = Number(value);
@@ -107,6 +136,25 @@ export function createTouchCountdown({
       timer = null;
     }
   };
+}
+
+export function createTouchPreparationStepTimeout({
+  seconds = TOUCH_PREPARATION_STEP_TIMEOUT_SECONDS,
+  onTick,
+  onTimeout,
+  schedule,
+  cancelSchedule,
+} = {}) {
+  return createTouchCountdown({
+    seconds,
+    onTick,
+    onComplete: () => {
+      onTick?.(0);
+      onTimeout?.();
+    },
+    schedule,
+    cancelSchedule,
+  });
 }
 
 function finiteNumber(value) {

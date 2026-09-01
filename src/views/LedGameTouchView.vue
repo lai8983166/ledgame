@@ -35,12 +35,16 @@ import {
 } from "../lib/touchGameAssets.js";
 import {
   createTouchCountdown,
+  createTouchPreparationStepTimeout,
+  isTouchPreparationStepTimeoutActive,
+  isTouchPreparationStepTimeoutCurrent,
   moveTouchCarousel,
   normalizeTouchGameDocument,
   normalizeTouchPlayerCount,
   hasRequiredWristbandParticipants,
   TOUCH_GAME_COUNTDOWN_SECONDS,
   TOUCH_PLAYER_COUNTS,
+  TOUCH_PREPARATION_STEP_TIMEOUT_SECONDS,
   touchCarouselSlots,
 } from "../lib/touchGamePreparation.js";
 import { confirmWithRendererFocus } from "../lib/rendererFocus.js";
@@ -83,6 +87,10 @@ const queueUid = ref("");
 const queueGameId = ref(null);
 const queueSubmitting = ref(false);
 const gamePreparationStep = ref("players");
+const preparationStepSecondsRemaining = ref(
+  TOUCH_PREPARATION_STEP_TIMEOUT_SECONDS,
+);
+const preparationStepTimeoutPending = ref(false);
 const gameCarouselIndex = ref(0);
 const gameDocument = ref(null);
 const countdownValue = ref(TOUCH_GAME_COUNTDOWN_SECONDS);
@@ -99,6 +107,8 @@ let wristbandAdvanceTimer = null;
 let playerAccessClockTimer = null;
 let idlePromptTimer = null;
 let cancelGameCountdown = null;
+let cancelPreparationStepTimeout = null;
+let preparationStepTimeoutRetryTimer = null;
 let gameWizardSessionId = null;
 let syncedPreparationRevision = null;
 let suppressCarouselClick = false;
@@ -132,6 +142,14 @@ const terminated = computed(() => hasTermination(runtimeState.value));
 const resultSucceeded = computed(() => runtimeState.value.success === true);
 const gameplay = computed(() => runtimeState.value.gameplay || {});
 const isGamePresentation = computed(() => presentationMode.value === "game");
+const preparationStepTimeoutVisible = computed(() =>
+  isTouchPreparationStepTimeoutActive({
+    presentationMode: presentationMode.value,
+    runtimeView: view.value,
+    sessionId: preparation.value?.sessionId,
+    step: gamePreparationStep.value,
+  }),
+);
 const isWristbandEntry = computed(() => entryMethod.value === "wristband");
 const playerAccesses = computed(() => runtimeState.value.playerAccesses || []);
 const playerAccess = computed(() => playerAccesses.value[0] || null);
@@ -243,6 +261,7 @@ onUnmounted(() => {
   window.clearInterval(playerAccessClockTimer);
   stopIdlePromptAnimation();
   stopGameCountdown();
+  stopPreparationStepTimeout();
 });
 
 watch(view, async (nextView) => {
@@ -282,6 +301,96 @@ watch(
   },
   { immediate: true },
 );
+
+watch(
+  [
+    preparationStepTimeoutVisible,
+    () => preparation.value?.sessionId || null,
+    gamePreparationStep,
+  ],
+  ([visible, sessionId, step]) => {
+    stopPreparationStepTimeout();
+    if (visible && sessionId) {
+      startPreparationStepTimeout(sessionId, step);
+    }
+  },
+  { immediate: true },
+);
+
+function startPreparationStepTimeout(sessionId, step) {
+  stopPreparationStepTimeout();
+  preparationStepSecondsRemaining.value =
+    TOUCH_PREPARATION_STEP_TIMEOUT_SECONDS;
+  cancelPreparationStepTimeout = createTouchPreparationStepTimeout({
+    onTick: (remaining) => {
+      if (isCurrentPreparationStepTimeout(sessionId, step)) {
+        preparationStepSecondsRemaining.value = remaining;
+      }
+    },
+    onTimeout: () => {
+      cancelPreparationStepTimeout = null;
+      void handlePreparationStepTimeout(sessionId, step);
+    },
+  });
+}
+
+function stopPreparationStepTimeout() {
+  cancelPreparationStepTimeout?.();
+  cancelPreparationStepTimeout = null;
+  window.clearTimeout(preparationStepTimeoutRetryTimer);
+  preparationStepTimeoutRetryTimer = null;
+  preparationStepTimeoutPending.value = false;
+}
+
+function isCurrentPreparationStepTimeout(sessionId, step) {
+  return isTouchPreparationStepTimeoutCurrent(
+    { sessionId, step },
+    {
+      presentationMode: presentationMode.value,
+      runtimeView: view.value,
+      sessionId: preparation.value?.sessionId,
+      step: gamePreparationStep.value,
+    },
+  );
+}
+
+async function handlePreparationStepTimeout(sessionId, step) {
+  if (!isCurrentPreparationStepTimeout(sessionId, step)) return;
+  preparationStepSecondsRemaining.value = 0;
+  if (busyAction.value) {
+    window.clearTimeout(preparationStepTimeoutRetryTimer);
+    preparationStepTimeoutRetryTimer = window.setTimeout(() => {
+      preparationStepTimeoutRetryTimer = null;
+      void handlePreparationStepTimeout(sessionId, step);
+    }, 100);
+    return;
+  }
+  if (preparationStepTimeoutPending.value) return;
+
+  preparationStepTimeoutPending.value = true;
+  busyAction.value = "preparation-step-timeout";
+  errorMessage.value = "";
+  try {
+    await returnTouchRuntimeToIdle({
+      api,
+      engineState: view.value,
+      preparationSessionId: sessionId,
+      applyState: applyRuntimeState,
+    });
+  } catch (error) {
+    const timeoutError = extractErrorMessage(
+      error,
+      t("touch.preparationStepTimeoutFailed"),
+    );
+    await refreshState();
+    errorMessage.value = timeoutError;
+  } finally {
+    preparationStepTimeoutPending.value = false;
+    if (busyAction.value === "preparation-step-timeout") {
+      busyAction.value = "";
+    }
+  }
+}
 
 function playIdleVideo() {
   idleVideoElement.value?.play().catch(() => {
@@ -1186,6 +1295,16 @@ async function confirmReturnToIdle() {
       class="touch-game-wizard touch-game-background"
       :style="gameBackgroundStyle"
     >
+      <div
+        v-if="preparationStepTimeoutVisible"
+        class="touch-preparation-step-timeout"
+        data-testid="game-preparation-step-timeout"
+        :data-step="gamePreparationStep"
+        aria-live="polite"
+      >
+        <strong>{{ preparationStepSecondsRemaining }}</strong>
+        <small>{{ t("touch.preparationStepTimeoutUnit") }}</small>
+      </div>
       <button
         v-if="gamePreparationStep !== 'countdown'"
         class="touch-wizard-cancel"
@@ -2238,6 +2357,37 @@ async function confirmReturnToIdle() {
   overflow: hidden;
 }
 
+.touch-preparation-step-timeout {
+  position: absolute;
+  top: clamp(18px, 2.4vh, 34px);
+  right: clamp(24px, 3vw, 54px);
+  z-index: 5;
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  min-height: 44px;
+  padding: 7px 14px;
+  border: 1px solid rgba(255, 218, 102, 0.72);
+  border-radius: 5px;
+  color: #fff7ce;
+  background: rgba(43, 31, 5, 0.84);
+  box-shadow: 0 0 16px rgba(255, 213, 72, 0.18);
+  pointer-events: none;
+}
+
+.touch-preparation-step-timeout small {
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.touch-preparation-step-timeout strong {
+  min-width: 2ch;
+  color: #fff08a;
+  font-size: 25px;
+  line-height: 1;
+  text-align: right;
+}
+
 .touch-wristband-scan-banner {
   display: grid;
   gap: 3px;
@@ -2282,7 +2432,7 @@ async function confirmReturnToIdle() {
 .touch-wizard-cancel {
   position: absolute;
   top: clamp(18px, 2.4vh, 34px);
-  right: clamp(24px, 3vw, 54px);
+  right: clamp(174px, 14vw, 244px);
   z-index: 4;
   min-width: 116px;
   min-height: 44px;
@@ -3418,9 +3568,16 @@ fieldset:disabled {
 
   .touch-wizard-cancel {
     top: 12px;
-    right: 14px;
+    right: 140px;
     min-width: 92px;
     min-height: 38px;
+  }
+
+  .touch-preparation-step-timeout {
+    top: 12px;
+    right: 14px;
+    min-height: 38px;
+    padding: 5px 10px;
   }
 
   .touch-wizard-heading {
