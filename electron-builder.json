@@ -44,6 +44,16 @@
       ]
     }
   ],
+  "extraFiles": [
+    {
+      "from": "build-resources/elc408",
+      "to": "elc408",
+      "filter": [
+        "conf.json",
+        "wiring.json"
+      ]
+    }
+  ],
   "win": {
     "target": [
       "dir",

@@ -1,6 +1,7 @@
 const childProcess = require('node:child_process')
 const fs = require('node:fs')
 const path = require('node:path')
+const { writeDefaultElc408Files } = require('./elc408-defaults.cjs')
 
 const frontendRoot = path.resolve(__dirname, '..')
 const backendRoot = path.resolve(process.env.BACKEND_DIR || path.join(frontendRoot, '..', 'ledGame-backend'))
@@ -9,6 +10,7 @@ const backendResourceDir = path.join(buildResourcesRoot, 'backend')
 const jreResourceDir = path.join(buildResourcesRoot, 'jre')
 const seedDatabaseResourceDir = path.join(buildResourcesRoot, 'seed-database', 'runtime')
 const mediaResourceDir = path.join(buildResourcesRoot, 'media')
+const elc408ResourceDir = path.join(buildResourcesRoot, 'elc408')
 
 const skipExtensions = new Set(['.md'])
 
@@ -215,6 +217,11 @@ function prepareMedia() {
   copyFiltered(sourceMediaDir, mediaResourceDir, { optional: true })
 }
 
+function prepareElc408Defaults() {
+  removeDirectory(elc408ResourceDir)
+  writeDefaultElc408Files(elc408ResourceDir)
+}
+
 function main() {
   if (!fs.existsSync(backendRoot)) {
     throw new Error(`Backend project was not found: ${backendRoot}`)
@@ -225,6 +232,7 @@ function main() {
   prepareJre()
   prepareSeedDatabase()
   prepareMedia()
+  prepareElc408Defaults()
 
   console.log(`Portable resources prepared at ${buildResourcesRoot}`)
 }
