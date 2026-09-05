@@ -60,6 +60,7 @@ const activeFrameIndex = ref(0);
 const selectedColor = ref(0);
 const interactionMode = ref("select-move");
 const matrixZoom = ref(1);
+const showOverlapIndicators = ref(true);
 const draggingFrameProgress = ref(false);
 const previewFrameIndex = ref(null);
 const selectedObjectId = ref("");
@@ -3114,6 +3115,14 @@ function formatRuntimeSummary(value) {
                 ↷
               </button>
             </div>
+            <button
+              class="soft-button compact-button overlap-indicator-toggle"
+              type="button"
+              :aria-pressed="showOverlapIndicators"
+              @click="showOverlapIndicators = !showOverlapIndicators"
+            >
+              {{ t(showOverlapIndicators ? "simple.hideOverlapCount" : "simple.showOverlapCount") }}
+            </button>
             <button class="soft-button compact-button" type="button" @click="togglePanoramaMode">
               {{ t(panoramaMode ? "simple.exitPanorama" : "simple.panorama") }}
             </button>
@@ -3147,6 +3156,7 @@ function formatRuntimeSummary(value) {
             :base-patch-cells="matrixBasePatchCells"
             :base-patch-version="matrixBasePatchVersion"
             :overlay-highlights="matrixOverlayHighlights"
+            :show-overlap-indicator="showOverlapIndicators"
             :range-create-enabled="interactionMode === 'add' && !selectionMode && !anchorEditMode"
             :object-drag-enabled="interactionMode === 'select-move' && !selectionMode && !anchorEditMode"
             :outside-range-create-enabled="interactionMode === 'add' && !panoramaMode && !selectionMode && !anchorEditMode"

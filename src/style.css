@@ -1927,6 +1927,13 @@ html[data-language-direction="rtl"] :is(input, textarea) {
   font-size: 21px;
 }
 
+.overlap-indicator-toggle[aria-pressed="true"] {
+  color: #334050;
+  box-shadow:
+    inset 4px 4px 8px rgba(178, 187, 201, 0.38),
+    inset -4px -4px 8px rgba(255, 255, 255, 0.88);
+}
+
 .simple-editor-workspace button:disabled {
   border-color: rgba(155, 70, 82, 0.42);
   color: #8d4c57;

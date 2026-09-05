@@ -279,6 +279,18 @@ watch(view, async (nextView) => {
   }
 });
 
+watch(
+  () => runtimeState.value.childMode,
+  async (nextValue, previousValue) => {
+    if (nextValue === previousValue || view.value !== "PREPARING") return;
+    const selectedBeforeRefresh = selectedGameId.value;
+    await loadGames();
+    if (selectedBeforeRefresh && !games.value.some((game) => game.id === selectedBeforeRefresh)) {
+      await cancelPreparation();
+    }
+  },
+);
+
 watch(showIdleVideo, async (visible) => {
   if (!visible) return;
   await nextTick();

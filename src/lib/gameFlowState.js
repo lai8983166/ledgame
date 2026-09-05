@@ -55,6 +55,7 @@ export function normalizeRuntimeState(value) {
     playerAccesses,
     playerAccess: playerAccesses[0] ?? null,
     gameTime: normalizeGameTime(state.gameTime),
+    childMode: Boolean(state.childMode),
     gameplay: state.gameplay && typeof state.gameplay === "object" ? { ...state.gameplay } : null,
   };
 }

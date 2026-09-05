@@ -80,6 +80,15 @@ test("SimpleMatrixCanvas uses the two-phase patch renderer and keeps full redraw
   assert.match(matrixCanvasSource, /lastGeometrySignature !== createGeometrySignature\(\)[\s\S]*drawBaseCanvas\(\)/);
 });
 
+test("Simple editor can toggle overlap count indicators without changing occupancy", () => {
+  assert.match(matrixCanvasSource, /showOverlapIndicator:\s*\{/);
+  assert.match(matrixCanvasSource, /overlapCell && props\.showOverlapIndicator/);
+  assert.match(matrixCanvasSource, /props\.showOverlapIndicator && cell\.overlapCount > 1/);
+  assert.match(editorSource, /const showOverlapIndicators = ref\(true\)/);
+  assert.match(editorSource, /:show-overlap-indicator="showOverlapIndicators"/);
+  assert.match(editorSource, /showOverlapIndicators = !showOverlapIndicators/);
+});
+
 test("debug simulation controls are gated by authoritative runtime mode", async () => {
   const source = await readFile(new URL("../src/views/DemoView.vue", import.meta.url), "utf8");
   assert.match(source, /runtimeMode === 'SIMULATION'/);

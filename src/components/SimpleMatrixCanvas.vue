@@ -52,6 +52,10 @@ const props = defineProps({
     type: Array,
     default: () => [],
   },
+  showOverlapIndicator: {
+    type: Boolean,
+    default: true,
+  },
 });
 
 const emit = defineEmits([
@@ -134,6 +138,7 @@ watch(
     props.cellSize,
     props.gapSize,
     props.basePatchVersion,
+    props.showOverlapIndicator,
   ],
   () => {
     const request = resolveBaseDrawMode();
@@ -342,7 +347,7 @@ function drawCellOverlay(context, cell, index) {
     context.strokeRect(left - 0.5, top - 0.5, size + 1, size + 1);
   }
 
-  if (overlapCell) {
+  if (overlapCell && props.showOverlapIndicator) {
     drawOverlapIndicator(context, left, top, size, cell.overlapCount);
   }
 }
@@ -537,7 +542,7 @@ function buildCellTitle(cell) {
   if (cell.objectId) {
     parts.push(cell.objectId);
   }
-  if (cell.overlapCount > 1) {
+  if (props.showOverlapIndicator && cell.overlapCount > 1) {
     parts.push(t("simple.overlapLayersPlain", { count: cell.overlapCount }));
   }
   return parts.join(", ");

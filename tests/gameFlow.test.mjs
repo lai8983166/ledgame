@@ -35,6 +35,11 @@ test("normalizeRuntimeState supports system idle without a game id", () => {
   assert.equal(touchViewForState(state), "IDLE");
 });
 
+test("normalizeRuntimeState exposes child mode with an off default", () => {
+  assert.equal(normalizeRuntimeState({ childMode: true }).childMode, true);
+  assert.equal(normalizeRuntimeState({}).childMode, false);
+});
+
 test("normalizeRuntimeState restores preparation options and legacy defaults", () => {
   const state = normalizeRuntimeState(preparingStateFixture);
   assert.equal(state.preparation.sessionId, "prep-7");
