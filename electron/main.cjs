@@ -1123,7 +1123,7 @@ async function startEmbeddedBackend() {
       LED_MEDIA_ROOT: mediaRoot,
       LED_BRIDGE_ENABLED: process.env.LED_BRIDGE_ENABLED || 'false',
       MEMBER_PLATFORM_BASE_URL: `http://${savedApplicationSettings.memberPlatformHost}:${savedApplicationSettings.memberPlatformPort}`,
-      LED_ROOM_CONNECTION_ENABLED: 'true',
+      LED_ROOM_CONNECTION_ENABLED: process.env.LED_ROOM_CONNECTION_ENABLED ?? 'true',
     },
   })
   const spawnedBackend = embeddedBackendProcess

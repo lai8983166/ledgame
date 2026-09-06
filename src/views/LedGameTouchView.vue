@@ -1432,6 +1432,7 @@ async function confirmReturnToIdle() {
         </div>
         <div v-else class="touch-carousel-shell">
           <button
+            data-testid="game-carousel-previous"
             class="touch-carousel-arrow previous"
             type="button"
             :aria-label="t('touch.previousGame')"
@@ -1440,6 +1441,8 @@ async function confirmReturnToIdle() {
             ‹
           </button>
           <div
+            data-testid="game-carousel"
+            :data-selected-game-id="carouselGame?.id ?? ''"
             class="touch-game-carousel"
             tabindex="0"
             :aria-label="t('touch.selectGameTitle')"
@@ -1477,6 +1480,7 @@ async function confirmReturnToIdle() {
             </button>
           </div>
           <button
+            data-testid="game-carousel-next"
             class="touch-carousel-arrow next"
             type="button"
             :aria-label="t('touch.nextGame')"
