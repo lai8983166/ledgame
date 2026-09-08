@@ -68,6 +68,7 @@ function normalizeDocument(value) {
   source.levels = Array.isArray(source.levels) ? source.levels : [];
   for (const level of source.levels) {
     level.bounds ||= { minX: 0, minY: 0, maxX: (source.siteSizeWidth || 16) - 1, maxY: (source.siteSizeHeight || 36) - 1 };
+    level.rewardPoints = Number.isInteger(Number(level.rewardPoints)) && Number(level.rewardPoints) >= 0 ? Number(level.rewardPoints) : 0;
   }
   return source;
 }
@@ -274,6 +275,7 @@ function goBack() {
           <h2>{{ t("rank.levelConfig") }}</h2>
           <div class="form-grid">
             <label><span>{{ t("rank.duration") }}</span><input v-model.number="type1Config.durationSeconds" data-rank-field="level.durationSeconds" type="number" min="1" /></label>
+            <label><span>{{ t('management.rankReward') }}</span><input v-model.number="type1Config.rewardPoints" data-rank-field="level.rewardPoints" type="number" min="0" max="1000000" step="1" /><small>{{ t('management.rankRewardHint') }}</small></label>
             <label><span>{{ t("rank.refreshSeconds") }}</span><input v-model.number="type1Config.refreshSeconds" type="number" min="1" /></label>
             <label data-rank-field="level.bounds" tabindex="-1"><span>{{ t("rank.minX") }}</span><input v-model.number="type1Config.bounds.minX" type="number" min="0" /></label>
             <label><span>{{ t("rank.maxX") }}</span><input v-model.number="type1Config.bounds.maxX" type="number" min="0" /></label>

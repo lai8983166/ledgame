@@ -2,6 +2,9 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import SpiritPointEditorDialog from "../components/SpiritPointEditorDialog.vue";
+import { confirmWithRendererFocus } from "../lib/rendererFocus.js";
+import { createDebouncedPrefix, filterByNamePrefix } from "../lib/debouncedPrefixFilter.js";
+import { requestSpiritDeletion } from "../lib/spiritLibraryState.js";
 
 const DEFAULT_PREVIEW_GAP = 2;
 const { t } = useI18n();
@@ -15,9 +18,13 @@ const editingSpirit = ref(null);
 const creatingSpirit = ref(false);
 const isSavingSpirit = ref(false);
 const editErrorMessage = ref("");
+const searchText = ref("");
+const searchPrefix = ref("");
+const deletingSpirit = ref(false);
 const previewStageRef = ref(null);
 const previewStageSize = ref({ width: 0, height: 0 });
 let previewResizeObserver = null;
+const searchDebounce = createDebouncedPrefix({ onChange: (value) => { searchPrefix.value = value; } });
 
 const spiritApi = computed(() => window.spiritLibrary);
 
@@ -28,13 +35,16 @@ const sortedSpirits = computed(() =>
     }),
   ),
 );
+const filteredSpirits = computed(() => {
+  return filterByNamePrefix(sortedSpirits.value, searchPrefix.value, spiritName);
+});
 const selectedSpirit = computed(() => {
-  if (sortedSpirits.value.length === 0) {
+  if (filteredSpirits.value.length === 0) {
     return null;
   }
   return (
-    sortedSpirits.value.find((spirit) => spirit.id === selectedSpiritId.value) ||
-    sortedSpirits.value[0]
+    filteredSpirits.value.find((spirit) => spirit.id === selectedSpiritId.value) ||
+    filteredSpirits.value[0]
   );
 });
 const previewPoints = computed(() => parsePoints(selectedSpirit.value?.points));
@@ -147,6 +157,30 @@ function openSpiritCreator() {
     points: "[]",
     basic: false,
   };
+}
+
+function updateSearch(value) {
+  searchText.value = value;
+  searchDebounce.update(value);
+}
+
+async function deleteSelectedSpirit() {
+  const selected = selectedSpirit.value;
+  if (!selected || deletingSpirit.value || !spiritApi.value?.delete) return;
+  deletingSpirit.value = true; errorMessage.value = "";
+  try {
+    const result = await requestSpiritDeletion({
+      selected,
+      visibleItems: filteredSpirits.value,
+      confirm: () => confirmWithRendererFocus(t("management.deleteSpiritConfirm", { name: spiritName(selected) })),
+      remove: (id) => spiritApi.value.delete(id),
+    });
+    if (result.status !== "deleted") return;
+    spirits.value = spirits.value.filter((item) => item.id !== selected.id);
+    selectedSpiritId.value = result.selectedId;
+    noticeMessage.value = t("management.spiritDeleted", { name: spiritName(selected) });
+  } catch (error) { errorMessage.value = error?.message || t("management.spiritDeleteFailed"); }
+  finally { deletingSpirit.value = false; }
 }
 
 function closeSpiritEditor() {
@@ -277,6 +311,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   previewResizeObserver?.disconnect();
+  searchDebounce.cancel();
 });
 </script>
 
@@ -313,10 +348,11 @@ onBeforeUnmount(() => {
           <strong>{{ t("spirits.templates") }}</strong>
           <span>{{ t("common.itemCount", { count: sortedSpirits.length }) }}</span>
         </div>
+        <input class="spirit-search-input" type="search" :value="searchText" :placeholder="t('management.spiritSearch')" @input="updateSearch($event.target.value)" />
 
         <div class="spirit-list">
           <button
-            v-for="spirit in sortedSpirits"
+            v-for="spirit in filteredSpirits"
             :key="spirit.id"
             class="spirit-list-row"
             :class="{ selected: selectedSpirit?.id === spirit.id }"
@@ -326,6 +362,7 @@ onBeforeUnmount(() => {
             <span>{{ spiritName(spirit) }}</span>
             <small>{{ sizeLabel(spirit) }}</small>
           </button>
+          <p v-if="!filteredSpirits.length" class="spirit-search-empty">{{ t('management.noSpiritMatch') }}</p>
         </div>
       </aside>
 
@@ -341,6 +378,7 @@ onBeforeUnmount(() => {
                 {{ t(selectedSpirit.basic ? "spirits.basic" : "spirits.custom") }}
               </span>
               <button class="soft-button" type="button" @click="openSpiritEditor">{{ t("spirits.edit") }}</button>
+              <button class="soft-button spirit-delete-button" type="button" :disabled="deletingSpirit" @click="deleteSelectedSpirit">{{ t(deletingSpirit ? 'management.deleting' : 'management.delete') }}</button>
             </div>
           </div>
 

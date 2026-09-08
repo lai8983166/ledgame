@@ -55,6 +55,7 @@ const fullLedGameApi = {
   gameState: () => ipcRenderer.invoke('engine:game-state'),
   listGames: () => ipcRenderer.invoke('game:list'),
   listPlayableGames: () => ipcRenderer.invoke('game:playable-list'),
+  listManageableGames: () => ipcRenderer.invoke('game:manageable-list'),
   touchGameState: () => ipcRenderer.invoke('game:state'),
   startSystemIdle: () => ipcRenderer.invoke('game:idle'),
   stopTouchGame: () => ipcRenderer.invoke('game:stop'),
@@ -89,6 +90,8 @@ const fullLedGameApi = {
   validateRankGameEditor: (document) => ipcRenderer.invoke('rank-game-editor:validate', document),
   saveRankGameEditor: (gameId, document) => ipcRenderer.invoke('rank-game-editor:save', gameId, document),
   updateGameMetadata: (gameId, patch) => ipcRenderer.invoke('game:metadata-update', gameId, patch),
+  reorderGames: (gameIds) => ipcRenderer.invoke('game:reorder', gameIds),
+  readHelpDocument: (key) => ipcRenderer.invoke('help:document', key),
   exportFrameJson: (payload) => ipcRenderer.invoke('frame:export-json', payload),
   importFrameJson: () => ipcRenderer.invoke('frame:import-json'),
   saveGif: (payload) => ipcRenderer.invoke('level:save-gif', payload),
@@ -145,7 +148,10 @@ contextBridge.exposeInMainWorld('appSettings', {
   get: () => ipcRenderer.invoke('app-settings:get'),
   testMemberPlatform: (settings) => ipcRenderer.invoke('app-settings:test-member-platform', settings),
   ...(windowKind === 'main'
-    ? { update: (patch) => ipcRenderer.invoke('app-settings:update', patch) }
+    ? {
+        update: (patch) => ipcRenderer.invoke('app-settings:update', patch),
+        chooseIcon: () => ipcRenderer.invoke('app-settings:choose-icon'),
+      }
     : {}),
   onChanged: (callback) => {
     const listener = (_event, settings) => callback(settings)
@@ -171,6 +177,7 @@ contextBridge.exposeInMainWorld('spiritLibrary', {
   list: () => ipcRenderer.invoke('spirit:list'),
   create: (payload) => ipcRenderer.invoke('spirit:create', payload),
   update: (spiritId, payload) => ipcRenderer.invoke('spirit:update', spiritId, payload),
+  delete: (spiritId) => ipcRenderer.invoke('spirit:delete', spiritId),
 })
 
 contextBridge.exposeInMainWorld('elc408Tools', {

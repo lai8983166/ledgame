@@ -28,6 +28,7 @@ const DEFAULT_PROMPT_TEXTS = {
   "ro-RO": "Pornește jocul",
   "ar-SA": "ابدأ اللعبة",
 };
+const BRAND_DEFAULTS = { applicationTitle: "LED Game", applicationIconPath: null, touchExitPassword: "888888" };
 
 test("application settings normalize missing and unsupported fields to safe defaults", () => {
   assert.deepEqual(normalizeApplicationSettings(null), {
@@ -38,6 +39,7 @@ test("application settings normalize missing and unsupported fields to safe defa
     secondaryDisplay: null,
     touchIdlePromptTexts: DEFAULT_PROMPT_TEXTS,
     touchIdlePromptFontSize: 72,
+    ...BRAND_DEFAULTS,
   });
   assert.deepEqual(
     normalizeApplicationSettings({
@@ -53,6 +55,7 @@ test("application settings normalize missing and unsupported fields to safe defa
       secondaryDisplay: null,
       touchIdlePromptTexts: DEFAULT_PROMPT_TEXTS,
       touchIdlePromptFontSize: 72,
+      ...BRAND_DEFAULTS,
     },
   );
 });
@@ -106,6 +109,7 @@ test("application settings reject invalid writes and recover damaged JSON", asyn
       secondaryDisplay: null,
       touchIdlePromptTexts: DEFAULT_PROMPT_TEXTS,
       touchIdlePromptFontSize: 72,
+      ...BRAND_DEFAULTS,
     });
     await assert.rejects(() => store.update({ mode: "operator" }), /Unsupported application mode/);
     await assert.rejects(
@@ -143,4 +147,30 @@ test("application settings migrate the legacy single idle prompt into localized 
   const normalized = normalizeApplicationSettings({ touchIdlePromptText: "自定义开始" });
   assert.equal(normalized.touchIdlePromptTexts["zh-CN"], "自定义开始");
   assert.equal(normalized.touchIdlePromptTexts["en-US"], "Start Game");
+});
+
+test("application title, managed icon and touch exit password persist with safe validation", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "led-game-brand-settings-"));
+  const settingsPath = path.join(directory, "application.json");
+  try {
+    const store = createApplicationSettingsStore({ fs, settingsPath });
+    const iconPath = path.join(directory, "brand icon.png");
+    const saved = await store.update({
+      applicationTitle: "  Fun Floor  ",
+      applicationIconPath: iconPath,
+      touchExitPassword: "123456",
+    });
+    assert.equal(saved.applicationTitle, "Fun Floor");
+    assert.equal(saved.applicationIconPath, path.resolve(iconPath));
+    assert.equal(saved.touchExitPassword, "123456");
+    assert.deepEqual(await createApplicationSettingsStore({ fs, settingsPath }).get(), saved);
+
+    await assert.rejects(() => store.update({ applicationTitle: "   " }), /1 to 64/);
+    await assert.rejects(() => store.update({ applicationTitle: "x".repeat(65) }), /1 to 64/);
+    await assert.rejects(() => store.update({ touchExitPassword: "12ab" }), /4 to 12 digits/);
+    await assert.rejects(() => store.update({ touchExitPassword: "1".repeat(13) }), /4 to 12 digits/);
+    assert.deepEqual(await store.get(), saved);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
 });

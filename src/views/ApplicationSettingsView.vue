@@ -22,6 +22,9 @@ const saved = ref({
   memberPlatformPort: 8090,
   touchIdlePromptTexts: defaultPromptTexts(),
   touchIdlePromptFontSize: 72,
+  applicationTitle: "LED Game",
+  applicationIconPath: "",
+  touchExitPassword: "",
 });
 const draft = reactive({
   entryMethod: "touch",
@@ -30,6 +33,9 @@ const draft = reactive({
   memberPlatformPort: 8090,
   touchIdlePromptTexts: defaultPromptTexts(),
   touchIdlePromptFontSize: 72,
+  applicationTitle: "LED Game",
+  applicationIconPath: "",
+  touchExitPassword: "",
 });
 let removeSettingsListener = null;
 
@@ -49,8 +55,11 @@ const dirty = computed(
     || draft.memberPlatformHost !== saved.value.memberPlatformHost
     || Number(draft.memberPlatformPort) !== Number(saved.value.memberPlatformPort)
     || JSON.stringify(draft.touchIdlePromptTexts) !== JSON.stringify(saved.value.touchIdlePromptTexts)
-    || draft.touchIdlePromptFontSize !== saved.value.touchIdlePromptFontSize,
+    || draft.touchIdlePromptFontSize !== saved.value.touchIdlePromptFontSize
+    || draft.applicationTitle !== saved.value.applicationTitle
+    || Boolean(draft.touchExitPassword),
 );
+const applicationIconLabel = computed(() => draft.applicationIconPath || t("management.defaultIcon"));
 
 onMounted(async () => {
   removeSettingsListener = api?.onChanged?.((settings) => applySettings(settings)) || null;
@@ -103,6 +112,10 @@ function applySettings(settings) {
     touchIdlePromptFontSize: Number.isInteger(promptFontSize) && promptFontSize >= 32 && promptFontSize <= 200
       ? promptFontSize
       : 72,
+    applicationTitle: typeof settings?.applicationTitle === "string" && settings.applicationTitle.trim()
+      ? settings.applicationTitle.trim() : "LED Game",
+    applicationIconPath: typeof settings?.applicationIconPath === "string" ? settings.applicationIconPath : "",
+    touchExitPassword: "",
   };
   saved.value = normalized;
   draft.entryMethod = normalized.entryMethod;
@@ -111,6 +124,18 @@ function applySettings(settings) {
   draft.memberPlatformPort = normalized.memberPlatformPort;
   draft.touchIdlePromptTexts = normalized.touchIdlePromptTexts;
   draft.touchIdlePromptFontSize = normalized.touchIdlePromptFontSize;
+  draft.applicationTitle = normalized.applicationTitle;
+  draft.applicationIconPath = normalized.applicationIconPath;
+  draft.touchExitPassword = "";
+}
+
+async function chooseApplicationIcon() {
+  if (!api?.chooseIcon) return;
+  errorMessage.value = "";
+  try {
+    const result = await api.chooseIcon();
+    if (!result?.canceled && result?.settings) applySettings(result.settings);
+  } catch (error) { errorMessage.value = error?.message || t("common.operationFailed"); }
 }
 
 async function saveSettings() {
@@ -170,6 +195,12 @@ async function testMemberPlatform() {
       </div>
 
       <template v-else>
+        <fieldset class="application-settings-connection">
+          <legend>{{ t('management.appearanceSecurity') }}</legend>
+          <label class="application-settings-field"><span>{{ t('management.appTitle') }}</span><input v-model.trim="draft.applicationTitle" type="text" maxlength="64" /></label>
+          <label class="application-settings-field"><span>{{ t('management.exitPassword') }}</span><input v-model="draft.touchExitPassword" v-bind="{ placeholder: t('management.passwordPlaceholder') }" type="password" inputmode="numeric" maxlength="12" /><small>{{ t('management.passwordHint') }}</small></label>
+          <div class="application-settings-actions"><button class="application-settings-secondary" type="button" @click="chooseApplicationIcon">{{ t('management.chooseIcon') }}</button><span>{{ applicationIconLabel }}</span></div>
+        </fieldset>
         <label class="application-settings-field">
           <span>{{ t("applicationSettings.entryMethod") }}</span>
           <select v-model="draft.entryMethod">

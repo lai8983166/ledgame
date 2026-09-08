@@ -15,6 +15,7 @@ test("normalizes legacy level limits into canonical modes", () => {
       lifeLimit: true,
       lifeLimitValue: 3,
       lifeLimitMode: "LIMITED",
+      rewardPoints: 0,
     },
   );
 });
@@ -32,4 +33,9 @@ test("unlimited modes clear stale values and bounded modes require positive inte
     lifeLimitMode: "LIMITED",
     lifeLimitValue: -1,
   }).length, 2);
+  assert.equal(normalizeLevelOption({ rewardPoints: "25" }).rewardPoints, 25);
+  assert.equal(validateLevelOption({ rewardPoints: -1 }).some((error) => error.field === "rewardPoints"), true);
+  assert.equal(validateLevelOption({ rewardPoints: 1.5 }).some((error) => error.field === "rewardPoints"), true);
+  assert.equal(validateLevelOption({ rewardPoints: 1_000_001 }).some((error) => error.field === "rewardPoints"), true);
+  assert.equal(validateLevelOption({ rewardPoints: 1_000_000 }).length, 0);
 });

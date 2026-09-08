@@ -2952,6 +2952,12 @@ function formatRuntimeSummary(value) {
         <div v-if="activeLevel" class="level-limit-fields">
           <h3>{{ t("simple.levelLimits") }}</h3>
           <label>
+            <span>{{ t('management.simpleReward') }}</span>
+            <input v-model.number="activeLevel.option.rewardPoints" type="number" min="0" max="1000000" step="1" :class="{ invalid: activeLevelOptionErrors.has('rewardPoints') }" />
+            <small>{{ t('management.simpleRewardHint') }}</small>
+            <small v-if="activeLevelOptionErrors.has('rewardPoints')" class="field-error">{{ t('management.rewardInvalid') }}</small>
+          </label>
+          <label>
             <span>{{ t("simple.levelTimeLimit") }}</span>
             <select
               :value="activeLevel.option.timeLimitMode"

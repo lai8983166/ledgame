@@ -31,6 +31,21 @@ function mergeCatalog(base, addition) {
 
 const baseMessages = {
   "zh-CN": {
+    management: {
+      reading: "正在读取…", changelog: "版本变更记录", about: "软件介绍", gameName: "游戏名称",
+      appearanceSecurity: "应用外观与安全", appTitle: "应用标题", exitPassword: "Touch 界面退出密码",
+      childModeVisible: "儿童模式下可见", childModeVisibleHint: "关闭后，儿童模式开启时不会显示该游戏",
+      passwordPlaceholder: "留空表示不修改", passwordHint: "请输入 4 到 12 位数字；保存后不会在界面中回显。",
+      chooseIcon: "选择应用图标", defaultIcon: "默认图标", reorder: "调整展示顺序", noSpiritMatch: "没有匹配的精灵",
+      spiritSearch: "输入名称前缀查找", simpleReward: "本关通关积分",
+      simpleRewardHint: "Simple / Normal / Diffcult 中，本关通关后所有玩家获得相同积分。",
+      rewardInvalid: "积分必须是 0 到 1000000 之间的整数", rankReward: "本关获胜积分",
+      rankRewardHint: "本关最高分玩家获得；并列第一时并列玩家均获得完整积分。",
+      nameRequired: "游戏名称不能为空", orderSaveFailed: "保存游戏顺序失败",
+      deleteSpiritConfirm: "确定删除精灵“{name}”吗？\n已保存游戏中的图形不会被删除。",
+      spiritDeleted: "已删除精灵“{name}”", spiritDeleteFailed: "删除精灵失败",
+      moveUp: "上移", moveDown: "下移", deleting: "删除中…", delete: "删除",
+    },
     nav: {
       enterGame: "进入游戏",
       entering: "进入中",
@@ -509,6 +524,21 @@ const baseMessages = {
     },
   },
   "en-US": {
+    management: {
+      reading: "Loading…", changelog: "Version history", about: "About", gameName: "Game name",
+      appearanceSecurity: "Appearance and security", appTitle: "Application title", exitPassword: "Touch exit password",
+      childModeVisible: "Visible in child mode", childModeVisibleHint: "When disabled, this game is hidden while child mode is enabled",
+      passwordPlaceholder: "Leave blank to keep unchanged", passwordHint: "Enter 4 to 12 digits. The saved password is never displayed.",
+      chooseIcon: "Choose application icon", defaultIcon: "Default icon", reorder: "Reorder games", noSpiritMatch: "No matching spirits",
+      spiritSearch: "Search by name prefix", simpleReward: "Level completion points",
+      simpleRewardHint: "Every player receives the same points in Simple, Normal and Diffcult.",
+      rewardInvalid: "Points must be an integer from 0 to 1000000", rankReward: "Level winner points",
+      rankRewardHint: "The highest scorer receives the points; tied winners each receive the full amount.",
+      nameRequired: "Game name is required", orderSaveFailed: "Unable to save game order",
+      deleteSpiritConfirm: "Delete spirit “{name}”?\nShapes already saved in games will remain.",
+      spiritDeleted: "Deleted spirit “{name}”", spiritDeleteFailed: "Unable to delete spirit",
+      moveUp: "Move up", moveDown: "Move down", deleting: "Deleting…", delete: "Delete",
+    },
     nav: {
       enterGame: "Enter Game",
       entering: "Opening",

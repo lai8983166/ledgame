@@ -38,6 +38,8 @@ export function normalizeLevelOption(option = {}) {
       ? positiveInteger(source.lifeLimitValue)
       : 0,
     lifeLimit: lifeLimitMode === "LIMITED",
+    rewardPoints: Number.isInteger(Number(source.rewardPoints)) && Number(source.rewardPoints) >= 0
+      ? Number(source.rewardPoints) : 0,
   };
 }
 
@@ -49,6 +51,9 @@ export function validateLevelOption(option) {
   }
   if (normalized.lifeLimitMode === "LIMITED" && normalized.lifeLimitValue <= 0) {
     errors.push({ field: "lifeLimitValue", messageKey: "simple.levelLimitPositive" });
+  }
+  if (option?.rewardPoints != null && (!Number.isInteger(Number(option.rewardPoints)) || Number(option.rewardPoints) < 0 || Number(option.rewardPoints) > 1_000_000)) {
+    errors.push({ field: "rewardPoints", messageKey: "simple.rewardPointsInvalid" });
   }
   return errors;
 }

@@ -15,6 +15,7 @@ export function createSecondaryDisplayPresentation(value, options = {}) {
   const fallbackStageIndex = nullableNonNegativeInteger(gameplay.levelIndex);
   const stageIndex = state.currentStageIndex ?? fallbackStageIndex;
   const score = nullableFiniteNumber(gameplay.score);
+  const memberPoints = nullableNonNegativeInteger(gameplay.memberPoints);
   const life = nullableNonNegativeInteger(gameplay.life);
   const now = finiteNumber(options.now, Date.now());
   const observedAt = finiteNumber(options.observedAt, now);
@@ -24,6 +25,7 @@ export function createSecondaryDisplayPresentation(value, options = {}) {
     mode: displayMode(state),
     stageNumber: stageIndex === null ? null : stageIndex + 1,
     score,
+    memberPoints,
     life,
     hearts: life === null ? null : "♥".repeat(life),
     retrying: state.engineState === "SETTLING" && state.stageOutcome === "RETRY",

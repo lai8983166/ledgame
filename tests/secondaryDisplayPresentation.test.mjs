@@ -36,10 +36,11 @@ test("secondary display derives player-facing level and exact life hearts", () =
   const current = createSecondaryDisplayPresentation({
     engineState: "RUNNING",
     currentStageIndex: 4,
-    gameplay: { levelIndex: 1, score: 80, life: 3 },
+    gameplay: { levelIndex: 1, score: 80, memberPoints: 10, life: 3 },
   });
   assert.equal(current.stageNumber, 5);
   assert.equal(current.score, 80);
+  assert.equal(current.memberPoints, 10);
   assert.equal(current.life, 3);
   assert.equal(current.hearts, "♥♥♥");
 
@@ -50,6 +51,7 @@ test("secondary display derives player-facing level and exact life hearts", () =
   assert.equal(legacy.life, 0);
   assert.equal(legacy.hearts, "");
   assert.equal(createSecondaryDisplayPresentation({ engineState: "RUNNING" }).hearts, null);
+  assert.equal(createSecondaryDisplayPresentation({ engineState: "RUNNING" }).memberPoints, null);
 });
 
 test("secondary display preserves Rank players while adding generic stage context", () => {
@@ -58,6 +60,7 @@ test("secondary display preserves Rank players while adding generic stage contex
     rank: index + 1,
     stageScore: 10 - index,
     totalScore: 30 - index,
+    memberPoints: index === 0 ? 20 : 0,
   }));
   const presentation = createSecondaryDisplayPresentation({
     engineState: "RUNNING",

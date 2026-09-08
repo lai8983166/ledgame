@@ -73,3 +73,12 @@ test("secondary runtime view shows generic game time without treating Rank milli
   assert.match(source, /secondaryDisplay\.unlimited/);
   assert.doesNotMatch(source, /rankSecondary\.remainingTime[^\n]*gameplay\.remainingMillis/);
 });
+
+test("secondary runtime view keeps gameplay score and accumulated member points separate", async () => {
+  const source = await readFile(new URL("../src/views/SecondaryDisplayView.vue", import.meta.url), "utf8");
+
+  assert.match(source, /secondaryDisplay\.score[\s\S]*presentation\.score/);
+  assert.match(source, /secondaryDisplay\.memberPoints[\s\S]*presentation\.memberPoints/);
+  assert.match(source, /rankSecondary\.totalScore[\s\S]*player\.totalScore/);
+  assert.match(source, /secondaryDisplay\.memberPoints[\s\S]*player\.memberPoints/);
+});

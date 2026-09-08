@@ -153,6 +153,7 @@ function displayValue(value) {
               </header>
               <div><span>{{ t("rankSecondary.stageScore") }}</span><strong>{{ displayValue(player.stageScore) }}</strong></div>
               <div><span>{{ t("rankSecondary.totalScore") }}</span><strong>{{ displayValue(player.totalScore) }}</strong></div>
+              <div><span>{{ t("secondaryDisplay.memberPoints") }}</span><strong>{{ displayValue(player.memberPoints) }}</strong></div>
             </article>
           </div>
         </section>
@@ -165,6 +166,10 @@ function displayValue(value) {
           <article class="hud-stat hud-score">
             <span>{{ t("secondaryDisplay.score") }}</span>
             <strong>{{ displayValue(presentation.score) }}</strong>
+          </article>
+          <article class="hud-stat hud-member-points">
+            <span>{{ t("secondaryDisplay.memberPoints") }}</span>
+            <strong>{{ displayValue(presentation.memberPoints) }}</strong>
           </article>
           <article
             v-if="presentation.life !== null"
@@ -224,13 +229,15 @@ function displayValue(value) {
 .lifecycle-label { display: grid; place-items: center; padding: 10px 17px; color: #9ed8f4; }
 .secondary-runtime-main { min-height: 0; transition: opacity 220ms ease, filter 220ms ease; }
 .secondary-runtime-main.is-obscured { opacity: 0.18; filter: saturate(0.5); }
-.shared-hud { height: 100%; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: clamp(18px, 2.5vw, 42px); align-items: stretch; }
-.shared-hud.has-life { grid-template-columns: minmax(180px, 0.7fr) minmax(240px, 1fr) minmax(300px, 1.35fr); }
+.shared-hud { height: 100%; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: clamp(18px, 2.5vw, 42px); align-items: stretch; }
+.shared-hud.has-life { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .hud-stat { min-width: 0; display: grid; align-content: center; gap: 12px; padding: clamp(24px, 4vw, 58px); border-top: 8px solid #2ebad5; border-radius: 6px; background: rgba(12, 28, 41, 0.94); }
 .hud-stat > span { color: #9fb4c2; font-size: clamp(19px, 1.8vw, 30px); font-weight: 800; }
 .hud-stat > strong { overflow: hidden; font-size: clamp(70px, 10vw, 164px); line-height: 0.95; text-overflow: ellipsis; }
 .hud-stage { border-color: #f2c95e; }
 .hud-stage > strong { color: #ffe191; }
+.hud-member-points { border-color: #48d99c; }
+.hud-member-points > strong { color: #8cf1c5; }
 .hud-life { border-color: #ea5a77; }
 .hud-life > strong { color: #ff9caf; }
 .life-hearts { max-height: 30vh; overflow: hidden; margin: 8px 0 0; color: #ff5578; font-size: clamp(30px, 3.7vw, 62px); line-height: 1.05; overflow-wrap: anywhere; text-shadow: 0 0 18px rgba(255, 77, 116, 0.42); }
@@ -265,7 +272,7 @@ function displayValue(value) {
   .secondary-runtime-content { padding-inline: 4vw; }
   .game-heading h1 { max-width: 48vw; }
   .header-status { flex-direction: column; }
-  .shared-hud.has-life { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .shared-hud, .shared-hud.has-life { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .hud-life { grid-column: 1 / -1; grid-template-columns: auto 1fr; }
   .hud-life .life-hearts { grid-column: 1 / -1; }
   .rank-player-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }

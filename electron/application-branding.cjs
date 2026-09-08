@@ -1,0 +1,56 @@
+const path = require('node:path')
+
+const SUPPORTED_ICON_EXTENSIONS = new Set(['.ico', '.png'])
+const MAX_ICON_BYTES = 5 * 1024 * 1024
+
+function toPublicApplicationSettings(settings) {
+  if (!settings || typeof settings !== 'object') return settings
+  const { touchExitPassword: _secret, ...publicSettings } = settings
+  return publicSettings
+}
+
+function applyApplicationBrand({ app, BrowserWindow, fsSync, settings, splashWindow = null }) {
+  const title = settings?.applicationTitle || 'LED Game'
+  app.setName(title)
+  const iconPath = settings?.applicationIconPath
+  const iconAvailable = Boolean(iconPath && fsSync.existsSync(iconPath))
+  BrowserWindow.getAllWindows().forEach((window) => {
+    if (window.isDestroyed() || window === splashWindow) return
+    window.setTitle(title)
+    if (iconAvailable) window.setIcon(iconPath)
+  })
+  return { title, iconAvailable }
+}
+
+async function installApplicationIcon({ fs, nativeImage, source, userDataPath, now = Date.now }) {
+  const extension = path.extname(source || '').toLowerCase()
+  if (!SUPPORTED_ICON_EXTENSIONS.has(extension)) {
+    throw new Error('应用图标仅支持 PNG 或 ICO 文件')
+  }
+  const stat = await fs.stat(source)
+  if (!stat.isFile() || stat.size <= 0 || stat.size > MAX_ICON_BYTES) {
+    throw new Error('应用图标必须是 5MB 以内的有效文件')
+  }
+  const image = nativeImage.createFromPath(source)
+  if (!image || image.isEmpty()) throw new Error('无法解析所选应用图标')
+
+  const directory = path.join(userDataPath, 'branding')
+  const target = path.join(directory, `application-icon-${now()}${extension}`)
+  const temporary = `${target}.tmp`
+  await fs.mkdir(directory, { recursive: true })
+  try {
+    await fs.copyFile(source, temporary)
+    await fs.rename(temporary, target)
+    return target
+  } catch (error) {
+    await fs.rm(temporary, { force: true }).catch(() => {})
+    throw error
+  }
+}
+
+module.exports = {
+  MAX_ICON_BYTES,
+  applyApplicationBrand,
+  installApplicationIcon,
+  toPublicApplicationSettings,
+}

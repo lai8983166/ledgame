@@ -4,7 +4,7 @@ const nodeNet = require('node:net')
 const nodeFs = require('node:fs')
 const fs = require('node:fs/promises')
 const { pathToFileURL } = require('node:url')
-const { app, BrowserWindow, dialog, ipcMain, Menu, protocol, net: electronNet, screen } = require('electron')
+const { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, protocol, net: electronNet, screen } = require('electron')
 const {
   appendPreparationWristband,
   debugGameSplitBounds,
@@ -20,6 +20,12 @@ const {
 const {
   createApplicationSettingsStore,
 } = require('./application-settings.cjs')
+const {
+  applyApplicationBrand: applyBrandToWindows,
+  installApplicationIcon,
+  toPublicApplicationSettings,
+} = require('./application-branding.cjs')
+const { createSplashLifecycle } = require('./splash-lifecycle.cjs')
 const {
   describeDisplays,
   matchSecondaryDisplay,
@@ -96,6 +102,7 @@ const applicationSettings = createApplicationSettingsStore({
 appendStartupLog('Electron main loaded')
 
 let mainWindow
+let splashWindow
 let debugWindow
 let touchWindow
 let secondaryWindow
@@ -119,6 +126,21 @@ let embeddedBackendLogSink = null
 let databaseRefreshPromise = null
 let NodeWebSocket = null
 let quitCleanupStarted = false
+const splashLifecycle = createSplashLifecycle({
+  createWindow: () => {
+    const window = new BrowserWindow({
+      width: 420, height: 260, frame: false, resizable: false, show: false,
+      backgroundColor: '#07131e', alwaysOnTop: true,
+      webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true },
+    })
+    window.once('ready-to-show', () => {
+      if (!window.isDestroyed()) window.show()
+    })
+    window.loadFile(path.join(__dirname, 'splash.html'))
+    return window
+  },
+  onWatchdog: () => handleStartupFailure(new Error('启动超时，请检查游戏服务配置与运行日志。')),
+})
 
 function appendStartupLog(message) {
   const logsDir = path.join(app.getPath('userData'), 'logs')
@@ -148,9 +170,10 @@ async function setApplicationLanguage(locale) {
 }
 
 function broadcastApplicationSettings(settings) {
+  const publicSettings = toPublicApplicationSettings(settings)
   BrowserWindow.getAllWindows().forEach((window) => {
     if (!window.isDestroyed()) {
-      window.webContents.send('app-settings-changed', settings)
+      window.webContents.send('app-settings-changed', publicSettings)
     }
   })
 }
@@ -171,8 +194,9 @@ async function updateApplicationSettings(patch) {
     })
   }
   broadcastApplicationSettings(settings)
+  applyApplicationBrand(settings)
   await broadcastSecondaryDisplayStatus()
-  return settings
+  return toPublicApplicationSettings(settings)
 }
 
 function currentDisplayDescriptors() {
@@ -317,6 +341,7 @@ function createWindow() {
       zoomFactor: 1.0,
     },
   })
+  preventRendererTitleOverride(mainWindow)
   mainWindow.setMenuBarVisibility(false)
   logWindowGeometry(mainWindow, 'main-window-created')
   mainWindow.once('maximize', () => logWindowGeometry(mainWindow, 'main-window-maximized'))
@@ -324,6 +349,8 @@ function createWindow() {
   mainWindow.once('ready-to-show', () => {
     logWindowGeometry(mainWindow, 'main-window-ready')
     mainWindow.show()
+    splashLifecycle.close('main-ready')
+    splashWindow = null
   })
   mainWindow.on('closed', () => {
     void releaseElc408LogCapture()
@@ -376,6 +403,7 @@ function createDebugWindow(layoutBounds = null) {
       zoomFactor: 1.0,
     },
   })
+  preventRendererTitleOverride(debugWindow)
   debugWindow.setMenuBarVisibility(false)
 
   debugWindow.on('closed', () => {
@@ -399,6 +427,18 @@ function createDebugWindow(layoutBounds = null) {
       debugWindow.webContents.send('engine-state', latestEngineState)
     }
   })
+}
+
+function createSplashWindow() {
+  splashWindow = splashLifecycle.open()
+}
+
+function applyApplicationBrand(settings) {
+  return applyBrandToWindows({ app, BrowserWindow, fsSync: nodeFs, settings, splashWindow })
+}
+
+function preventRendererTitleOverride(window) {
+  window.on('page-title-updated', (event) => event.preventDefault())
 }
 
 function normalizeTouchPresentationMode(value) {
@@ -471,6 +511,7 @@ function createTouchWindow(mode = 'debug', layoutBounds = null) {
       zoomFactor: 1.0,
     },
   })
+  preventRendererTitleOverride(touchWindow)
   touchWindow.setMenuBarVisibility(false)
   const createdTouchWindow = touchWindow
   touchKeyboardEditableFocused = false
@@ -540,12 +581,13 @@ function createTouchWindow(mode = 'debug', layoutBounds = null) {
   return createdTouchWindow
 }
 
-function exitTouchFullScreen(event, code) {
+async function exitTouchFullScreen(event, code) {
+  const settings = await applicationSettings.get()
   if (
     !touchWindow ||
     touchWindow.isDestroyed() ||
     event.sender !== touchWindow.webContents ||
-    !isTouchExitCode(code)
+    !isTouchExitCode(code, settings.touchExitPassword)
   ) {
     return { success: false }
   }
@@ -610,6 +652,7 @@ function createSecondaryWindow(display) {
       zoomFactor: 1.0,
     },
   })
+  preventRendererTitleOverride(secondaryWindow)
   secondaryWindow.setMenuBarVisibility(false)
   const createdWindow = secondaryWindow
 
@@ -1223,6 +1266,8 @@ function handleStartupFailure(error) {
   const message = error?.message || String(error)
   console.error(`Application startup failed: ${message}`)
   appendStartupLog(`Application startup failed: ${message}`)
+  splashLifecycle.close('startup-failure')
+  splashWindow = null
   dialog.showErrorBox('LED Game 启动失败', message)
   app.quit()
 }
@@ -1718,6 +1763,7 @@ ipcMain.handle('engine:stop', () => engineStateRequest('/engine/demo/stop', { me
 ipcMain.handle('engine:state', () => engineStateRequest('/engine/demo/state'))
 ipcMain.handle('game:list', () => backendRequest('/game'))
 ipcMain.handle('game:playable-list', () => backendRequest('/games/playable'))
+ipcMain.handle('game:manageable-list', () => backendRequest('/games/manageable'))
 ipcMain.handle('database:refresh-availability', () => databaseRefreshAvailability())
 ipcMain.handle('database:refresh', () => refreshDatabase())
 ipcMain.handle('game:state', () => requestCurrentGameState())
@@ -1839,8 +1885,35 @@ ipcMain.handle('media:list', () => listMediaLibrary())
 ipcMain.handle('media:get-preview-url', (_event, relativePath) => getMediaPreviewUrl(relativePath))
 ipcMain.handle('app-language:get', () => languagePreferences.get())
 ipcMain.handle('app-language:set', (_event, locale) => setApplicationLanguage(locale))
-ipcMain.handle('app-settings:get', () => applicationSettings.get())
+ipcMain.handle('app-settings:get', async () => toPublicApplicationSettings(await applicationSettings.get()))
 ipcMain.handle('app-settings:update', (_event, patch) => updateApplicationSettings(patch))
+ipcMain.handle('app-settings:choose-icon', async (event) => {
+  const result = await showNativeDialogWithFocusRestore({
+    BrowserWindow, dialog, event, method: 'showOpenDialog',
+    options: { title: '选择应用图标', properties: ['openFile'],
+      filters: [{ name: '应用图标', extensions: ['ico', 'png'] }] },
+  })
+  if (result.canceled || !result.filePaths?.[0]) return { canceled: true }
+  const source = result.filePaths[0]
+  const target = await installApplicationIcon({
+    fs,
+    nativeImage,
+    source,
+    userDataPath: app.getPath('userData'),
+  })
+  return { canceled: false, settings: await updateApplicationSettings({ applicationIconPath: target }) }
+})
+ipcMain.handle('game:reorder', (_event, gameIds) => backendRequest('/games/display-order', {
+  method: 'PUT', body: JSON.stringify({ gameIds }),
+}))
+ipcMain.handle('help:document', async (_event, key) => {
+  const files = { changelog: '版本变更记录.txt', about: '软件介绍.txt' }
+  if (!files[key]) throw new Error('不支持的帮助文档')
+  const candidates = [path.join(app.getAppPath(), files[key]), path.join(process.resourcesPath, 'help', files[key])]
+  const file = candidates.find((candidate) => nodeFs.existsSync(candidate))
+  if (!file) throw new Error('帮助文档不存在')
+  return fs.readFile(file, 'utf8')
+})
 ipcMain.handle('app-settings:test-member-platform', async (_event, settings) => {
   const current = await applicationSettings.get()
   const draft = settings && typeof settings === 'object' ? settings : current
@@ -1851,6 +1924,10 @@ ipcMain.handle('app-settings:test-member-platform', async (_event, settings) => 
       port: draft.memberPlatformPort,
     }),
   })
+})
+ipcMain.handle('spirit:delete', (_event, spiritId) => {
+  if (!spiritId) throw new Error('缺少精灵 ID')
+  return backendRequest(`/spirit/${encodeURIComponent(spiritId)}`, { method: 'DELETE' })
 })
 ipcMain.handle('touch:presentation-mode', () => touchPresentationMode)
 ipcMain.handle('touch:exit-fullscreen', (event, code) => exitTouchFullScreen(event, code))
@@ -1997,11 +2074,13 @@ app.whenReady()
     // The app has no native menu. Removing it keeps the Windows content bounds
     // stable instead of collapsing an auto-hidden menu on first input.
     Menu.setApplicationMenu(null)
+    createSplashWindow()
     registerMediaProtocol()
     await startEmbeddedBackend()
     startFrameServer()
     startRuntimeStateStream()
     createWindow()
+    applyApplicationBrand(await applicationSettings.get())
 
     screen.on('display-added', () => {
       void broadcastSecondaryDisplayStatus()

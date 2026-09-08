@@ -22,6 +22,8 @@ const TOUCH_IDLE_PROMPT_MAX_LENGTH = 48
 const TOUCH_IDLE_PROMPT_FONT_SIZE_DEFAULT = 72
 const TOUCH_IDLE_PROMPT_FONT_SIZE_MIN = 32
 const TOUCH_IDLE_PROMPT_FONT_SIZE_MAX = 200
+const APPLICATION_TITLE_DEFAULT = 'LED Game'
+const TOUCH_EXIT_PASSWORD_DEFAULT = '888888'
 const DEFAULT_APPLICATION_SETTINGS = Object.freeze({
   entryMethod: 'touch',
   mode: 'debug',
@@ -30,7 +32,20 @@ const DEFAULT_APPLICATION_SETTINGS = Object.freeze({
   secondaryDisplay: null,
   touchIdlePromptTexts: TOUCH_IDLE_PROMPT_DEFAULTS,
   touchIdlePromptFontSize: TOUCH_IDLE_PROMPT_FONT_SIZE_DEFAULT,
+  applicationTitle: APPLICATION_TITLE_DEFAULT,
+  applicationIconPath: null,
+  touchExitPassword: TOUCH_EXIT_PASSWORD_DEFAULT,
 })
+
+function normalizeApplicationTitle(value) {
+  const title = typeof value === 'string' ? value.trim() : ''
+  return title && Array.from(title).length <= 64 ? title : APPLICATION_TITLE_DEFAULT
+}
+
+function normalizeTouchExitPassword(value) {
+  return typeof value === 'string' && /^\d{4,12}$/.test(value)
+    ? value : TOUCH_EXIT_PASSWORD_DEFAULT
+}
 
 function normalizeBounds(value) {
   if (!value || typeof value !== 'object') {
@@ -112,6 +127,10 @@ function normalizeApplicationSettings(value) {
       source.touchIdlePromptTexts ?? source.touchIdlePromptText,
     ),
     touchIdlePromptFontSize: normalizeTouchIdlePromptFontSize(source.touchIdlePromptFontSize),
+    applicationTitle: normalizeApplicationTitle(source.applicationTitle),
+    applicationIconPath: typeof source.applicationIconPath === 'string' && source.applicationIconPath.trim()
+      ? path.resolve(source.applicationIconPath) : null,
+    touchExitPassword: normalizeTouchExitPassword(source.touchExitPassword),
   }
 }
 
@@ -122,6 +141,14 @@ function validateSettingsPatch(value) {
   }
   if ('mode' in patch && !APPLICATION_MODES.includes(patch.mode)) {
     throw new Error(`Unsupported application mode: ${patch.mode}`)
+  }
+  if ('applicationTitle' in patch && (typeof patch.applicationTitle !== 'string'
+    || !patch.applicationTitle.trim() || Array.from(patch.applicationTitle.trim()).length > 64)) {
+    throw new Error('Application title must contain 1 to 64 characters')
+  }
+  if ('touchExitPassword' in patch && (typeof patch.touchExitPassword !== 'string'
+    || !/^\d{4,12}$/.test(patch.touchExitPassword))) {
+    throw new Error('Touch exit password must contain 4 to 12 digits')
   }
   if ('memberPlatformHost' in patch && (typeof patch.memberPlatformHost !== 'string'
     || normalizeMemberPlatformHost(patch.memberPlatformHost) !== patch.memberPlatformHost.trim())) {
@@ -216,6 +243,7 @@ function createApplicationSettingsStore({ fs, settingsPath }) {
 
 module.exports = {
   APPLICATION_MODES,
+  APPLICATION_TITLE_DEFAULT,
   DEFAULT_APPLICATION_SETTINGS,
   ENTRY_METHODS,
   TOUCH_IDLE_PROMPT_DEFAULTS,
@@ -223,6 +251,7 @@ module.exports = {
   TOUCH_IDLE_PROMPT_FONT_SIZE_MAX,
   TOUCH_IDLE_PROMPT_FONT_SIZE_MIN,
   TOUCH_IDLE_PROMPT_MAX_LENGTH,
+  TOUCH_EXIT_PASSWORD_DEFAULT,
   createApplicationSettingsStore,
   normalizeApplicationSettings,
   normalizeSecondaryDisplay,

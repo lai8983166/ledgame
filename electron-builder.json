@@ -8,6 +8,8 @@
   "files": [
     "dist/**/*",
     "electron/**/*",
+    "版本变更记录.txt",
+    "软件介绍.txt",
     "package.json"
   ],
   "extraResources": [
@@ -41,6 +43,14 @@
       "filter": [
         "**/*",
         "!**/*.md"
+      ]
+    },
+    {
+      "from": ".",
+      "to": "help",
+      "filter": [
+        "版本变更记录.txt",
+        "软件介绍.txt"
       ]
     }
   ],

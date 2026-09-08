@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, onUnmounted, ref } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import DemoView from "./views/DemoView.vue";
 import { sendFloorClick } from "./lib/floorInput.js";
@@ -32,6 +32,9 @@ const gameRuntimeState = ref(null);
 const activeView = ref("demo");
 const selectedEditorGame = ref(null);
 const helpMenuOpen = ref(false);
+const helpDocument = ref(null);
+const helpDocumentLoading = ref(false);
+const helpDocumentError = ref("");
 const helpButtonRef = ref(null);
 const helpMenuRef = ref(null);
 const secondaryMenuOpen = ref(false);
@@ -159,6 +162,10 @@ function attachHelpMenuListeners() {
   }
   function onKeydown(event) {
     if (event.key === "Escape") {
+      if (helpDocument.value) {
+        closeHelpDocument();
+        return;
+      }
       if (helpMenuOpen.value) {
         closeHelpMenu();
         helpButtonRef.value?.focus();
@@ -273,6 +280,24 @@ function openGameEditor(game) {
     errorMessage.value = t("rank.unsupportedEditor");
     activeView.value = "games";
   }
+}
+
+async function openHelpDocument(key, title) {
+  closeHelpMenu();
+  helpDocument.value = { title, content: "" };
+  helpDocumentLoading.value = true;
+  helpDocumentError.value = "";
+  try {
+    helpDocument.value.content = await api.readHelpDocument(key);
+  } catch (error) {
+    helpDocumentError.value = error?.message || t("common.operationFailed");
+  } finally { helpDocumentLoading.value = false; }
+}
+
+async function closeHelpDocument() {
+  helpDocument.value = null;
+  await nextTick();
+  helpButtonRef.value?.focus();
 }
 
 function toggleSecondaryMenu() {
@@ -658,6 +683,8 @@ function formatRuntimeValue(value, fallback = "-") {
             >
               {{ t("nav.dataUpdate") }}
             </button>
+            <button class="nav-help-item" type="button" role="menuitem" @click="openHelpDocument('changelog', t('management.changelog'))">{{ t('management.changelog') }}</button>
+            <button class="nav-help-item" type="button" role="menuitem" @click="openHelpDocument('about', t('management.about'))">{{ t('management.about') }}</button>
           </div>
         </div>
       </nav>
@@ -668,6 +695,15 @@ function formatRuntimeValue(value, fallback = "-") {
       <button type="button" :aria-label="t('common.close')" @click="secondaryErrorMessage = ''">
         ×
       </button>
+    </div>
+
+    <div v-if="helpDocument" class="help-document-backdrop" @mousedown.self="closeHelpDocument">
+      <section class="help-document-dialog" role="dialog" aria-modal="true">
+        <header><h2>{{ helpDocument.title }}</h2><button type="button" @click="closeHelpDocument">×</button></header>
+        <p v-if="helpDocumentLoading">{{ t('management.reading') }}</p>
+        <p v-else-if="helpDocumentError" class="error-line">{{ helpDocumentError }}</p>
+        <pre v-else>{{ helpDocument.content }}</pre>
+      </section>
     </div>
 
     <DemoView

@@ -134,8 +134,8 @@ function debugGameSplitBounds(workArea) {
   }
 }
 
-function isTouchExitCode(value) {
-  return String(value ?? '') === '888888'
+function isTouchExitCode(value, expected = '888888') {
+  return String(value ?? '') === String(expected ?? '')
 }
 
 function jsonRequest(pathname, method, body) {

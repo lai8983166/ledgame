@@ -1,11 +1,7 @@
 import { normalizeGameList } from "./gameFlowState.js";
 
-const SIMPLE_ORDER = new Map(
-  ["simple-demo", "simple", "normal", "diffcult"].map((name, index) => [name, index]),
-);
-
 export function supportsGameEditor(game) {
-  return game?.type === "rank" || (game?.type === "default" && SIMPLE_ORDER.has(game.name));
+  return game?.type === "rank" || game?.type === "default";
 }
 
 export function normalizeSupportedGames(value) {
@@ -17,18 +13,15 @@ export function normalizeSupportedGames(value) {
       seen.add(game.id);
       return true;
     })
-    .sort((left, right) => {
-      const leftSimple = SIMPLE_ORDER.get(left.name);
-      const rightSimple = SIMPLE_ORDER.get(right.name);
-      if (leftSimple !== undefined || rightSimple !== undefined) {
-        return (leftSimple ?? 100) - (rightSimple ?? 100);
-      }
-      return String(left.displayName).localeCompare(String(right.displayName));
-    });
+    .sort((left, right) => (Number.isFinite(Number(left.displayOrder)) ? Number(left.displayOrder) : Number.MAX_SAFE_INTEGER)
+      - (Number.isFinite(Number(right.displayOrder)) ? Number(right.displayOrder) : Number.MAX_SAFE_INTEGER)
+      || Number(left.id) - Number(right.id));
 }
 
-export async function loadSupportedGames(api) {
-  if (!api?.listPlayableGames) throw new Error("Playable game list API is unavailable");
+export async function loadSupportedGames(api, options = {}) {
+  const includeHidden = Boolean(options.includeHidden);
+  const listGames = includeHidden ? api?.listManageableGames : api?.listPlayableGames;
+  if (!listGames) throw new Error("Playable game list API is unavailable");
   const initializationErrors = [];
   for (const seed of [api.seedSimpleVariants, api.seedRankType1]) {
     if (!seed) continue;
@@ -39,7 +32,7 @@ export async function loadSupportedGames(api) {
     }
   }
   return {
-    games: normalizeSupportedGames(await api.listPlayableGames()),
+    games: normalizeSupportedGames(await listGames()),
     initializationError: initializationErrors[0] || null,
   };
 }

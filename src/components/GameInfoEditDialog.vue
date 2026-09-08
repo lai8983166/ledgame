@@ -7,11 +7,19 @@ import MediaPickerDialog from "./MediaPickerDialog.vue";
 const props = defineProps({
   game: { type: Object, required: true },
   cover: { type: String, default: "" },
+  name: { type: String, default: "" },
+  childModeVisible: { type: Boolean, default: true },
   loading: { type: Boolean, default: false },
   saving: { type: Boolean, default: false },
   error: { type: String, default: "" },
 });
-const emit = defineEmits(["cancel", "save", "update:cover"]);
+const emit = defineEmits([
+  "cancel",
+  "save",
+  "update:cover",
+  "update:name",
+  "update:child-mode-visible",
+]);
 const { t } = useI18n({ useScope: "global" });
 
 const dialogRef = ref(null);
@@ -53,7 +61,7 @@ function handleKeydown(event) {
     return;
   }
   const focusable = [
-    ...(dialogRef.value?.querySelectorAll("button:not(:disabled)") || []),
+    ...(dialogRef.value?.querySelectorAll("input:not(:disabled), button:not(:disabled)") || []),
   ];
   if (!focusable.length) {
     event.preventDefault();
@@ -108,6 +116,18 @@ onBeforeUnmount(() => {
       </header>
 
       <div class="game-info-body">
+        <label class="game-info-name"><span>{{ t('management.gameName') }}</span><input :value="name" type="text" maxlength="255" @input="emit('update:name', $event.target.value)" /></label>
+        <label class="game-info-visibility">
+          <input
+            :checked="childModeVisible"
+            type="checkbox"
+            @change="emit('update:child-mode-visible', $event.target.checked)"
+          />
+          <span>
+            <strong>{{ t('management.childModeVisible') }}</strong>
+            <small>{{ t('management.childModeVisibleHint') }}</small>
+          </span>
+        </label>
         <span class="game-info-label">{{ t("games.editCover") }}</span>
         <div class="game-info-cover-preview">
           <img
@@ -225,6 +245,12 @@ onBeforeUnmount(() => {
   justify-items: center;
   gap: 12px;
 }
+.game-info-name { display: grid; gap: 6px; width: 100%; color: #4f5b69; font-size: 13px; font-weight: 700; }
+.game-info-name input { padding: 10px 12px; border: 1px solid #b9c5d2; border-radius: 6px; background: white; }
+.game-info-visibility { display: flex; align-items: flex-start; gap: 10px; width: 100%; color: #4f5b69; font-size: 13px; }
+.game-info-visibility input { width: 18px; height: 18px; margin-top: 1px; accent-color: #5968e8; }
+.game-info-visibility span { display: grid; gap: 3px; }
+.game-info-visibility small { color: #76818f; font-size: 11px; font-weight: 400; }
 
 .game-info-label {
   justify-self: start;
