@@ -5,6 +5,7 @@ import EditorInteractionModeSwitch from "../components/EditorInteractionModeSwit
 import SimpleMatrixCanvas from "../components/SimpleMatrixCanvas.vue";
 import SimpleLevelPreviewDialog from "../components/SimpleLevelPreviewDialog.vue";
 import GameGlobalConfigDialog from "../components/GameGlobalConfigDialog.vue";
+import PixelLightLayoutDialog from "../components/PixelLightLayoutDialog.vue";
 import { encodeSimpleGifInWorker } from "../lib/encodeSimpleGif.js";
 import { prepareSimpleLevelGif, selectSimpleTopItem } from "../lib/simpleLevelGif.js";
 import { resolveLiveOccupancyCell } from "../lib/simpleOccupancy.js";
@@ -16,6 +17,7 @@ import { normalizeLevelOption, validateLevelOption } from "../lib/simpleLevelOpt
 import { createRgbEditHistory } from "../lib/simpleRgbEditHistory.js";
 import { createLatestAsyncTaskGuard } from "../lib/latestAsyncTask.js";
 import { saveSimpleGlobalConfigDocument } from "../lib/simpleGlobalConfig.js";
+import { normalizePixelLightWiring } from "../lib/pixelLightLayout.js";
 import {
   runGuardedFrameSequence,
   waitForGuardedPromise,
@@ -47,6 +49,9 @@ const errorMessage = ref("");
 const statusMessage = ref("");
 const globalConfigOpen = ref(false);
 const globalConfigDraft = ref({});
+const pixelLightLayoutOpen = ref(false);
+const pixelLightLayoutDraft = ref({});
+const pixelLightControllerCount = ref(2);
 const runtimeStatusMessage = ref("");
 const runtimeErrorMessage = ref("");
 const runtimeResult = ref(null);
@@ -860,6 +865,39 @@ async function saveGlobalConfig(patch) {
   });
   if (!errorMessage.value) {
     globalConfigOpen.value = false;
+  }
+}
+
+function openPixelLightLayout() {
+  if (!document.value || busyAction.value) {
+    return;
+  }
+  const draft = normalizePixelLightWiring(document.value.commonConfig?.pixelLightWiring);
+  pixelLightLayoutDraft.value = draft;
+  errorMessage.value = "";
+  pixelLightControllerCount.value = Math.max(2, draft.form.controlIdx + 1);
+  pixelLightLayoutOpen.value = true;
+}
+
+async function savePixelLightLayout(layout) {
+  const gameId = currentGameId.value;
+  if (!gameId) {
+    return;
+  }
+  await runEditorAction("save", async () => {
+    const result = await saveSimpleGlobalConfigDocument({
+      api,
+      gameId,
+      patch: { commonConfig: { pixelLightWiring: normalizePixelLightWiring(layout) } },
+      liveDocument: document.value,
+      missingDocumentMessage: t("simple.readSavedFailed"),
+    });
+    pixelLightLayoutDraft.value = normalizePixelLightWiring(layout);
+    statusMessage.value = result?.data?.saved ? t("pixelLight.saved") : t("simple.saveComplete");
+    validationErrors.value = [];
+  });
+  if (!errorMessage.value) {
+    pixelLightLayoutOpen.value = false;
   }
 }
 
@@ -3003,7 +3041,10 @@ function formatRuntimeSummary(value) {
             </small>
           </label>
         </div>
-        <button class="soft-button" type="button" :disabled="Boolean(busyAction)" @click="openGlobalConfig">{{ t("simple.globalConfig") }}</button>
+        <div class="editor-config-actions">
+          <button class="soft-button" type="button" :disabled="Boolean(busyAction)" @click="openGlobalConfig">{{ t("simple.globalConfig") }}</button>
+          <button class="soft-button" type="button" :disabled="Boolean(busyAction)" @click="openPixelLightLayout">{{ t("pixelLight.open") }}</button>
+        </div>
       </aside>
 
       <main class="editor-panel editor-center">
@@ -3471,6 +3512,17 @@ function formatRuntimeSummary(value) {
       :error="errorMessage"
       @cancel="globalConfigOpen = false"
       @save="saveGlobalConfig"
+    />
+    <PixelLightLayoutDialog
+      v-if="pixelLightLayoutOpen"
+      :layout="pixelLightLayoutDraft"
+      :controller-count="pixelLightControllerCount"
+      :grid-width="matrixWidth"
+      :grid-height="matrixHeight"
+      :saving="busyAction === 'save'"
+      :error="errorMessage"
+      @cancel="pixelLightLayoutOpen = false"
+      @save="savePixelLightLayout"
     />
     <SimpleLevelPreviewDialog
       v-if="levelPreviewSnapshot"

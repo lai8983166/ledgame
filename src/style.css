@@ -682,6 +682,12 @@ button:disabled {
   box-shadow: 0 2px 5px rgba(54, 65, 78, 0.16);
 }
 
+.editor-config-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 html[data-language-direction="rtl"] :is(input, textarea) {
   direction: rtl;
   text-align: right;
