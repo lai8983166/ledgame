@@ -4,6 +4,7 @@
   "src/components/DebugLedCanvas.vue::t(",
   "src/components/EditorInteractionModeSwitch.vue::option.title || option.label",
   "src/components/EditorInteractionModeSwitch.vue::t(",
+  "src/components/GameEffectDialog.vue::t(",
   "src/components/GameGlobalConfigDialog.vue::t(",
   "src/components/GameInfoEditDialog.vue::t(",
   "src/components/LanguageSelectionPanel.vue::t(",

@@ -6,6 +6,7 @@ import SimpleMatrixCanvas from "../components/SimpleMatrixCanvas.vue";
 import SimpleLevelPreviewDialog from "../components/SimpleLevelPreviewDialog.vue";
 import GameGlobalConfigDialog from "../components/GameGlobalConfigDialog.vue";
 import PixelLightLayoutDialog from "../components/PixelLightLayoutDialog.vue";
+import GameEffectDialog from "../components/GameEffectDialog.vue";
 import { encodeSimpleGifInWorker } from "../lib/encodeSimpleGif.js";
 import { prepareSimpleLevelGif, selectSimpleTopItem } from "../lib/simpleLevelGif.js";
 import { resolveLiveOccupancyCell } from "../lib/simpleOccupancy.js";
@@ -18,6 +19,11 @@ import { createRgbEditHistory } from "../lib/simpleRgbEditHistory.js";
 import { createLatestAsyncTaskGuard } from "../lib/latestAsyncTask.js";
 import { saveSimpleGlobalConfigDocument } from "../lib/simpleGlobalConfig.js";
 import { normalizePixelLightWiring } from "../lib/pixelLightLayout.js";
+import {
+  applyEffectToFrameList,
+  expandEffectFrames,
+  normalizeEffectConfig,
+} from "../lib/effectEditor.js";
 import {
   runGuardedFrameSequence,
   waitForGuardedPromise,
@@ -52,6 +58,11 @@ const globalConfigDraft = ref({});
 const pixelLightLayoutOpen = ref(false);
 const pixelLightLayoutDraft = ref({});
 const pixelLightControllerCount = ref(2);
+const effectDialogOpen = ref(false);
+const effectDialogDraft = ref({});
+const effectSpirits = ref([]);
+const effectSpiritLoadFailed = ref(false);
+const effectIdPrefix = ref("effect");
 const runtimeStatusMessage = ref("");
 const runtimeErrorMessage = ref("");
 const runtimeResult = ref(null);
@@ -442,6 +453,7 @@ async function loadEditor() {
   editorFitCanReveal = false;
   clearRgbEditHistory();
   document.value = null;
+  effectDialogOpen.value = false;
   await runEditorAction("load", async () => {
     if (!gameId) {
       throw new Error(t("simple.gameSelectionMissing"));
@@ -877,6 +889,63 @@ function openPixelLightLayout() {
   errorMessage.value = "";
   pixelLightControllerCount.value = Math.max(2, draft.form.controlIdx + 1);
   pixelLightLayoutOpen.value = true;
+}
+
+async function loadEffectSpirits() {
+  if (effectSpirits.value.length || effectSpiritLoadFailed.value) {
+    return;
+  }
+  if (!window.spiritLibrary?.list) {
+    effectSpiritLoadFailed.value = true;
+    return;
+  }
+  try {
+    const result = await window.spiritLibrary.list();
+    effectSpirits.value = Array.isArray(result?.data) ? result.data : [];
+  } catch (_error) {
+    effectSpiritLoadFailed.value = true;
+  }
+}
+
+function openEffectDialog() {
+  if (!document.value || busyAction.value || !activeLevel.value || !activeFrame.value) {
+    return;
+  }
+  effectDialogDraft.value = normalizeEffectConfig({ color: selectedColor.value });
+  effectIdPrefix.value = `effect-${Date.now().toString(36)}-${objectIdCounter.value++}-${activeLevelIndex.value}-${activeFrameIndex.value}`;
+  effectDialogOpen.value = true;
+  loadEffectSpirits();
+}
+
+function closeEffectDialog() {
+  if (!busyAction.value) {
+    effectDialogOpen.value = false;
+  }
+}
+
+function applyEffectResult(result) {
+  const level = activeLevel.value;
+  if (!level || !Array.isArray(result?.frames) || !result.frames.length) {
+    return;
+  }
+  const generatedFrames = expandEffectFrames(result.config, {
+    spirits: effectSpirits.value,
+    idPrefix: effectIdPrefix.value,
+  });
+  const applied = applyEffectToFrameList(
+    level.frameList,
+    activeFrameIndex.value,
+    generatedFrames,
+    result.config?.mode,
+  );
+  level.frameList = applied.frameList;
+  activeFrameIndex.value = applied.selectedFrameIndex;
+  resetMatrixFrameCache();
+  clearRgbEditHistory();
+  syncSelectedObject();
+  scheduleMatrixCacheWarmup(activeFrameIndex.value);
+  effectDialogOpen.value = false;
+  statusMessage.value = t("effect.applied");
 }
 
 async function savePixelLightLayout(layout) {
@@ -3044,6 +3113,7 @@ function formatRuntimeSummary(value) {
         <div class="editor-config-actions">
           <button class="soft-button" type="button" :disabled="Boolean(busyAction)" @click="openGlobalConfig">{{ t("simple.globalConfig") }}</button>
           <button class="soft-button" type="button" :disabled="Boolean(busyAction)" @click="openPixelLightLayout">{{ t("pixelLight.open") }}</button>
+          <button class="soft-button" type="button" :disabled="Boolean(busyAction) || !activeFrame" @click="openEffectDialog">{{ t("effect.open") }}</button>
         </div>
       </aside>
 
@@ -3523,6 +3593,21 @@ function formatRuntimeSummary(value) {
       :error="errorMessage"
       @cancel="pixelLightLayoutOpen = false"
       @save="savePixelLightLayout"
+    />
+    <GameEffectDialog
+      v-if="effectDialogOpen"
+      :effect="effectDialogDraft"
+      :spirits="effectSpirits"
+      :grid-width="matrixWidth"
+      :grid-height="matrixHeight"
+      :level-index="activeLevelIndex"
+      :frame-index="activeFrameIndex"
+      :colors="colorOptions.map((color) => color.value)"
+      :id-prefix="effectIdPrefix"
+      :saving="Boolean(busyAction)"
+      :error="effectSpiritLoadFailed ? t('effect.spiritLoadFailed') : errorMessage"
+      @cancel="closeEffectDialog"
+      @confirm="applyEffectResult"
     />
     <SimpleLevelPreviewDialog
       v-if="levelPreviewSnapshot"
