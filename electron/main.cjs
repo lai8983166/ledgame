@@ -4,7 +4,7 @@ const nodeNet = require('node:net')
 const nodeFs = require('node:fs')
 const fs = require('node:fs/promises')
 const { pathToFileURL } = require('node:url')
-const { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, protocol, net: electronNet, screen } = require('electron')
+const { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, protocol, shell, net: electronNet, screen } = require('electron')
 const {
   appendPreparationWristband,
   debugGameSplitBounds,
@@ -21,8 +21,10 @@ const {
   createApplicationSettingsStore,
 } = require('./application-settings.cjs')
 const {
+  MAX_BACKGROUND_BYTES,
   applyApplicationBrand: applyBrandToWindows,
   installApplicationIcon,
+  installSecondaryDisplayBackground,
   toPublicApplicationSettings,
 } = require('./application-branding.cjs')
 const { createSplashLifecycle } = require('./splash-lifecycle.cjs')
@@ -197,6 +199,25 @@ async function updateApplicationSettings(patch) {
   applyApplicationBrand(settings)
   await broadcastSecondaryDisplayStatus()
   return toPublicApplicationSettings(settings)
+}
+
+async function readSecondaryDisplayBackground() {
+  const settings = await applicationSettings.get()
+  const expectedPath = path.join(app.getPath('userData'), 'branding', 'secondary-display-background.png')
+  const configuredPath = settings.secondaryDisplayBackgroundPath
+  if (!configuredPath || path.resolve(configuredPath) !== path.resolve(expectedPath)) {
+    return { dataUrl: null }
+  }
+  try {
+    const stat = await fs.stat(expectedPath)
+    if (!stat.isFile() || stat.size <= 0 || stat.size > MAX_BACKGROUND_BYTES) {
+      return { dataUrl: null }
+    }
+    const bytes = await fs.readFile(expectedPath)
+    return { dataUrl: `data:image/png;base64,${bytes.toString('base64')}` }
+  } catch (_error) {
+    return { dataUrl: null }
+  }
 }
 
 function currentDisplayDescriptors() {
@@ -1652,6 +1673,16 @@ async function getMediaPreviewUrl(relativePath) {
   }
 }
 
+async function openMediaFolder() {
+  const mediaRoot = getMediaRoot()
+  await fs.mkdir(mediaRoot, { recursive: true })
+  const failure = await shell.openPath(mediaRoot)
+  if (failure) {
+    throw new Error(`Unable to open media folder: ${failure}`)
+  }
+  return { ok: true }
+}
+
 function registerMediaProtocol() {
   protocol.handle(mediaProtocol, async (request) => {
     const requestUrl = new URL(request.url)
@@ -1764,6 +1795,16 @@ ipcMain.handle('engine:state', () => engineStateRequest('/engine/demo/state'))
 ipcMain.handle('game:list', () => backendRequest('/game'))
 ipcMain.handle('game:playable-list', () => backendRequest('/games/playable'))
 ipcMain.handle('game:manageable-list', () => backendRequest('/games/manageable'))
+ipcMain.handle('game-categories:list', () => backendRequest('/game-categories'))
+ipcMain.handle('game-categories:create', (_event, payload) => backendRequest('/game-categories', {
+  method: 'POST', body: JSON.stringify(payload || {}),
+}))
+ipcMain.handle('game-categories:update', (_event, categoryId, payload) => {
+  if (!categoryId) throw new Error('缺少游戏分类 ID')
+  return backendRequest(`/game-categories/${encodeURIComponent(categoryId)}`, {
+    method: 'PATCH', body: JSON.stringify(payload || {}),
+  })
+})
 ipcMain.handle('database:refresh-availability', () => databaseRefreshAvailability())
 ipcMain.handle('database:refresh', () => refreshDatabase())
 ipcMain.handle('game:state', () => requestCurrentGameState())
@@ -1883,6 +1924,7 @@ ipcMain.handle('spirit:update', (_event, spiritId, payload) => {
 })
 ipcMain.handle('media:list', () => listMediaLibrary())
 ipcMain.handle('media:get-preview-url', (_event, relativePath) => getMediaPreviewUrl(relativePath))
+ipcMain.handle('media:open-folder', () => openMediaFolder())
 ipcMain.handle('app-language:get', () => languagePreferences.get())
 ipcMain.handle('app-language:set', (_event, locale) => setApplicationLanguage(locale))
 ipcMain.handle('app-settings:get', async () => toPublicApplicationSettings(await applicationSettings.get()))
@@ -1903,6 +1945,40 @@ ipcMain.handle('app-settings:choose-icon', async (event) => {
   })
   return { canceled: false, settings: await updateApplicationSettings({ applicationIconPath: target }) }
 })
+ipcMain.handle('app-settings:choose-secondary-background', async (event) => {
+  const result = await showNativeDialogWithFocusRestore({
+    BrowserWindow, dialog, event, method: 'showOpenDialog',
+    options: {
+      title: '选择副屏背景',
+      properties: ['openFile'],
+      filters: [{ name: '图片', extensions: ['png', 'jpg', 'jpeg', 'webp', 'bmp', 'gif', 'apng', 'avif'] }],
+    },
+  })
+  if (result.canceled || !result.filePaths?.[0]) return { canceled: true }
+  const target = await installSecondaryDisplayBackground({
+    fs,
+    nativeImage,
+    source: result.filePaths[0],
+    userDataPath: app.getPath('userData'),
+  })
+  return {
+    canceled: false,
+    settings: await updateApplicationSettings({ secondaryDisplayBackgroundPath: target }),
+  }
+})
+ipcMain.handle('app-settings:clear-secondary-background', async () => {
+  const settings = await applicationSettings.get()
+  const result = await updateApplicationSettings({ secondaryDisplayBackgroundPath: null })
+  const expectedPath = path.join(app.getPath('userData'), 'branding', 'secondary-display-background.png')
+  if (
+    settings.secondaryDisplayBackgroundPath
+    && path.resolve(settings.secondaryDisplayBackgroundPath) === path.resolve(expectedPath)
+  ) {
+    await fs.rm(expectedPath, { force: true }).catch(() => {})
+  }
+  return result
+})
+ipcMain.handle('secondary-display:background', () => readSecondaryDisplayBackground())
 ipcMain.handle('game:reorder', (_event, gameIds) => backendRequest('/games/display-order', {
   method: 'PUT', body: JSON.stringify({ gameIds }),
 }))

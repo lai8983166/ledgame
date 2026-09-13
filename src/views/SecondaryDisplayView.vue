@@ -13,13 +13,17 @@ import gameFailureImage from "../assets/secondary-display/game-failure.png";
 
 const { t } = useI18n();
 const api = window.ledGame;
+const settingsApi = window.appSettings;
 const runtimeState = ref(normalizeRuntimeState(null));
 const loading = ref(true);
 const errorMessage = ref("");
+const backgroundDataUrl = ref("");
 const stateObservedAt = ref(Date.now());
 const clockNow = ref(Date.now());
 let removeStateListener = null;
+let removeSettingsListener = null;
 let clockTimer = null;
+let backgroundLoadRevision = 0;
 
 const presentation = computed(() => createSecondaryDisplayPresentation(runtimeState.value, {
   observedAt: stateObservedAt.value,
@@ -41,6 +45,18 @@ function applyRuntimeState(state) {
   runtimeState.value = normalizeRuntimeState(state);
   stateObservedAt.value = observedAt;
   clockNow.value = observedAt;
+}
+
+async function loadSecondaryBackground() {
+  const revision = ++backgroundLoadRevision;
+  try {
+    const result = await settingsApi?.getSecondaryBackground?.();
+    if (revision === backgroundLoadRevision) {
+      backgroundDataUrl.value = result?.dataUrl || "";
+    }
+  } catch (_error) {
+    if (revision === backgroundLoadRevision) backgroundDataUrl.value = "";
+  }
 }
 
 const resultVisual = computed(() => {
@@ -72,6 +88,10 @@ onMounted(async () => {
   removeStateListener = api?.onEngineState?.((state) => {
     applyRuntimeState(state);
   });
+  removeSettingsListener = settingsApi?.onChanged?.(() => {
+    void loadSecondaryBackground();
+  }) || null;
+  void loadSecondaryBackground();
   clockTimer = window.setInterval(() => {
     clockNow.value = Date.now();
   }, 250);
@@ -91,6 +111,8 @@ onMounted(async () => {
 
 onUnmounted(() => {
   removeStateListener?.();
+  removeSettingsListener?.();
+  backgroundLoadRevision += 1;
   if (clockTimer) window.clearInterval(clockTimer);
 });
 
@@ -101,6 +123,12 @@ function displayValue(value) {
 
 <template>
   <main class="secondary-runtime" :data-state="lifecycle">
+    <div
+      v-if="backgroundDataUrl"
+      class="secondary-runtime-background"
+      :style="{ backgroundImage: `url(${backgroundDataUrl})` }"
+      aria-hidden="true"
+    ></div>
     <div class="secondary-runtime-grid" aria-hidden="true"></div>
 
     <section v-if="loading" class="secondary-runtime-center" aria-live="polite">
@@ -210,6 +238,7 @@ function displayValue(value) {
 <style scoped>
 .secondary-runtime { position: relative; width: 100vw; height: 100vh; overflow: hidden; color: #f5f8fb; background: #071019; user-select: none; }
 .secondary-runtime::before { content: ""; position: absolute; inset: 0 0 auto; height: 7px; background: #26b9d6; box-shadow: 0 0 24px rgba(38, 185, 214, 0.5); }
+.secondary-runtime-background { position: absolute; z-index: 0; inset: 0; pointer-events: none; background-position: center; background-repeat: no-repeat; background-size: 100% 100%; opacity: 0.3; }
 .secondary-runtime-grid { position: absolute; inset: 0; opacity: 0.18; background-image: linear-gradient(rgba(105, 166, 197, 0.16) 1px, transparent 1px), linear-gradient(90deg, rgba(105, 166, 197, 0.16) 1px, transparent 1px); background-size: 52px 52px; }
 .secondary-runtime-content, .secondary-runtime-center { position: relative; z-index: 1; }
 .secondary-runtime-center { height: 100%; display: grid; place-content: center; gap: 12px; padding: 6vh 7vw; text-align: center; }

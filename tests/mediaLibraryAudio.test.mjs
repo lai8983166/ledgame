@@ -38,3 +38,15 @@ test("existing media IPC classifies audio as previewable without renderer file a
   assert.match(mainSource, /media:get-preview-url/);
   assert.match(mainSource, /resolveMediaPath\(relativePath\)/);
 });
+
+test("media library opens the managed media folder through Electron IPC", async () => {
+  assert.match(viewSource, /openMediaFolder/);
+  assert.match(viewSource, /media\.openFolder/);
+  assert.match(viewSource, /media\.folderOpened/);
+  assert.match(mainSource, /shell\.openPath\(mediaRoot\)/);
+  assert.match(mainSource, /media:open-folder/);
+  const preloadSource = await readFile(new URL("../electron/preload.cjs", import.meta.url), "utf8");
+  assert.match(preloadSource, /openFolder: \(\) => ipcRenderer\.invoke\('media:open-folder'\)/);
+  const styleSource = await readFile(new URL("../src/style.css", import.meta.url), "utf8");
+  assert.match(styleSource, /\.media-heading-actions\s*\{[\s\S]*gap:\s*10px/);
+});

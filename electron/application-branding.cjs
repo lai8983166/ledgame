@@ -2,6 +2,8 @@ const path = require('node:path')
 
 const SUPPORTED_ICON_EXTENSIONS = new Set(['.ico', '.png'])
 const MAX_ICON_BYTES = 5 * 1024 * 1024
+const SUPPORTED_BACKGROUND_EXTENSIONS = new Set(['.apng', '.avif', '.bmp', '.gif', '.jpeg', '.jpg', '.png', '.webp'])
+const MAX_BACKGROUND_BYTES = 20 * 1024 * 1024
 
 function toPublicApplicationSettings(settings) {
   if (!settings || typeof settings !== 'object') return settings
@@ -48,9 +50,42 @@ async function installApplicationIcon({ fs, nativeImage, source, userDataPath, n
   }
 }
 
+async function installSecondaryDisplayBackground({ fs, nativeImage, source, userDataPath, now = Date.now }) {
+  const extension = path.extname(source || '').toLowerCase()
+  if (!SUPPORTED_BACKGROUND_EXTENSIONS.has(extension)) {
+    throw new Error('副屏背景仅支持 PNG、JPG、JPEG、WEBP、BMP、GIF 或 AVIF 图片')
+  }
+  const stat = await fs.stat(source)
+  if (!stat.isFile() || stat.size <= 0 || stat.size > MAX_BACKGROUND_BYTES) {
+    throw new Error('副屏背景图片必须是 20MB 以内的有效文件')
+  }
+  const image = nativeImage.createFromPath(source)
+  if (!image || image.isEmpty()) throw new Error('无法解析所选副屏背景图片')
+  const png = image.toPNG()
+  if (!png || png.length === 0 || png.length > MAX_BACKGROUND_BYTES) {
+    throw new Error('副屏背景图片处理后超过 20MB')
+  }
+
+  const directory = path.join(userDataPath, 'branding')
+  const target = path.join(directory, 'secondary-display-background.png')
+  const temporary = `${target}.${now()}.tmp`
+  await fs.mkdir(directory, { recursive: true })
+  try {
+    await fs.writeFile(temporary, png)
+    await fs.rename(temporary, target)
+    return target
+  } catch (error) {
+    await fs.rm(temporary, { force: true }).catch(() => {})
+    throw error
+  }
+}
+
 module.exports = {
+  MAX_BACKGROUND_BYTES,
   MAX_ICON_BYTES,
   applyApplicationBrand,
   installApplicationIcon,
+  installSecondaryDisplayBackground,
+  SUPPORTED_BACKGROUND_EXTENSIONS,
   toPublicApplicationSettings,
 }

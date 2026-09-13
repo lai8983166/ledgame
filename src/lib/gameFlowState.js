@@ -165,6 +165,7 @@ export function normalizeGameSummary(value) {
     mode: nullableText(value.mode),
     cover: nullableText(value.cover),
     description: nullableText(value.description),
+    firstCatalog: nullableText(value.firstCatalog),
     displayOrder: nullableNumber(value.displayOrder),
     participants: nullableNumber(value.participants ?? value.maxPlayers),
     minPlayers: nullableNumber(value.minPlayers) ?? 1,

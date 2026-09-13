@@ -30,3 +30,14 @@ test("application settings IPC patch detaches nested reactive proxies", () => {
     touchIdlePromptFontSize: 72,
   });
 });
+
+test("application settings IPC patch includes the managed secondary background path", () => {
+  const patch = createApplicationSettingsPatch({
+    entryMethod: "touch",
+    mode: "game",
+    touchIdlePromptTexts: {},
+    touchIdlePromptFontSize: 72,
+    secondaryDisplayBackgroundPath: "C:\\data\\secondary-display-background.png",
+  });
+  assert.equal(patch.secondaryDisplayBackgroundPath, "C:\\data\\secondary-display-background.png");
+});

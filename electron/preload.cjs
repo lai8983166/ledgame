@@ -56,6 +56,9 @@ const fullLedGameApi = {
   listGames: () => ipcRenderer.invoke('game:list'),
   listPlayableGames: () => ipcRenderer.invoke('game:playable-list'),
   listManageableGames: () => ipcRenderer.invoke('game:manageable-list'),
+  listGameCategories: () => ipcRenderer.invoke('game-categories:list'),
+  createGameCategory: (payload) => ipcRenderer.invoke('game-categories:create', payload),
+  updateGameCategory: (categoryId, payload) => ipcRenderer.invoke('game-categories:update', categoryId, payload),
   touchGameState: () => ipcRenderer.invoke('game:state'),
   startSystemIdle: () => ipcRenderer.invoke('game:idle'),
   stopTouchGame: () => ipcRenderer.invoke('game:stop'),
@@ -132,6 +135,7 @@ contextBridge.exposeInMainWorld(
 contextBridge.exposeInMainWorld('mediaLibrary', {
   list: () => ipcRenderer.invoke('media:list'),
   getPreviewUrl: (relativePath) => ipcRenderer.invoke('media:get-preview-url', relativePath),
+  openFolder: () => ipcRenderer.invoke('media:open-folder'),
 })
 
 contextBridge.exposeInMainWorld('appLanguage', {
@@ -146,11 +150,14 @@ contextBridge.exposeInMainWorld('appLanguage', {
 
 contextBridge.exposeInMainWorld('appSettings', {
   get: () => ipcRenderer.invoke('app-settings:get'),
+  getSecondaryBackground: () => ipcRenderer.invoke('secondary-display:background'),
   testMemberPlatform: (settings) => ipcRenderer.invoke('app-settings:test-member-platform', settings),
   ...(windowKind === 'main'
     ? {
         update: (patch) => ipcRenderer.invoke('app-settings:update', patch),
         chooseIcon: () => ipcRenderer.invoke('app-settings:choose-icon'),
+        chooseSecondaryBackground: () => ipcRenderer.invoke('app-settings:choose-secondary-background'),
+        clearSecondaryBackground: () => ipcRenderer.invoke('app-settings:clear-secondary-background'),
       }
     : {}),
   onChanged: (callback) => {

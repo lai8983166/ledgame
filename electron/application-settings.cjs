@@ -24,6 +24,7 @@ const TOUCH_IDLE_PROMPT_FONT_SIZE_MIN = 32
 const TOUCH_IDLE_PROMPT_FONT_SIZE_MAX = 200
 const APPLICATION_TITLE_DEFAULT = 'LED Game'
 const TOUCH_EXIT_PASSWORD_DEFAULT = '888888'
+const SECONDARY_DISPLAY_BACKGROUND_DEFAULT = null
 const DEFAULT_APPLICATION_SETTINGS = Object.freeze({
   entryMethod: 'touch',
   mode: 'debug',
@@ -34,6 +35,7 @@ const DEFAULT_APPLICATION_SETTINGS = Object.freeze({
   touchIdlePromptFontSize: TOUCH_IDLE_PROMPT_FONT_SIZE_DEFAULT,
   applicationTitle: APPLICATION_TITLE_DEFAULT,
   applicationIconPath: null,
+  secondaryDisplayBackgroundPath: SECONDARY_DISPLAY_BACKGROUND_DEFAULT,
   touchExitPassword: TOUCH_EXIT_PASSWORD_DEFAULT,
 })
 
@@ -130,6 +132,9 @@ function normalizeApplicationSettings(value) {
     applicationTitle: normalizeApplicationTitle(source.applicationTitle),
     applicationIconPath: typeof source.applicationIconPath === 'string' && source.applicationIconPath.trim()
       ? path.resolve(source.applicationIconPath) : null,
+    secondaryDisplayBackgroundPath: typeof source.secondaryDisplayBackgroundPath === 'string'
+      && source.secondaryDisplayBackgroundPath.trim()
+      ? path.resolve(source.secondaryDisplayBackgroundPath) : SECONDARY_DISPLAY_BACKGROUND_DEFAULT,
     touchExitPassword: normalizeTouchExitPassword(source.touchExitPassword),
   }
 }
@@ -149,6 +154,10 @@ function validateSettingsPatch(value) {
   if ('touchExitPassword' in patch && (typeof patch.touchExitPassword !== 'string'
     || !/^\d{4,12}$/.test(patch.touchExitPassword))) {
     throw new Error('Touch exit password must contain 4 to 12 digits')
+  }
+  if ('secondaryDisplayBackgroundPath' in patch && patch.secondaryDisplayBackgroundPath !== null
+    && (typeof patch.secondaryDisplayBackgroundPath !== 'string' || !patch.secondaryDisplayBackgroundPath.trim())) {
+    throw new Error('Secondary display background path must be a file path or null')
   }
   if ('memberPlatformHost' in patch && (typeof patch.memberPlatformHost !== 'string'
     || normalizeMemberPlatformHost(patch.memberPlatformHost) !== patch.memberPlatformHost.trim())) {
@@ -252,6 +261,7 @@ module.exports = {
   TOUCH_IDLE_PROMPT_FONT_SIZE_MIN,
   TOUCH_IDLE_PROMPT_MAX_LENGTH,
   TOUCH_EXIT_PASSWORD_DEFAULT,
+  SECONDARY_DISPLAY_BACKGROUND_DEFAULT,
   createApplicationSettingsStore,
   normalizeApplicationSettings,
   normalizeSecondaryDisplay,

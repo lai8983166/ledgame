@@ -56,7 +56,7 @@ test("cover save uses metadata-only API and changes only the local cover summary
     listSource.indexOf("async function saveGameInfo()"),
     listSource.indexOf("</script>"),
   );
-  assert.match(saveFunction, /api\.updateGameMetadata\(game\.id, \{ cover, name, childModeVisible \}\)/);
+  assert.match(saveFunction, /api\.updateGameMetadata\(game\.id, \{ cover, name, childModeVisible, firstCatalog \}\)/);
   assert.doesNotMatch(saveFunction, /getGameEditor|saveGameEditor|saveRankGameEditor/);
   assert.match(saveFunction, /games\.value = games\.value\.map/);
   assert.match(saveFunction, /catch \(error\)[\s\S]*editError\.value/);
@@ -66,6 +66,7 @@ test("cover save uses metadata-only API and changes only the local cover summary
 test("game information dialog exposes child-mode visibility", () => {
   assert.match(dialogSource, /childModeVisible/);
   assert.match(dialogSource, /update:child-mode-visible/);
+  assert.match(dialogSource, /firstCatalog/);
   assert.match(listSource, /includeHidden: true/);
 });
 

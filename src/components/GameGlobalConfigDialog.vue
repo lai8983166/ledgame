@@ -5,6 +5,7 @@ import MediaPickerDialog from "./MediaPickerDialog.vue";
 
 const props = defineProps({
   config: { type: Object, required: true },
+  categories: { type: Array, default: () => [] },
   saving: { type: Boolean, default: false },
   error: { type: String, default: "" },
 });
@@ -25,7 +26,7 @@ const sections = computed(() => [
       { label: t("globalConfig.type"), path: "type", kind: "text" },
       { label: t("globalConfig.mode"), path: "mode", kind: "text" },
       { label: t("globalConfig.name"), path: "name", kind: "text" },
-      { label: t("globalConfig.firstCatalog"), path: "firstCatalog", kind: "text" },
+      { label: t("globalConfig.firstCatalog"), path: "firstCatalog", kind: "category" },
     ],
   },
   {
@@ -165,7 +166,7 @@ function handleKeydown(event) {
   if (event.key !== "Tab") {
     return;
   }
-  const focusable = [...(dialogRef.value?.querySelectorAll("button:not(:disabled), input:not(:disabled)") || [])];
+  const focusable = [...(dialogRef.value?.querySelectorAll("button:not(:disabled), input:not(:disabled), select:not(:disabled)") || [])];
   if (!focusable.length) {
     event.preventDefault();
     dialogRef.value?.focus();
@@ -230,6 +231,24 @@ onBeforeUnmount(() => {
                 :disabled="saving"
                 @input="setPath(field.path, $event.target.value)"
               />
+
+              <select
+                v-else-if="field.kind === 'category'"
+                :value="String(getPath(field.path) || '')"
+                :disabled="saving"
+                @change="setPath(field.path, $event.target.value)"
+              >
+                <option value="">{{ t("gameCategories.unassigned") }}</option>
+                <option
+                  v-if="getPath(field.path) && !props.categories.some((category) => String(category.id) === String(getPath(field.path)))"
+                  :value="String(getPath(field.path))"
+                >
+                  {{ getPath(field.path) }}
+                </option>
+                <option v-for="category in props.categories" :key="category.id" :value="String(category.id)">
+                  {{ category.name }}
+                </option>
+              </select>
 
               <input
                 v-else-if="field.kind === 'number'"
@@ -400,7 +419,8 @@ onBeforeUnmount(() => {
 }
 
 .global-config-field input[type="text"],
-.global-config-field input[type="number"] {
+.global-config-field input[type="number"],
+.global-config-field select {
   width: 240px;
   max-width: 100%;
   min-height: 38px;

@@ -6,7 +6,9 @@ const mainSource = await readFile(new URL("../electron/main.cjs", import.meta.ur
 const brandingSource = await readFile(new URL("../electron/application-branding.cjs", import.meta.url), "utf8");
 const preloadSource = await readFile(new URL("../electron/preload.cjs", import.meta.url), "utf8");
 const appSource = await readFile(new URL("../src/App.vue", import.meta.url), "utf8");
+const gameListSource = await readFile(new URL("../src/views/GameListView.vue", import.meta.url), "utf8");
 const applicationSettingsSource = await readFile(new URL("../src/views/ApplicationSettingsView.vue", import.meta.url), "utf8");
+const secondaryDisplaySource = await readFile(new URL("../src/views/SecondaryDisplayView.vue", import.meta.url), "utf8");
 const spiritSource = await readFile(new URL("../src/views/SpiritLibraryView.vue", import.meta.url), "utf8");
 const styleSource = await readFile(new URL("../src/style.css", import.meta.url), "utf8");
 const builder = JSON.parse(await readFile(new URL("../electron-builder.json", import.meta.url), "utf8"));
@@ -47,7 +49,27 @@ test("application icon field identifies the built-in icon as the default", () =>
   assert.doesNotMatch(applicationSettingsSource, /draft\.applicationIconPath \|\| t\(["']common\.unavailable["']\)/);
 });
 
+test("secondary display background is managed through IPC and rendered below existing content", () => {
+  assert.match(applicationSettingsSource, /chooseSecondaryBackground/);
+  assert.match(applicationSettingsSource, /clearSecondaryBackground/);
+  assert.match(preloadSource, /getSecondaryBackground: \(\) => ipcRenderer\.invoke\('secondary-display:background'\)/);
+  assert.match(preloadSource, /chooseSecondaryBackground: \(\) => ipcRenderer\.invoke\('app-settings:choose-secondary-background'\)/);
+  assert.match(mainSource, /installSecondaryDisplayBackground/);
+  assert.match(mainSource, /ipcMain\.handle\('secondary-display:background'/);
+  assert.match(secondaryDisplaySource, /secondary-runtime-background/);
+  assert.match(secondaryDisplaySource, /background-size: 100% 100%/);
+});
+
 test("persisted application title cannot be replaced by the renderer document title", () => {
   assert.match(mainSource, /function preventRendererTitleOverride\(window\)[\s\S]*page-title-updated[\s\S]*preventDefault/);
   assert.equal(mainSource.match(/preventRendererTitleOverride\((?:mainWindow|debugWindow|touchWindow|secondaryWindow)\)/g)?.length, 4);
+});
+
+test("games navigation owns the home and game-list selector", () => {
+  assert.match(appSource, /class="nav-tab nav-game-tab"/);
+  assert.match(appSource, /v-model="gameSection"/);
+  assert.match(appSource, /option value="home"/);
+  assert.match(appSource, /option value="list"/);
+  assert.match(appSource, /:section="gameSection"/);
+  assert.doesNotMatch(gameListSource, /game-section-switcher/);
 });

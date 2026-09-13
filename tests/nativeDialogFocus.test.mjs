@@ -73,5 +73,5 @@ test("native dialogs restore focus when the Electron dialog rejects", async () =
 test("main process routes every file dialog through the focus-restoring boundary", async () => {
   const main = await readFile(new URL("../electron/main.cjs", import.meta.url), "utf8");
   assert.doesNotMatch(main, /await dialog\.show(?:Save|Open)Dialog/);
-  assert.equal((main.match(/showNativeDialogWithFocusRestore\(\{/g) || []).length, 5);
+  assert.equal((main.match(/showNativeDialogWithFocusRestore\(\{/g) || []).length, 6);
 });

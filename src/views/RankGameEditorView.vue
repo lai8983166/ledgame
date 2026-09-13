@@ -4,6 +4,7 @@ import { useI18n } from "vue-i18n";
 import { extractErrorMessage } from "../lib/gameFlowState.js";
 import { createRankEditorPayload } from "../lib/rankGameEditor.js";
 import { confirmWithRendererFocus } from "../lib/rendererFocus.js";
+import { normalizeGameCategoryList } from "../lib/gameCategories.js";
 
 const props = defineProps({
   gameId: { type: [Number, String], required: true },
@@ -19,6 +20,7 @@ const errorMessage = ref("");
 const statusMessage = ref("");
 const validationErrors = ref([]);
 const dirty = ref(false);
+const gameCategories = ref([]);
 const testDialogOpen = ref(false);
 const testOptions = ref({ userCount: 2, stageFailurePolicy: "END_GAME" });
 let hydrating = false;
@@ -37,7 +39,9 @@ const validTestPlayerCount = computed(() => {
 });
 const saveLabel = computed(() => t(busy.value === "save" ? "rank.saving" : "rank.save"));
 
-onMounted(load);
+onMounted(() => {
+  void Promise.all([load(), loadGameCategories()]);
+});
 watch(document, () => {
   if (!hydrating && document.value) {
     dirty.value = true;
@@ -59,6 +63,17 @@ async function load() {
   } finally {
     hydrating = false;
     loading.value = false;
+  }
+}
+
+async function loadGameCategories() {
+  if (!api?.listGameCategories) {
+    return;
+  }
+  try {
+    gameCategories.value = normalizeGameCategoryList(await api.listGameCategories());
+  } catch (_error) {
+    gameCategories.value = [];
   }
 }
 
@@ -247,6 +262,18 @@ function goBack() {
           <label><span>{{ t("rank.displayName") }}</span><input v-model.trim="document.displayName" /></label>
           <label><span>{{ t("rank.description") }}</span><textarea v-model="document.description" rows="3"></textarea></label>
           <label><span>{{ t("rank.cover") }}</span><input v-model.trim="document.cover" /></label>
+          <label><span>{{ t("gameCategories.firstCatalog") }}</span>
+            <select v-model="document.firstCatalog">
+              <option value="">{{ t("gameCategories.unassigned") }}</option>
+              <option
+                v-if="document.firstCatalog && !gameCategories.some((category) => String(category.id) === String(document.firstCatalog))"
+                :value="String(document.firstCatalog)"
+              >
+                {{ document.firstCatalog }}
+              </option>
+              <option v-for="category in gameCategories" :key="category.id" :value="String(category.id)">{{ category.name }}</option>
+            </select>
+          </label>
           <div class="field-pair">
             <label><span>{{ t("rank.width") }}</span><input v-model.number="document.siteSizeWidth" data-rank-field="siteSizeWidth" type="number" min="1" max="128" /></label>
             <label><span>{{ t("rank.height") }}</span><input v-model.number="document.siteSizeHeight" data-rank-field="siteSizeHeight" type="number" min="1" max="128" /></label>

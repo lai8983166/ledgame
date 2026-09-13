@@ -28,7 +28,12 @@ const DEFAULT_PROMPT_TEXTS = {
   "ro-RO": "Pornește jocul",
   "ar-SA": "ابدأ اللعبة",
 };
-const BRAND_DEFAULTS = { applicationTitle: "LED Game", applicationIconPath: null, touchExitPassword: "888888" };
+const BRAND_DEFAULTS = {
+  applicationTitle: "LED Game",
+  applicationIconPath: null,
+  secondaryDisplayBackgroundPath: null,
+  touchExitPassword: "888888",
+};
 
 test("application settings normalize missing and unsupported fields to safe defaults", () => {
   assert.deepEqual(normalizeApplicationSettings(null), {
@@ -158,10 +163,15 @@ test("application title, managed icon and touch exit password persist with safe 
     const saved = await store.update({
       applicationTitle: "  Fun Floor  ",
       applicationIconPath: iconPath,
+      secondaryDisplayBackgroundPath: path.join(directory, "branding", "secondary-display-background.png"),
       touchExitPassword: "123456",
     });
     assert.equal(saved.applicationTitle, "Fun Floor");
     assert.equal(saved.applicationIconPath, path.resolve(iconPath));
+    assert.equal(
+      saved.secondaryDisplayBackgroundPath,
+      path.resolve(directory, "branding", "secondary-display-background.png"),
+    );
     assert.equal(saved.touchExitPassword, "123456");
     assert.deepEqual(await createApplicationSettingsStore({ fs, settingsPath }).get(), saved);
 

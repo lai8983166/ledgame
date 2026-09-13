@@ -29,7 +29,8 @@ const errorMessage = ref("");
 const frameState = ref(createFrameState());
 const hoverCell = ref(null);
 const gameRuntimeState = ref(null);
-const activeView = ref("demo");
+const activeView = ref("games");
+const gameSection = ref("home");
 const selectedEditorGame = ref(null);
 const helpMenuOpen = ref(false);
 const helpDocument = ref(null);
@@ -280,6 +281,11 @@ function openGameEditor(game) {
     errorMessage.value = t("rank.unsupportedEditor");
     activeView.value = "games";
   }
+}
+
+function selectGameSection(value) {
+  gameSection.value = value === "list" ? "list" : "home";
+  activeView.value = "games";
 }
 
 async function openHelpDocument(key, title) {
@@ -560,14 +566,21 @@ function formatRuntimeValue(value, fallback = "-") {
         >
           {{ t("nav.demo") }}
         </button>
-        <button
-          class="nav-tab"
+        <label
+          class="nav-tab nav-game-tab"
           :class="{ active: ['games', 'simple-editor', 'rank-editor'].includes(activeView) }"
-          type="button"
-          @click="activeView = 'games'"
         >
-          {{ t("nav.games") }}
-        </button>
+          <span>{{ t("nav.games") }}</span>
+          <select
+            v-model="gameSection"
+            :aria-label="t('nav.games')"
+            @click.stop
+            @change="selectGameSection($event.target.value)"
+          >
+            <option value="home">{{ t("gameCategories.home") }}</option>
+            <option value="list">{{ t("gameCategories.gameList") }}</option>
+          </select>
+        </label>
         <button
           class="nav-tab"
           :class="{ active: activeView === 'media' }"
@@ -719,7 +732,12 @@ function formatRuntimeValue(value, fallback = "-") {
       @stop-engine="stopEngine"
     />
 
-    <GameListView v-else-if="activeView === 'games'" @open-game="openGameEditor" />
+    <GameListView
+      v-else-if="activeView === 'games'"
+      :section="gameSection"
+      @update:section="selectGameSection"
+      @open-game="openGameEditor"
+    />
 
     <SimpleGameEditorView
       v-else-if="activeView === 'simple-editor'"

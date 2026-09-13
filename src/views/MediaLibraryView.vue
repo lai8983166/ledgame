@@ -14,6 +14,7 @@ const errorMessage = ref("");
 const noticeMessage = ref("");
 const rootExists = ref(true);
 const audioElement = ref(null);
+const isOpeningFolder = ref(false);
 let mounted = false;
 const mediaApi = computed(() => window.mediaLibrary);
 const previewLoader = createLatestAsyncValueLoader({
@@ -155,6 +156,28 @@ async function loadMedia() {
   }
 }
 
+async function openMediaFolder() {
+  if (isOpeningFolder.value) {
+    return;
+  }
+  errorMessage.value = "";
+  noticeMessage.value = "";
+  if (!mediaApi.value?.openFolder) {
+    errorMessage.value = t("media.apiUnavailable");
+    return;
+  }
+
+  isOpeningFolder.value = true;
+  try {
+    await mediaApi.value.openFolder();
+    noticeMessage.value = t("media.folderOpened");
+  } catch (error) {
+    errorMessage.value = error?.message || t("media.openFolderFailed");
+  } finally {
+    isOpeningFolder.value = false;
+  }
+}
+
 function stopAudioPreview() {
   const player = audioElement.value;
   if (!player) {
@@ -196,9 +219,14 @@ onBeforeUnmount(() => {
         <h1>{{ t("media.title") }}</h1>
         <p>{{ t("media.subtitle") }}</p>
       </div>
-      <button class="soft-button media-refresh-button" type="button" :disabled="isLoading" @click="loadMedia">
-        {{ isLoading ? t("common.refreshing") : t("common.refresh") }}
-      </button>
+      <div class="media-heading-actions">
+        <button class="soft-button media-open-folder-button" type="button" :disabled="isOpeningFolder" @click="openMediaFolder">
+          {{ isOpeningFolder ? t("media.openingFolder") : t("media.openFolder") }}
+        </button>
+        <button class="soft-button media-refresh-button" type="button" :disabled="isLoading" @click="loadMedia">
+          {{ isLoading ? t("common.refreshing") : t("common.refresh") }}
+        </button>
+      </div>
     </div>
 
     <div class="media-library-layout">

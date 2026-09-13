@@ -19,6 +19,7 @@ import { createRgbEditHistory } from "../lib/simpleRgbEditHistory.js";
 import { createLatestAsyncTaskGuard } from "../lib/latestAsyncTask.js";
 import { saveSimpleGlobalConfigDocument } from "../lib/simpleGlobalConfig.js";
 import { normalizePixelLightWiring } from "../lib/pixelLightLayout.js";
+import { normalizeGameCategoryList } from "../lib/gameCategories.js";
 import {
   applyEffectToFrameList,
   expandEffectFrames,
@@ -55,6 +56,7 @@ const errorMessage = ref("");
 const statusMessage = ref("");
 const globalConfigOpen = ref(false);
 const globalConfigDraft = ref({});
+const gameCategories = ref([]);
 const pixelLightLayoutOpen = ref(false);
 const pixelLightLayoutDraft = ref({});
 const pixelLightControllerCount = ref(2);
@@ -398,6 +400,7 @@ onMounted(() => {
   setupEditorFitMeasurement();
   setupMatrixContainerObserver();
   loadEditor();
+  void loadGameCategories();
   window.addEventListener("keydown", handleGlobalKeydown);
   window.addEventListener("click", closeContextMenu);
   window.addEventListener("resize", scheduleEditorFitMeasurement);
@@ -435,6 +438,17 @@ onBeforeUnmount(() => {
   cancelZoomFrame();
   cancelMatrixCacheWarmup();
 });
+
+async function loadGameCategories() {
+  if (!api?.listGameCategories) {
+    return;
+  }
+  try {
+    gameCategories.value = normalizeGameCategoryList(await api.listGameCategories());
+  } catch (_error) {
+    gameCategories.value = [];
+  }
+}
 
 watch(
   () => props.gameId,
@@ -3578,6 +3592,7 @@ function formatRuntimeSummary(value) {
     <GameGlobalConfigDialog
       v-if="globalConfigOpen"
       :config="globalConfigDraft"
+      :categories="gameCategories"
       :saving="busyAction === 'save'"
       :error="errorMessage"
       @cancel="globalConfigOpen = false"

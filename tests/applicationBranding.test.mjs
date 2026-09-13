@@ -10,6 +10,7 @@ const require = createRequire(import.meta.url);
 const {
   applyApplicationBrand,
   installApplicationIcon,
+  installSecondaryDisplayBackground,
   toPublicApplicationSettings,
 } = require("../electron/application-branding.cjs");
 const { createApplicationSettingsStore } = require("../electron/application-settings.cjs");
@@ -69,6 +70,30 @@ test("invalid icon copy leaves the previous persisted icon unchanged and cleans 
     assert.equal((await store.get()).applicationIconPath, path.resolve(previous));
     assert.deepEqual(removed, [path.join(directory, "branding", "application-icon-7.png.tmp")]);
     assert.equal(JSON.parse(await readFile(settingsPath, "utf8")).applicationIconPath, path.resolve(previous));
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("secondary display backgrounds are converted to a managed PNG", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "led-game-background-"));
+  const source = path.join(directory, "background.jpg");
+  try {
+    await writeFile(source, "image", "utf8");
+    const target = await installSecondaryDisplayBackground({
+      fs,
+      nativeImage: {
+        createFromPath: () => ({
+          isEmpty: () => false,
+          toPNG: () => Buffer.from("managed-png"),
+        }),
+      },
+      source,
+      userDataPath: directory,
+      now: () => 7,
+    });
+    assert.equal(target, path.join(directory, "branding", "secondary-display-background.png"));
+    assert.deepEqual(await readFile(target), Buffer.from("managed-png"));
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

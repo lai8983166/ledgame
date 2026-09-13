@@ -24,6 +24,7 @@ const saved = ref({
   touchIdlePromptFontSize: 72,
   applicationTitle: "LED Game",
   applicationIconPath: "",
+  secondaryDisplayBackgroundPath: "",
   touchExitPassword: "",
 });
 const draft = reactive({
@@ -35,6 +36,7 @@ const draft = reactive({
   touchIdlePromptFontSize: 72,
   applicationTitle: "LED Game",
   applicationIconPath: "",
+  secondaryDisplayBackgroundPath: "",
   touchExitPassword: "",
 });
 let removeSettingsListener = null;
@@ -57,9 +59,14 @@ const dirty = computed(
     || JSON.stringify(draft.touchIdlePromptTexts) !== JSON.stringify(saved.value.touchIdlePromptTexts)
     || draft.touchIdlePromptFontSize !== saved.value.touchIdlePromptFontSize
     || draft.applicationTitle !== saved.value.applicationTitle
+    || draft.secondaryDisplayBackgroundPath !== saved.value.secondaryDisplayBackgroundPath
     || Boolean(draft.touchExitPassword),
 );
 const applicationIconLabel = computed(() => draft.applicationIconPath || t("management.defaultIcon"));
+const secondaryBackgroundLabel = computed(() => {
+  if (!draft.secondaryDisplayBackgroundPath) return t("management.defaultBackground");
+  return String(draft.secondaryDisplayBackgroundPath).split(/[\\/]/).pop();
+});
 
 onMounted(async () => {
   removeSettingsListener = api?.onChanged?.((settings) => applySettings(settings)) || null;
@@ -115,6 +122,8 @@ function applySettings(settings) {
     applicationTitle: typeof settings?.applicationTitle === "string" && settings.applicationTitle.trim()
       ? settings.applicationTitle.trim() : "LED Game",
     applicationIconPath: typeof settings?.applicationIconPath === "string" ? settings.applicationIconPath : "",
+    secondaryDisplayBackgroundPath: typeof settings?.secondaryDisplayBackgroundPath === "string"
+      ? settings.secondaryDisplayBackgroundPath : "",
     touchExitPassword: "",
   };
   saved.value = normalized;
@@ -126,6 +135,7 @@ function applySettings(settings) {
   draft.touchIdlePromptFontSize = normalized.touchIdlePromptFontSize;
   draft.applicationTitle = normalized.applicationTitle;
   draft.applicationIconPath = normalized.applicationIconPath;
+  draft.secondaryDisplayBackgroundPath = normalized.secondaryDisplayBackgroundPath;
   draft.touchExitPassword = "";
 }
 
@@ -136,6 +146,27 @@ async function chooseApplicationIcon() {
     const result = await api.chooseIcon();
     if (!result?.canceled && result?.settings) applySettings(result.settings);
   } catch (error) { errorMessage.value = error?.message || t("common.operationFailed"); }
+}
+
+async function chooseSecondaryBackground() {
+  if (!api?.chooseSecondaryBackground) return;
+  errorMessage.value = "";
+  try {
+    const result = await api.chooseSecondaryBackground();
+    if (!result?.canceled && result?.settings) applySettings(result.settings);
+  } catch (error) {
+    errorMessage.value = error?.message || t("management.backgroundChooseFailed");
+  }
+}
+
+async function clearSecondaryBackground() {
+  if (!api?.clearSecondaryBackground || !draft.secondaryDisplayBackgroundPath) return;
+  errorMessage.value = "";
+  try {
+    applySettings(await api.clearSecondaryBackground());
+  } catch (error) {
+    errorMessage.value = error?.message || t("management.backgroundClearFailed");
+  }
 }
 
 async function saveSettings() {
@@ -200,6 +231,12 @@ async function testMemberPlatform() {
           <label class="application-settings-field"><span>{{ t('management.appTitle') }}</span><input v-model.trim="draft.applicationTitle" type="text" maxlength="64" /></label>
           <label class="application-settings-field"><span>{{ t('management.exitPassword') }}</span><input v-model="draft.touchExitPassword" v-bind="{ placeholder: t('management.passwordPlaceholder') }" type="password" inputmode="numeric" maxlength="12" /><small>{{ t('management.passwordHint') }}</small></label>
           <div class="application-settings-actions"><button class="application-settings-secondary" type="button" @click="chooseApplicationIcon">{{ t('management.chooseIcon') }}</button><span>{{ applicationIconLabel }}</span></div>
+          <div class="application-settings-actions application-settings-background-actions">
+            <button class="application-settings-secondary" type="button" @click="chooseSecondaryBackground">{{ t('management.chooseSecondaryBackground') }}</button>
+            <span>{{ secondaryBackgroundLabel }}</span>
+            <button v-if="draft.secondaryDisplayBackgroundPath" class="application-settings-secondary" type="button" @click="clearSecondaryBackground">{{ t('management.clearSecondaryBackground') }}</button>
+          </div>
+          <small>{{ t('management.secondaryBackgroundHint') }}</small>
         </fieldset>
         <label class="application-settings-field">
           <span>{{ t("applicationSettings.entryMethod") }}</span>
@@ -394,6 +431,18 @@ async function testMemberPlatform() {
   display: flex;
   align-items: center;
   gap: 14px;
+}
+
+.application-settings-background-actions {
+  flex-wrap: wrap;
+}
+
+.application-settings-background-actions > span {
+  min-width: 0;
+  overflow: hidden;
+  color: #687483;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .application-settings-save {

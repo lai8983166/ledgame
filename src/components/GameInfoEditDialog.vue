@@ -9,6 +9,8 @@ const props = defineProps({
   cover: { type: String, default: "" },
   name: { type: String, default: "" },
   childModeVisible: { type: Boolean, default: true },
+  firstCatalog: { type: String, default: "" },
+  categories: { type: Array, default: () => [] },
   loading: { type: Boolean, default: false },
   saving: { type: Boolean, default: false },
   error: { type: String, default: "" },
@@ -19,6 +21,7 @@ const emit = defineEmits([
   "update:cover",
   "update:name",
   "update:child-mode-visible",
+  "update:first-catalog",
 ]);
 const { t } = useI18n({ useScope: "global" });
 
@@ -61,7 +64,7 @@ function handleKeydown(event) {
     return;
   }
   const focusable = [
-    ...(dialogRef.value?.querySelectorAll("input:not(:disabled), button:not(:disabled)") || []),
+    ...(dialogRef.value?.querySelectorAll("input:not(:disabled), select:not(:disabled), button:not(:disabled)") || []),
   ];
   if (!focusable.length) {
     event.preventDefault();
@@ -117,6 +120,13 @@ onBeforeUnmount(() => {
 
       <div class="game-info-body">
         <label class="game-info-name"><span>{{ t('management.gameName') }}</span><input :value="name" type="text" maxlength="255" @input="emit('update:name', $event.target.value)" /></label>
+        <label class="game-info-category">
+          <span>{{ t('gameCategories.firstCatalog') }}</span>
+          <select :value="firstCatalog" @change="emit('update:first-catalog', $event.target.value)">
+            <option value="">{{ t('gameCategories.unassigned') }}</option>
+            <option v-for="category in categories" :key="category.id" :value="String(category.id)">{{ category.name }}</option>
+          </select>
+        </label>
         <label class="game-info-visibility">
           <input
             :checked="childModeVisible"
@@ -247,6 +257,8 @@ onBeforeUnmount(() => {
 }
 .game-info-name { display: grid; gap: 6px; width: 100%; color: #4f5b69; font-size: 13px; font-weight: 700; }
 .game-info-name input { padding: 10px 12px; border: 1px solid #b9c5d2; border-radius: 6px; background: white; }
+.game-info-category { display: grid; gap: 6px; width: 100%; color: #4f5b69; font-size: 13px; font-weight: 700; }
+.game-info-category select { min-height: 40px; padding: 0 12px; border: 1px solid #b9c5d2; border-radius: 6px; background: white; color: #343d4a; }
 .game-info-visibility { display: flex; align-items: flex-start; gap: 10px; width: 100%; color: #4f5b69; font-size: 13px; }
 .game-info-visibility input { width: 18px; height: 18px; margin-top: 1px; accent-color: #5968e8; }
 .game-info-visibility span { display: grid; gap: 3px; }
