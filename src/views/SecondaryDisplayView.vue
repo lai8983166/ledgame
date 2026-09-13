@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, onUnmounted, ref } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { normalizeRuntimeState } from "../lib/gameFlowState.js";
 import {
@@ -18,12 +18,21 @@ const runtimeState = ref(normalizeRuntimeState(null));
 const loading = ref(true);
 const errorMessage = ref("");
 const backgroundDataUrl = ref("");
+const backgroundElement = ref(null);
 const stateObservedAt = ref(Date.now());
 const clockNow = ref(Date.now());
 let removeStateListener = null;
 let removeSettingsListener = null;
 let clockTimer = null;
 let backgroundLoadRevision = 0;
+
+watch(backgroundDataUrl, (dataUrl) => {
+  const element = backgroundElement.value;
+  if (!element) return;
+  // Keep the large data URL out of the VDOM style patch path. Backgrounds
+  // change rarely, while runtime state updates can happen many times per second.
+  element.style.backgroundImage = dataUrl ? `url(${dataUrl})` : "";
+}, { flush: "post" });
 
 const presentation = computed(() => createSecondaryDisplayPresentation(runtimeState.value, {
   observedAt: stateObservedAt.value,
@@ -122,11 +131,15 @@ function displayValue(value) {
 </script>
 
 <template>
-  <main class="secondary-runtime" :data-state="lifecycle">
+  <main
+    class="secondary-runtime"
+    :class="{ 'secondary-runtime--custom-background': Boolean(backgroundDataUrl) }"
+    :data-state="lifecycle"
+  >
     <div
       v-if="backgroundDataUrl"
+      ref="backgroundElement"
       class="secondary-runtime-background"
-      :style="{ backgroundImage: `url(${backgroundDataUrl})` }"
       aria-hidden="true"
     ></div>
     <div class="secondary-runtime-grid" aria-hidden="true"></div>
@@ -236,9 +249,11 @@ function displayValue(value) {
 </template>
 
 <style scoped>
-.secondary-runtime { position: relative; width: 100vw; height: 100vh; overflow: hidden; color: #f5f8fb; background: #071019; user-select: none; }
+.secondary-runtime { --secondary-panel-alpha: 0.94; --secondary-header-alpha: 0.9; --secondary-result-alpha: 0.91; position: relative; width: 100vw; height: 100vh; overflow: hidden; color: #f5f8fb; background: #071019; user-select: none; }
 .secondary-runtime::before { content: ""; position: absolute; inset: 0 0 auto; height: 7px; background: #26b9d6; box-shadow: 0 0 24px rgba(38, 185, 214, 0.5); }
 .secondary-runtime-background { position: absolute; z-index: 0; inset: 0; pointer-events: none; background-position: center; background-repeat: no-repeat; background-size: 100% 100%; opacity: 0.3; }
+.secondary-runtime--custom-background { --secondary-panel-alpha: 0.7; --secondary-header-alpha: 0.72; --secondary-result-alpha: 0.78; }
+.secondary-runtime--custom-background .secondary-runtime-background { opacity: 0.48; }
 .secondary-runtime-grid { position: absolute; inset: 0; opacity: 0.18; background-image: linear-gradient(rgba(105, 166, 197, 0.16) 1px, transparent 1px), linear-gradient(90deg, rgba(105, 166, 197, 0.16) 1px, transparent 1px); background-size: 52px 52px; }
 .secondary-runtime-content, .secondary-runtime-center { position: relative; z-index: 1; }
 .secondary-runtime-center { height: 100%; display: grid; place-content: center; gap: 12px; padding: 6vh 7vw; text-align: center; }
@@ -249,7 +264,7 @@ function displayValue(value) {
 .game-heading { min-width: 0; }
 .game-heading h1 { max-width: 58vw; overflow: hidden; margin: 7px 0 0; font-size: clamp(34px, 4.5vw, 72px); line-height: 1.05; text-overflow: ellipsis; white-space: nowrap; }
 .header-status { display: flex; align-items: stretch; gap: 12px; }
-.stage-label, .game-time-label, .lifecycle-label { border: 1px solid #315672; border-radius: 6px; background: #102535; }
+.stage-label, .game-time-label, .lifecycle-label { border: 1px solid #315672; border-radius: 6px; background: rgba(16, 37, 53, var(--secondary-header-alpha)); }
 .stage-label { display: flex; align-items: baseline; gap: 12px; padding: 9px 16px; }
 .stage-label span, .game-time-label span { color: #93b5c8; font-weight: 700; }
 .stage-label strong, .game-time-label strong { color: #f4cf64; font-size: clamp(24px, 2.4vw, 40px); }
@@ -260,7 +275,7 @@ function displayValue(value) {
 .secondary-runtime-main.is-obscured { opacity: 0.18; filter: saturate(0.5); }
 .shared-hud { height: 100%; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: clamp(18px, 2.5vw, 42px); align-items: stretch; }
 .shared-hud.has-life { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-.hud-stat { min-width: 0; display: grid; align-content: center; gap: 12px; padding: clamp(24px, 4vw, 58px); border-top: 8px solid #2ebad5; border-radius: 6px; background: rgba(12, 28, 41, 0.94); }
+.hud-stat { min-width: 0; display: grid; align-content: center; gap: 12px; padding: clamp(24px, 4vw, 58px); border-top: 8px solid #2ebad5; border-radius: 6px; background: rgba(12, 28, 41, var(--secondary-panel-alpha)); }
 .hud-stat > span { color: #9fb4c2; font-size: clamp(19px, 1.8vw, 30px); font-weight: 800; }
 .hud-stat > strong { overflow: hidden; font-size: clamp(70px, 10vw, 164px); line-height: 0.95; text-overflow: ellipsis; }
 .hud-stage { border-color: #f2c95e; }
@@ -273,13 +288,13 @@ function displayValue(value) {
 .rank-scoreboard { height: 100%; min-height: 0; display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 2.2vh; }
 .rank-round-summary { display: flex; flex-wrap: wrap; gap: 12px 28px; color: #9ed8f4; font-size: clamp(16px, 1.5vw, 25px); font-weight: 750; }
 .rank-player-grid { min-height: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: clamp(10px, 1.4vw, 22px); }
-.rank-player-card { min-width: 0; overflow: hidden; padding: clamp(14px, 1.8vw, 26px); border-top: 7px solid var(--player-color); border-radius: 5px; background: #0c1c29; }
+.rank-player-card { min-width: 0; overflow: hidden; padding: clamp(14px, 1.8vw, 26px); border-top: 7px solid var(--player-color); border-radius: 5px; background: rgba(12, 28, 41, var(--secondary-panel-alpha)); }
 .rank-player-card header, .rank-player-card > div { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
 .rank-player-card header { margin-bottom: 1.5vh; color: var(--player-color); }
 .rank-player-card header strong { font-size: clamp(28px, 2.8vw, 50px); }
 .rank-player-card > div span { color: #a4b5c2; font-weight: 700; }
 .rank-player-card > div strong { font-size: clamp(29px, 3.5vw, 62px); }
-.result-layer { position: absolute; z-index: 4; inset: clamp(115px, 17vh, 190px) clamp(32px, 5vw, 88px) clamp(28px, 5vh, 66px); display: grid; grid-template-columns: minmax(220px, 0.8fr) minmax(320px, 1.2fr); align-items: center; gap: clamp(20px, 4vw, 72px); overflow: hidden; border-block: 1px solid rgba(99, 205, 225, 0.38); background: rgba(6, 18, 28, 0.91); animation: result-enter 420ms cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.result-layer { position: absolute; z-index: 4; inset: clamp(115px, 17vh, 190px) clamp(32px, 5vw, 88px) clamp(28px, 5vh, 66px); display: grid; grid-template-columns: minmax(220px, 0.8fr) minmax(320px, 1.2fr); align-items: center; gap: clamp(20px, 4vw, 72px); overflow: hidden; border-block: 1px solid rgba(99, 205, 225, 0.38); background: rgba(6, 18, 28, var(--secondary-result-alpha)); animation: result-enter 420ms cubic-bezier(0.2, 0.8, 0.2, 1) both; }
 .result-layer::before { content: ""; position: absolute; inset: 0; border-left: 10px solid #54cce3; pointer-events: none; animation: result-emphasis 2.8s ease-in-out infinite; }
 .result-success::before { border-left-color: #48d99c; }
 .result-failure::before { border-left-color: #f05e7a; }

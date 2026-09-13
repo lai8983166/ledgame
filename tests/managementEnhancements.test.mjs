@@ -58,6 +58,10 @@ test("secondary display background is managed through IPC and rendered below exi
   assert.match(mainSource, /ipcMain\.handle\('secondary-display:background'/);
   assert.match(secondaryDisplaySource, /secondary-runtime-background/);
   assert.match(secondaryDisplaySource, /background-size: 100% 100%/);
+  assert.match(secondaryDisplaySource, /secondary-runtime--custom-background/);
+  assert.match(secondaryDisplaySource, /--secondary-panel-alpha: 0\.7/);
+  assert.match(secondaryDisplaySource, /watch\(backgroundDataUrl/);
+  assert.doesNotMatch(secondaryDisplaySource, /:style="\{ backgroundImage:/);
 });
 
 test("persisted application title cannot be replaced by the renderer document title", () => {
@@ -66,7 +70,8 @@ test("persisted application title cannot be replaced by the renderer document ti
 });
 
 test("games navigation owns the home and game-list selector", () => {
-  assert.match(appSource, /class="nav-tab nav-game-tab"/);
+  assert.match(appSource, /<select[\s\S]*class="nav-tab nav-game-tab"/);
+  assert.doesNotMatch(appSource, /<label[\s\S]*nav-game-tab/);
   assert.match(appSource, /v-model="gameSection"/);
   assert.match(appSource, /option value="home"/);
   assert.match(appSource, /option value="list"/);

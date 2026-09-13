@@ -119,26 +119,33 @@ button {
 }
 
 .nav-game-tab {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-}
-
-.nav-game-tab select {
-  min-width: 78px;
-  min-height: 28px;
-  padding: 0 6px;
-  border: 1px solid #cbd5df;
-  border-radius: 7px;
-  color: #526171;
-  background: #f8fafc;
+  min-width: 106px;
+  min-height: 40px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 14px;
+  color: #7a8492;
+  background: transparent;
+  cursor: pointer;
   font: inherit;
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 650;
+  text-align: center;
+  transition:
+    color 160ms ease,
+    background 160ms ease,
+    box-shadow 160ms ease;
 }
 
-.nav-game-tab select:focus-visible {
+.nav-game-tab.active {
+  color: #343d4a;
+  background: #f2f5f8;
+  box-shadow:
+    7px 7px 14px rgba(176, 185, 198, 0.38),
+    -7px -7px 14px rgba(255, 255, 255, 0.96);
+}
+
+.nav-game-tab:focus-visible {
   outline: 2px solid #4f7eb6;
   outline-offset: 2px;
 }

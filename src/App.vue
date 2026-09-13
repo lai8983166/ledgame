@@ -566,21 +566,17 @@ function formatRuntimeValue(value, fallback = "-") {
         >
           {{ t("nav.demo") }}
         </button>
-        <label
+        <select
+          v-model="gameSection"
           class="nav-tab nav-game-tab"
           :class="{ active: ['games', 'simple-editor', 'rank-editor'].includes(activeView) }"
+          :aria-label="t('nav.games')"
+          @click.stop
+          @change="selectGameSection($event.target.value)"
         >
-          <span>{{ t("nav.games") }}</span>
-          <select
-            v-model="gameSection"
-            :aria-label="t('nav.games')"
-            @click.stop
-            @change="selectGameSection($event.target.value)"
-          >
-            <option value="home">{{ t("gameCategories.home") }}</option>
-            <option value="list">{{ t("gameCategories.gameList") }}</option>
-          </select>
-        </label>
+          <option value="home">{{ t("gameCategories.home") }}</option>
+          <option value="list">{{ t("gameCategories.gameList") }}</option>
+        </select>
         <button
           class="nav-tab"
           :class="{ active: activeView === 'media' }"
