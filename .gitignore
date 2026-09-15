@@ -4,7 +4,7 @@ dist/
 dist-electron/
 build-resources/
 release/
-.build/game-soak-package/
+.build/
 *.log
 .DS_Store
 openspec/
