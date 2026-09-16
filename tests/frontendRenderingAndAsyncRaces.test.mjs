@@ -17,6 +17,10 @@ const matrixCanvasSource = await readFile(
   new URL("../src/components/SimpleMatrixCanvas.vue", import.meta.url),
   "utf8",
 );
+const styleSource = await readFile(
+  new URL("../src/style.css", import.meta.url),
+  "utf8",
+);
 const editorSource = await readFile(
   new URL("../src/views/SimpleGameEditorView.vue", import.meta.url),
   "utf8",
@@ -78,6 +82,26 @@ test("SimpleMatrixCanvas uses the two-phase patch renderer and keeps full redraw
   assert.match(matrixCanvasSource, /import \{ drawTwoPhaseCanvasPatch \}/);
   assert.match(matrixCanvasSource, /drawTwoPhaseCanvasPatch\(context, patchCells/);
   assert.match(matrixCanvasSource, /lastGeometrySignature !== createGeometrySignature\(\)[\s\S]*drawBaseCanvas\(\)/);
+});
+
+test("SimpleMatrixCanvas keeps outside interaction padding stable across editor modes", () => {
+  assert.match(matrixCanvasSource, /outsideRangeLayoutEnabled:\s*\{/);
+  assert.match(
+    matrixCanvasSource,
+    /props\.outsideRangeLayoutEnabled \|\| props\.outsideRangeCreateEnabled/,
+  );
+  assert.match(matrixCanvasSource, /props\.outsideRangeLayoutEnabled,\s*props\.outsideRangePadding/);
+  assert.match(
+    editorSource,
+    /:outside-range-layout-enabled="!panoramaMode"/,
+  );
+  assert.match(editorSource, /const matrixLayoutPaddingCells = computed\(\(\) =>/);
+  assert.match(editorSource, /matrixColumnCount\.value \+ padding \* 2/);
+  assert.match(styleSource, /\.matrix-scroll[\s\S]*scrollbar-gutter:\s*stable both-edges/);
+  assert.match(
+    editorSource,
+    /:outside-range-create-enabled="interactionMode === 'add' && !spriteBrushActive/,
+  );
 });
 
 test("Simple editor can toggle overlap count indicators without changing occupancy", () => {

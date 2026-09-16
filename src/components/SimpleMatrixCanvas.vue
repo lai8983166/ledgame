@@ -36,6 +36,13 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
+  // Keep the interaction canvas footprint stable while the editor switches
+  // between modes. Creation remains controlled by outsideRangeCreateEnabled;
+  // this flag only reserves the same outer padding in layout.
+  outsideRangeLayoutEnabled: {
+    type: Boolean,
+    default: false,
+  },
   outsideRangePadding: {
     type: Number,
     default: 2,
@@ -94,7 +101,9 @@ const canvasHeight = computed(() =>
   props.rowCount ? props.rowCount * props.cellSize + Math.max(0, props.rowCount - 1) * props.gapSize : 0,
 );
 const outsidePaddingCells = computed(() =>
-  props.outsideRangeCreateEnabled ? Math.max(0, Math.floor(props.outsideRangePadding)) : 0,
+  (props.outsideRangeLayoutEnabled || props.outsideRangeCreateEnabled)
+    ? Math.max(0, Math.floor(props.outsideRangePadding))
+    : 0,
 );
 const outsidePaddingPixels = computed(() => outsidePaddingCells.value * stride.value);
 const interactionCanvasWidth = computed(() => canvasWidth.value + outsidePaddingPixels.value * 2);
@@ -153,6 +162,7 @@ watch(
     props.rangeCreateEnabled,
     props.objectDragEnabled,
     props.outsideRangeCreateEnabled,
+    props.outsideRangeLayoutEnabled,
     props.outsideRangePadding,
     props.overlayHighlights,
   ],

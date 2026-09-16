@@ -2134,6 +2134,7 @@ html[data-language-direction="rtl"] :is(input, textarea) {
   height: min(70vh, 780px);
   min-height: 520px;
   overflow: auto;
+  scrollbar-gutter: stable both-edges;
   overscroll-behavior: contain;
   display: grid;
   place-items: center;
@@ -2466,6 +2467,62 @@ html[data-language-direction="rtl"] :is(input, textarea) {
   place-items: center;
 }
 
+.object-actions .object-color-button.active {
+  border-color: var(--object-tool-accent, #70d6b3);
+  background: #e1e6ed;
+  box-shadow:
+    inset 6px 6px 12px rgba(178, 187, 201, 0.48),
+    inset -4px -4px 9px rgba(255, 255, 255, 0.88),
+    0 0 0 2px color-mix(in srgb, var(--object-tool-accent, #70d6b3) 42%, transparent);
+}
+
+.object-actions .object-color-button.active::after,
+.object-actions .object-sprite-button.active::after {
+  content: "✓";
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  display: grid;
+  width: 15px;
+  height: 15px;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.86);
+  border-radius: 50%;
+  color: #fff;
+  background: var(--object-tool-accent, #70d6b3);
+  box-shadow:
+    1px 1px 3px rgba(83, 94, 108, 0.34),
+    inset 1px 1px 2px rgba(255, 255, 255, 0.4);
+  font-size: 10px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.object-actions .object-color-button.active .palette-swatch {
+  box-shadow:
+    inset 2px 2px 4px rgba(255, 255, 255, 0.32),
+    inset -2px -2px 4px rgba(51, 59, 70, 0.24),
+    0 0 0 2px rgba(255, 255, 255, 0.92),
+    0 0 0 4px color-mix(in srgb, var(--object-tool-accent, #70d6b3) 58%, transparent),
+    0 0 10px color-mix(in srgb, var(--object-tool-accent, #70d6b3) 38%, transparent);
+}
+
+.object-actions .object-color-0 {
+  --object-tool-accent: #3f8c63;
+}
+
+.object-actions .object-color-1 {
+  --object-tool-accent: #4f78bb;
+}
+
+.object-actions .object-color-2 {
+  --object-tool-accent: #bc555a;
+}
+
+.object-actions .object-color-3 {
+  --object-tool-accent: #a65c91;
+}
+
 .object-actions .object-color-button .palette-swatch {
   width: 30px;
   height: 30px;
@@ -2482,14 +2539,20 @@ html[data-language-direction="rtl"] :is(input, textarea) {
 }
 
 .object-actions .object-sprite-button {
+  position: relative;
   color: #6f62a8;
 }
 
 .object-actions .object-sprite-button.active {
   color: #4f448d;
+  border-color: #6f62a8;
+  background: #e2deef;
   box-shadow:
-    inset 5px 5px 10px rgba(178, 187, 201, 0.4),
-    inset -5px -5px 10px rgba(255, 255, 255, 0.88);
+    inset 6px 6px 12px rgba(159, 151, 187, 0.42),
+    inset -5px -5px 10px rgba(255, 255, 255, 0.9),
+    0 0 0 2px rgba(111, 98, 168, 0.42),
+    0 0 12px rgba(111, 98, 168, 0.28);
+  --object-tool-accent: #6f62a8;
 }
 
 .object-list-toggle {
@@ -2610,6 +2673,7 @@ html[data-language-direction="rtl"] :is(input, textarea) {
 }
 
 .sprite-preview-card {
+  position: relative;
   display: grid;
   min-width: 0;
   min-height: 142px;
@@ -2625,6 +2689,11 @@ html[data-language-direction="rtl"] :is(input, textarea) {
     -6px -6px 12px rgba(255, 255, 255, 0.82);
   cursor: pointer;
   text-align: left;
+  transition:
+    color 160ms ease,
+    background 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease;
 }
 
 .sprite-preview-card:hover {
@@ -2633,10 +2702,35 @@ html[data-language-direction="rtl"] :is(input, textarea) {
 }
 
 .sprite-preview-card.active {
-  color: #3f8f79;
+  color: #4f448d;
+  border-color: #6f62a8;
+  background: #e2deef;
   box-shadow:
-    inset 5px 5px 10px rgba(178, 187, 201, 0.4),
-    inset -5px -5px 10px rgba(255, 255, 255, 0.88);
+    inset 6px 6px 12px rgba(159, 151, 187, 0.42),
+    inset -5px -5px 10px rgba(255, 255, 255, 0.9),
+    0 0 0 2px rgba(111, 98, 168, 0.42),
+    0 0 14px rgba(111, 98, 168, 0.3);
+}
+
+.sprite-preview-card.active::after {
+  content: "✓";
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  display: grid;
+  width: 17px;
+  height: 17px;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  border-radius: 50%;
+  color: #fff;
+  background: #6f62a8;
+  box-shadow:
+    1px 1px 3px rgba(83, 94, 108, 0.34),
+    inset 1px 1px 2px rgba(255, 255, 255, 0.4);
+  font-size: 11px;
+  font-weight: 900;
+  line-height: 1;
 }
 
 .sprite-preview-card strong,

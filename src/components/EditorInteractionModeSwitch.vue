@@ -163,14 +163,41 @@ function handleKeydown(event, index, option) {
 
 .editor-mode-option.selected {
   margin-top: 5px;
-  border-top-color: #70d6b3;
+  border-color: #70d6b3;
   border-radius: 0 0 4px 4px;
   box-shadow:
+    inset 7px 7px 13px rgba(178, 187, 201, 0.42),
+    inset -6px -6px 12px rgba(255, 255, 255, 0.86),
     inset 0 -18px 14px rgba(178, 187, 201, 0.3),
     4px 4px 8px rgba(178, 187, 201, 0.22),
-    -4px -4px 8px rgba(255, 255, 255, 0.72);
+    -4px -4px 8px rgba(255, 255, 255, 0.72),
+    0 0 0 2px rgba(112, 214, 179, 0.42),
+    0 0 12px rgba(112, 214, 179, 0.3);
+  background: #e1e9e8;
   transform: perspective(200px) rotateX(-14deg);
   transform-origin: 50% 40%;
+}
+
+.editor-mode-option.selected::after {
+  content: "✓";
+  position: absolute;
+  top: 4px;
+  right: 6px;
+  z-index: 3;
+  display: grid;
+  width: 15px;
+  height: 15px;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.86);
+  border-radius: 50%;
+  color: #fff;
+  background: #3f8f79;
+  box-shadow:
+    1px 1px 3px rgba(83, 94, 108, 0.34),
+    inset 1px 1px 2px rgba(255, 255, 255, 0.4);
+  font-size: 10px;
+  font-weight: 900;
+  line-height: 1;
 }
 
 .editor-mode-option.selected .editor-mode-back-side {

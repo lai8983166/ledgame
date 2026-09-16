@@ -122,6 +122,7 @@ let lastLayoutDiagnostic = "";
 let editorMounted = false;
 
 const PANORAMA_PADDING = 8;
+const EDITOR_OUTSIDE_RANGE_PADDING = 2;
 
 // Matrix auto-fit: the matrix canvas is sized from these container measurements so it
 // fills the .matrix-scroll column instead of using a fixed 18px cell. matrixZoom remains
@@ -204,12 +205,16 @@ const matrixRows = computed(() => createRange(matrixRange.value.minY, matrixRang
 const matrixColumns = computed(() => createRange(matrixRange.value.minX, matrixRange.value.maxX));
 const matrixRowCount = computed(() => matrixRows.value.length);
 const matrixColumnCount = computed(() => matrixColumns.value.length);
+const matrixLayoutPaddingCells = computed(() =>
+  panoramaMode.value ? 0 : EDITOR_OUTSIDE_RANGE_PADDING,
+);
 const autoFitMatrixCell = computed(() => {
   // Pick the largest square cell that fits the measured .matrix-scroll content area in
   // BOTH dimensions. total = n*cell + (n-1)*gap, gap≈cell*MATRIX_GAP_RATIO
   //   => cell*(n + MATRIX_GAP_RATIO*(n-1)) ≤ avail  =>  cell ≤ avail / (n + MATRIX_GAP_RATIO*(n-1))
-  const cols = Math.max(1, matrixColumnCount.value);
-  const rows = Math.max(1, matrixRowCount.value);
+  const padding = matrixLayoutPaddingCells.value;
+  const cols = Math.max(1, matrixColumnCount.value + padding * 2);
+  const rows = Math.max(1, matrixRowCount.value + padding * 2);
   const availW = Math.max(0, matrixContainerWidth.value - 2 * MATRIX_SCROLL_PADDING);
   const availH = Math.max(0, matrixContainerHeight.value - 2 * MATRIX_SCROLL_PADDING);
   if (!availW && !availH) {
@@ -3393,6 +3398,8 @@ function formatRuntimeSummary(value) {
             :show-overlap-indicator="showOverlapIndicators"
             :range-create-enabled="interactionMode === 'add' && !spriteBrushActive && !selectionMode && !anchorEditMode"
             :object-drag-enabled="interactionMode === 'select-move' && !selectionMode && !anchorEditMode"
+            :outside-range-layout-enabled="!panoramaMode"
+            :outside-range-padding="EDITOR_OUTSIDE_RANGE_PADDING"
             :outside-range-create-enabled="interactionMode === 'add' && !spriteBrushActive && !panoramaMode && !selectionMode && !anchorEditMode"
             @cell-click="handleCellClick"
             @cell-range-create="handleCellRangeCreate"
@@ -3454,10 +3461,14 @@ function formatRuntimeSummary(value) {
                   v-for="color in colorOptions"
                   :key="color.index"
                   class="palette-option object-color-button"
-                  :class="{ active: selectedColor === color.index }"
+                  :class="[
+                    { active: !spriteBrushActive && selectedColor === color.index },
+                    `object-color-${color.index}`,
+                  ]"
                   :disabled="colorSelectionDisabled"
                   :title="color.label"
                   :aria-label="color.label"
+                  :aria-pressed="!spriteBrushActive && selectedColor === color.index"
                   type="button"
                   @click="selectColor(color.index)"
                 >
@@ -3714,7 +3725,9 @@ function formatRuntimeSummary(value) {
           <div class="editor-side-rail">
             <div class="editor-side-section">
               <div class="editor-meta">
-                <p>{{ t("simple.currentBrush", { color: selectedColor }) }}</p>
+                <p>
+                  {{ spriteBrushActive ? t("simple.spriteBrush") : t("simple.currentBrush", { color: selectedColor }) }}
+                </p>
                 <p>{{ t("simple.matrix", { width: matrixWidth, height: matrixHeight }) }}</p>
                 <p>{{ t("simple.zoom", { value: Math.round(matrixZoom * 100) }) }}</p>
                 <p>{{ t("simple.objectCount", { count: frameObjects.length }) }}</p>
