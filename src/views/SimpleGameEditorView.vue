@@ -2,6 +2,8 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, toRaw, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import EditorInteractionModeSwitch from "../components/EditorInteractionModeSwitch.vue";
+import EditorActionIcon from "../components/EditorActionIcon.vue";
+import EditorSpritePreview from "../components/EditorSpritePreview.vue";
 import SimpleMatrixCanvas from "../components/SimpleMatrixCanvas.vue";
 import SimpleLevelPreviewDialog from "../components/SimpleLevelPreviewDialog.vue";
 import GameGlobalConfigDialog from "../components/GameGlobalConfigDialog.vue";
@@ -24,6 +26,7 @@ import {
   applyEffectToFrameList,
   expandEffectFrames,
   normalizeEffectConfig,
+  normalizeEffectSprite,
 } from "../lib/effectEditor.js";
 import {
   runGuardedFrameSequence,
@@ -77,6 +80,9 @@ const activeLevelIndex = ref(0);
 const activeFrameIndex = ref(0);
 const selectedColor = ref(0);
 const interactionMode = ref("select-move");
+const spriteBrushActive = ref(false);
+const spriteSearchText = ref("");
+const selectedSpriteId = ref("");
 const matrixZoom = ref(1);
 const showOverlapIndicators = ref(true);
 const draggingFrameProgress = ref(false);
@@ -87,6 +93,7 @@ const panoramaMode = ref(false);
 const selectionMode = ref(false);
 const mergeSelectionIds = ref([]);
 const anchorEditMode = ref(false);
+const showObjectList = ref(false);
 const anchorCandidate = ref(null);
 const objectIdCounter = ref(0);
 const contextMenu = ref({ visible: false, x: 0, y: 0 });
@@ -225,6 +232,35 @@ const interactionModeOptions = computed(() => [
   { value: "add", label: t("simple.modeAdd"), icon: "+", title: t("simple.modeAddTitle") },
   { value: "select-move", label: t("simple.modeSelectMove"), icon: "↖", title: t("simple.modeSelectTitle") },
 ]);
+const normalizedEditorSprites = computed(() =>
+  effectSpirits.value
+    .map((sprite) => normalizeEffectSprite(sprite))
+    .filter((sprite) => sprite?.id && sprite.name && sprite.points.length),
+);
+const spriteDimensionFilter = computed(() => {
+  const parts = String(spriteSearchText.value || "").trim().split(/\s+/).filter(Boolean);
+  if (parts.length !== 2 || !parts.every((part) => /^\d+$/.test(part))) {
+    return null;
+  }
+  const width = Number(parts[0]);
+  const height = Number(parts[1]);
+  if (!Number.isSafeInteger(width) || !Number.isSafeInteger(height) || width < 1 || height < 1) {
+    return null;
+  }
+  return { width, height };
+});
+const filteredEditorSprites = computed(() => {
+  const dimensions = spriteDimensionFilter.value;
+  if (!dimensions) {
+    return [];
+  }
+  return normalizedEditorSprites.value.filter(
+    (sprite) => sprite.width === dimensions.width && sprite.height === dimensions.height,
+  );
+});
+const selectedEditorSprite = computed(() =>
+  filteredEditorSprites.value.find((sprite) => sprite.id === selectedSpriteId.value) || null,
+);
 const matrixCells = computed(() => {
   matrixCacheRevision.value;
   const frame = previewFrame.value;
@@ -401,6 +437,7 @@ onMounted(() => {
   setupMatrixContainerObserver();
   loadEditor();
   void loadGameCategories();
+  void loadEffectSpirits();
   window.addEventListener("keydown", handleGlobalKeydown);
   window.addEventListener("click", closeContextMenu);
   window.addEventListener("resize", scheduleEditorFitMeasurement);
@@ -460,6 +497,16 @@ watch(
   },
 );
 
+watch(
+  filteredEditorSprites,
+  (sprites) => {
+    if (!sprites.some((sprite) => sprite.id === selectedSpriteId.value)) {
+      selectedSpriteId.value = "";
+    }
+  },
+  { flush: "post" },
+);
+
 async function loadEditor() {
   const gameId = currentGameId.value;
   const loadTicket = editorLoadGuard.begin(gameId);
@@ -486,6 +533,9 @@ async function loadEditor() {
     activeFrameIndex.value = 0;
     selectedColor.value = 0;
     interactionMode.value = "select-move";
+    spriteBrushActive.value = false;
+    spriteSearchText.value = "";
+    selectedSpriteId.value = "";
     selectedObjectId.value = "";
     stopSelectionMode();
     panoramaMode.value = false;
@@ -1789,7 +1839,28 @@ function selectColor(index) {
   if (colorSelectionDisabled.value) {
     return;
   }
+  spriteBrushActive.value = false;
   selectedColor.value = index;
+}
+
+function toggleSpriteBrush() {
+  if (selectionMode.value || anchorEditMode.value) {
+    return;
+  }
+  spriteBrushActive.value = !spriteBrushActive.value;
+  interactionMode.value = "add";
+  objectDragState = null;
+  objectDragPreview.value = null;
+  hoveredObjectId.value = "";
+  stopSelectionMode();
+  stopAnchorEdit();
+  statusMessage.value = t(
+    spriteBrushActive.value ? "simple.spriteBrushEnabled" : "simple.addModeStatus",
+  );
+}
+
+function selectEditorSprite(sprite) {
+  selectedSpriteId.value = sprite?.id || "";
 }
 
 function setInteractionMode(mode) {
@@ -1797,6 +1868,9 @@ function setInteractionMode(mode) {
     return;
   }
   interactionMode.value = mode;
+  if (mode !== "add") {
+    spriteBrushActive.value = false;
+  }
   objectDragState = null;
   objectDragPreview.value = null;
   hoveredObjectId.value = "";
@@ -1834,6 +1908,25 @@ function handleCellClick(x, y) {
     statusMessage.value = t("simple.realCellsOnly");
     return;
   }
+  if (spriteBrushActive.value) {
+    const sprite = selectedEditorSprite.value;
+    if (!sprite) {
+      statusMessage.value = t("simple.spriteRequired");
+      return;
+    }
+    const object = createSpriteMatrixObject(x, y, sprite, frame);
+    if (!panoramaMode.value && !isObjectInsideRealMatrix(object)) {
+      statusMessage.value = t("simple.spriteOutOfBounds");
+      return;
+    }
+    runRgbEdit(currentFrameRgbHistoryTargets(), "create-sprite-object", () => {
+      frame.matrix.push(object);
+      patchMatrixFrame(frame, object, "add");
+      selectedObjectId.value = object.id;
+    });
+    statusMessage.value = t("simple.spriteCreated", { name: sprite.name });
+    return;
+  }
   runRgbEdit(currentFrameRgbHistoryTargets(), "create-object", () => {
     const object = createMatrixObject(x, y, selectedColor.value, frame);
     frame.matrix.push(object);
@@ -1844,7 +1937,7 @@ function handleCellClick(x, y) {
 }
 
 function handleCellRangeCreate(payload) {
-  if (interactionMode.value !== "add" || anchorEditMode.value || selectionMode.value) {
+  if (interactionMode.value !== "add" || spriteBrushActive.value || anchorEditMode.value || selectionMode.value) {
     return;
   }
   const frame = ensureActiveFrame();
@@ -2603,6 +2696,16 @@ function createMatrixObject(x, y, color, frame) {
   };
 }
 
+function createSpriteMatrixObject(x, y, sprite, frame) {
+  return {
+    id: createUniqueObjectId(frame, activeFrameIndex.value),
+    x,
+    y,
+    color: clampColorIndex(sprite.color),
+    points: sprite.points.map(([pointX, pointY]) => [toInteger(pointX, 0), toInteger(pointY, 0)]),
+  };
+}
+
 function createUniqueObjectId(frame, frameIndex) {
   const usedIds = new Set((frame?.matrix || []).map((object) => object?.id).filter(Boolean));
   let id = "";
@@ -3288,9 +3391,9 @@ function formatRuntimeSummary(value) {
             :base-patch-version="matrixBasePatchVersion"
             :overlay-highlights="matrixOverlayHighlights"
             :show-overlap-indicator="showOverlapIndicators"
-            :range-create-enabled="interactionMode === 'add' && !selectionMode && !anchorEditMode"
+            :range-create-enabled="interactionMode === 'add' && !spriteBrushActive && !selectionMode && !anchorEditMode"
             :object-drag-enabled="interactionMode === 'select-move' && !selectionMode && !anchorEditMode"
-            :outside-range-create-enabled="interactionMode === 'add' && !panoramaMode && !selectionMode && !anchorEditMode"
+            :outside-range-create-enabled="interactionMode === 'add' && !spriteBrushActive && !panoramaMode && !selectionMode && !anchorEditMode"
             @cell-click="handleCellClick"
             @cell-range-create="handleCellRangeCreate"
             @object-drag-start="handleObjectDragStart"
@@ -3324,150 +3427,230 @@ function formatRuntimeSummary(value) {
           <div class="object-panel">
             <div class="object-panel-head">
               <h2>{{ t("simple.objects") }}</h2>
-              <p>{{ t("simple.itemCount", { count: frameObjects.length }) }}</p>
+              <div class="object-panel-head-actions">
+                <p>{{ t("simple.itemCount", { count: frameObjects.length }) }}</p>
+                <button
+                  class="soft-button compact-button object-list-toggle"
+                  type="button"
+                  :aria-label="t(showObjectList ? 'simple.showSpritePreview' : 'simple.showObjects')"
+                  :aria-pressed="showObjectList"
+                  :title="t(showObjectList ? 'simple.showSpritePreview' : 'simple.showObjects')"
+                  @click="showObjectList = !showObjectList"
+                >
+                  <EditorActionIcon :name="showObjectList ? 'sprite' : 'layers'" />
+                </button>
+              </div>
+            </div>
+            <div class="object-edit-controls">
+              <EditorInteractionModeSwitch
+                :model-value="interactionMode"
+                :options="interactionModeOptions"
+                @update:model-value="setInteractionMode"
+              />
             </div>
             <div class="object-actions">
-              <template v-if="anchorEditMode">
+              <div class="object-action-palette" :aria-label="t('simple.color')" role="group">
                 <button
-                  class="soft-button compact-button"
+                  v-for="color in colorOptions"
+                  :key="color.index"
+                  class="palette-option object-color-button"
+                  :class="{ active: selectedColor === color.index }"
+                  :disabled="colorSelectionDisabled"
+                  :title="color.label"
+                  :aria-label="color.label"
                   type="button"
-                  @click="confirmAnchorEdit"
+                  @click="selectColor(color.index)"
                 >
-                  {{ t("simple.confirm") }}
+                  <span class="palette-swatch" :style="{ backgroundColor: color.value }"></span>
+                  <span class="palette-label">{{ color.label }}</span>
                 </button>
                 <button
-                  class="soft-button compact-button"
+                  class="soft-button compact-button object-icon-button object-sprite-button"
+                  :class="{ active: spriteBrushActive }"
+                  :disabled="selectionMode || anchorEditMode"
                   type="button"
+                  :title="t('simple.spriteBrushTitle')"
+                  :aria-label="t('simple.spriteBrush')"
+                  :aria-pressed="spriteBrushActive"
+                  @click="toggleSpriteBrush"
+                >
+                  <EditorActionIcon name="sprite" />
+                </button>
+              </div>
+              <template v-if="anchorEditMode">
+                <button
+                  class="soft-button compact-button object-icon-button"
+                  type="button"
+                  :aria-label="t('simple.confirm')"
+                  :title="t('simple.confirm')"
+                  @click="confirmAnchorEdit"
+                >
+                  <EditorActionIcon name="check" />
+                </button>
+                <button
+                  class="soft-button compact-button object-icon-button"
+                  type="button"
+                  :aria-label="t('simple.cancel')"
+                  :title="t('simple.cancel')"
                   @click="stopAnchorEdit"
                 >
-                  {{ t("simple.cancel") }}
+                  <EditorActionIcon name="close" />
                 </button>
               </template>
               <template v-else>
                 <button
-                  class="soft-button compact-button"
+                  class="soft-button compact-button object-icon-button"
                   :disabled="!selectedObject"
                   type="button"
+                  :aria-label="t('simple.rotateLeft')"
+                  :title="t('simple.rotateLeft')"
                   @click="rotateSelectedObjectCounterClockwise"
                 >
-                  {{ t("simple.rotateLeft") }}
+                  <EditorActionIcon name="rotate-left" />
                 </button>
                 <button
-                  class="soft-button compact-button"
+                  class="soft-button compact-button object-icon-button"
                   :disabled="!selectedObject"
                   type="button"
+                  :aria-label="t('simple.rotateRight')"
+                  :title="t('simple.rotateRight')"
                   @click="rotateSelectedObjectClockwise"
                 >
-                  {{ t("simple.rotateRight") }}
+                  <EditorActionIcon name="rotate-right" />
                 </button>
                 <button
-                  class="soft-button compact-button"
+                  class="soft-button compact-button object-icon-button"
                   :disabled="!selectedObject"
                   type="button"
+                  :aria-label="t('simple.editAnchor')"
+                  :title="t('simple.editAnchor')"
                   @click="startAnchorEdit"
                 >
-                  {{ t("simple.editAnchor") }}
+                  <EditorActionIcon name="anchor" />
                 </button>
                 <button
-                  class="soft-button compact-button layer-symbol-button"
+                  class="soft-button compact-button object-icon-button layer-symbol-button"
                   :disabled="!selectedObjectCanMoveUp"
                   type="button"
                   :title="t('simple.layerUpTitle')"
                   :aria-label="t('simple.layerUp')"
                   @click="moveSelectedObjectLayerUp"
                 >
-                  +
+                  <EditorActionIcon name="layer-up" />
                 </button>
                 <button
-                  class="soft-button compact-button layer-symbol-button"
+                  class="soft-button compact-button object-icon-button layer-symbol-button"
                   :disabled="!selectedObjectCanMoveDown"
                   type="button"
                   :title="t('simple.layerDownTitle')"
                   :aria-label="t('simple.layerDown')"
                   @click="moveSelectedObjectLayerDown"
                 >
-                  -
+                  <EditorActionIcon name="layer-down" />
                 </button>
                 <button
-                  class="soft-button compact-button layer-symbol-button"
+                  class="soft-button compact-button object-icon-button layer-symbol-button"
                   :disabled="!selectedObject"
                   type="button"
                   :title="t('simple.applyLayer')"
                   :aria-label="t('simple.applyLayer')"
                   @click="applySelectedObjectLayerToAllFrames"
                 >
-                  ⇅
+                  <EditorActionIcon name="layers" />
                 </button>
                 <button
-                  class="soft-button compact-button"
+                  class="soft-button compact-button object-icon-button"
                   :disabled="!selectedObject"
                   type="button"
+                  :aria-label="t('simple.recolor')"
+                  :title="t('simple.recolor')"
                   @click="applyBrushColorToSelectedObject"
                 >
-                  {{ t("simple.recolor") }}
+                  <EditorActionIcon name="palette" />
                 </button>
                 <button
-                  class="soft-button compact-button"
+                  class="soft-button compact-button object-icon-button"
                   :disabled="!selectedObject || activeFrameIndex <= 0"
                   type="button"
+                  :aria-label="t('simple.copyPrevious')"
+                  :title="t('simple.copyPrevious')"
                   @click="copySelectedObjectToPreviousFrame"
                 >
-                  {{ t("simple.copyPrevious") }}
+                  <EditorActionIcon name="copy-previous" />
                 </button>
                 <button
-                  class="soft-button compact-button"
+                  class="soft-button compact-button object-icon-button"
                   :disabled="!selectedObject || activeFrameIndex >= frames.length - 1"
                   type="button"
+                  :aria-label="t('simple.copyNext')"
+                  :title="t('simple.copyNext')"
                   @click="copySelectedObjectToNextFrame"
                 >
-                  {{ t("simple.copyNext") }}
+                  <EditorActionIcon name="copy-next" />
                 </button>
                 <button
-                  class="soft-button compact-button"
+                  class="soft-button compact-button object-icon-button"
                   :disabled="!selectedObject || frames.length <= 1"
                   type="button"
+                  :aria-label="t('simple.copyAll')"
+                  :title="t('simple.copyAll')"
                   @click="copySelectedObjectToAllFrames"
                 >
-                  {{ t("simple.copyAll") }}
+                  <EditorActionIcon name="copy-all" />
                 </button>
                 <button
-                  class="soft-button compact-button"
+                  class="soft-button compact-button object-icon-button object-danger-button"
                   :disabled="!selectedObject"
                   type="button"
+                  :aria-label="t('simple.delete')"
+                  :title="t('simple.delete')"
                   @click="deleteSelectedObject"
                 >
-                  {{ t("simple.delete") }}
+                  <EditorActionIcon name="trash" />
                 </button>
               </template>
               <button
-                class="soft-button compact-button color-copy-button"
+                class="soft-button compact-button object-icon-button color-copy-button color-copy-green"
                 :disabled="frames.length <= 1 || frameColorObjectCounts[0] === 0"
                 type="button"
                 :title="t('simple.greenCopyTitle')"
+                :aria-label="t('simple.greenToAll')"
                 @click="copyColorObjectsToAllFrames(0)"
               >
-                {{ t("simple.greenToAll") }}
+                <EditorActionIcon name="copy-color" />
               </button>
               <button
-                class="soft-button compact-button color-copy-button"
+                class="soft-button compact-button object-icon-button color-copy-button color-copy-blue"
                 :disabled="frames.length <= 1 || frameColorObjectCounts[1] === 0"
                 type="button"
                 :title="t('simple.blueCopyTitle')"
+                :aria-label="t('simple.blueToAll')"
                 @click="copyColorObjectsToAllFrames(1)"
               >
-                {{ t("simple.blueToAll") }}
+                <EditorActionIcon name="copy-color" />
               </button>
               <button
-                class="soft-button compact-button color-copy-button"
+                class="soft-button compact-button object-icon-button color-copy-button color-copy-red"
+                :disabled="frames.length <= 1 || frameColorObjectCounts[2] === 0"
+                type="button"
+                :title="t('simple.redCopyTitle')"
+                :aria-label="t('simple.redToAll')"
+                @click="copyColorObjectsToAllFrames(2)"
+              >
+                <EditorActionIcon name="copy-color" />
+              </button>
+                <button
+                  class="soft-button compact-button object-icon-button color-copy-button color-copy-pink"
                 :disabled="frames.length <= 1 || frameColorObjectCounts[3] === 0"
                 type="button"
                 :title="t('simple.pinkCopyTitle')"
+                :aria-label="t('simple.pinkToAll')"
                 @click="copyColorObjectsToAllFrames(3)"
               >
-                {{ t("simple.pinkToAll") }}
+                <EditorActionIcon name="copy-color" />
               </button>
             </div>
-            <div class="object-list">
+            <div v-if="showObjectList" class="object-list">
               <button
                 v-for="object in frameObjects"
                 :key="object.id"
@@ -3491,29 +3674,45 @@ function formatRuntimeSummary(value) {
                 </span>
               </button>
             </div>
+            <div v-else class="sprite-preview-panel">
+              <div class="sprite-preview-heading">
+                <strong>{{ t("simple.spritePreview") }}</strong>
+                <small v-if="spriteDimensionFilter">{{ t("simple.spritePreviewCount", { count: filteredEditorSprites.length }) }}</small>
+              </div>
+              <input
+                v-model="spriteSearchText"
+                class="sprite-dimension-search"
+                type="text"
+                inputmode="numeric"
+                :placeholder="t('simple.spriteSearchPlaceholder')"
+                :aria-label="t('simple.spriteSearch')"
+              />
+              <p v-if="effectSpiritLoadFailed" class="sprite-preview-empty">{{ t("effect.spiritLoadFailed") }}</p>
+              <p v-else-if="!spriteDimensionFilter" class="sprite-preview-empty">{{ t("simple.spriteSearchHint") }}</p>
+              <p v-else-if="!filteredEditorSprites.length" class="sprite-preview-empty">{{ t("simple.spriteNoMatch") }}</p>
+              <div v-else class="sprite-preview-grid">
+                <button
+                  v-for="sprite in filteredEditorSprites"
+                  :key="sprite.id"
+                  class="sprite-preview-card"
+                  :class="{ active: selectedSpriteId === sprite.id }"
+                  type="button"
+                  :aria-label="sprite.name"
+                  :aria-pressed="selectedSpriteId === sprite.id"
+                  @click="selectEditorSprite(sprite)"
+                >
+                  <EditorSpritePreview
+                    :sprite="sprite"
+                    :color="colorOptions[sprite.color]?.value || '#70d6b3'"
+                  />
+                  <strong>{{ sprite.name }}</strong>
+                  <small>{{ sprite.width }} × {{ sprite.height }} · {{ sprite.points.length }} {{ t("simple.spritePointsUnit") }}</small>
+                </button>
+              </div>
+            </div>
           </div>
           <div class="editor-side-rail">
             <div class="editor-side-section">
-              <h2>{{ t("simple.brush") }}</h2>
-              <EditorInteractionModeSwitch
-                :model-value="interactionMode"
-                :options="interactionModeOptions"
-                @update:model-value="setInteractionMode"
-              />
-              <div class="palette-options">
-                <button
-                  v-for="color in colorOptions"
-                  :key="color.index"
-                  class="palette-option"
-                  :class="{ active: selectedColor === color.index }"
-                  :disabled="colorSelectionDisabled"
-                  type="button"
-                  @click="selectColor(color.index)"
-                >
-                  <span class="palette-swatch" :style="{ backgroundColor: color.value }"></span>
-                  <span>{{ color.label }}</span>
-                </button>
-              </div>
               <div class="editor-meta">
                 <p>{{ t("simple.currentBrush", { color: selectedColor }) }}</p>
                 <p>{{ t("simple.matrix", { width: matrixWidth, height: matrixHeight }) }}</p>
