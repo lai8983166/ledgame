@@ -141,6 +141,25 @@ const canConfirm = computed(() =>
 const terminated = computed(() => hasTermination(runtimeState.value));
 const resultSucceeded = computed(() => runtimeState.value.success === true);
 const gameplay = computed(() => runtimeState.value.gameplay || {});
+const isRankGameplay = computed(
+  () => runtimeState.value.gameType === "rank" || gameplay.value.type === "rank",
+);
+const rankPlayers = computed(() =>
+  Array.isArray(gameplay.value.players) ? gameplay.value.players : [],
+);
+const rankRemainingTimeLabel = computed(() => {
+  const gameplayRemainingMillis = gameplay.value.remainingMillis == null
+    ? Number.NaN
+    : Number(gameplay.value.remainingMillis);
+  if (Number.isFinite(gameplayRemainingMillis)) {
+    return formatRemainingTime(Math.ceil(Math.max(0, gameplayRemainingMillis) / 1000));
+  }
+  const gameTime = runtimeState.value.gameTime;
+  if (gameTime?.mode === "LIMITED" && Number.isFinite(gameTime.remainingMillis)) {
+    return formatRemainingTime(Math.ceil(Math.max(0, gameTime.remainingMillis) / 1000));
+  }
+  return t("secondaryDisplay.unlimited");
+});
 const isGamePresentation = computed(() => presentationMode.value === "game");
 const preparationStepTimeoutVisible = computed(() =>
   isTouchPreparationStepTimeoutActive({
@@ -1807,6 +1826,7 @@ async function confirmReturnToIdle() {
     <section
       v-else-if="view === 'RUNNING'"
       class="touch-center touch-status-panel"
+      :class="{ 'touch-rank-status-panel': !isGamePresentation && isRankGameplay }"
     >
       <span class="touch-kicker">RUNNING</span>
       <h1>
@@ -1824,15 +1844,62 @@ async function confirmReturnToIdle() {
         <span><small>{{ t("touch.expiryTime") }}</small><strong>{{ playerAccessExpiryLabel }}</strong></span>
         <span><small>{{ t("touch.wristbandBalance") }}</small><strong>{{ playerAccessRemainingLabel }}</strong></span>
       </div>
+      <section
+        v-if="!isGamePresentation && isRankGameplay"
+        class="touch-rank-live-panel"
+        data-testid="touch-rank-debug-hud"
+      >
+        <header class="touch-rank-live-header">
+          <span>{{ t("rankSecondary.round", { value: gameplay.roundId ?? "--" }) }}</span>
+          <span>
+            {{ t("secondaryDisplay.gameRemaining") }}
+            <strong>{{ rankRemainingTimeLabel }}</strong>
+          </span>
+        </header>
+        <div class="touch-rank-player-grid">
+          <article
+            v-for="player in rankPlayers"
+            :key="player.playerNumber"
+            class="touch-rank-player-card"
+            :style="{ '--touch-player-color': player.color || '#38a4d8' }"
+          >
+            <header>
+              <span class="touch-rank-player-identity">
+                <i class="touch-rank-player-dot" aria-hidden="true"></i>
+                <strong>{{ player.playerNumber }}P</strong>
+              </span>
+              <span>
+                {{ player.tied
+                  ? t("rankSecondary.tiedRank", { value: player.rank ?? "--" })
+                  : t("rankSecondary.rank", { value: player.rank ?? "--" }) }}
+              </span>
+            </header>
+            <div>
+              <span>{{ t("rankSecondary.stageScore") }}</span>
+              <strong>{{ player.stageScore ?? 0 }}</strong>
+            </div>
+            <div>
+              <span>{{ t("rankSecondary.totalScore") }}</span>
+              <strong>{{ player.totalScore ?? 0 }}</strong>
+            </div>
+            <div>
+              <span>{{ t("secondaryDisplay.memberPoints") }}</span>
+              <strong>{{ player.memberPoints ?? 0 }}</strong>
+            </div>
+          </article>
+        </div>
+      </section>
       <div v-if="!isGamePresentation" class="touch-live-stats">
-        <span
-          >{{ t("touch.score") }}
-          <strong>{{ gameplay.score ?? 0 }}</strong></span
-        >
-        <span
-          >{{ t("touch.life") }}
-          <strong>{{ gameplay.life ?? "-" }}</strong></span
-        >
+        <template v-if="!isRankGameplay">
+          <span
+            >{{ t("touch.score") }}
+            <strong>{{ gameplay.score ?? 0 }}</strong></span
+          >
+          <span
+            >{{ t("touch.life") }}
+            <strong>{{ gameplay.life ?? "-" }}</strong></span
+          >
+        </template>
       </div>
        <button v-if="canCollectQueueEntry" class="touch-secondary-button queue-entry-button" data-testid="game-queue-open" type="button" @click="openQueuePanel">{{ t("touch.queueNext") }}</button>
       <button
@@ -2079,6 +2146,117 @@ async function confirmReturnToIdle() {
   height: 100%;
   margin: 0 auto;
   text-align: center;
+}
+
+.touch-rank-status-panel {
+  box-sizing: border-box;
+  width: min(1100px, calc(100% - 48px));
+  padding: clamp(24px, 4vh, 52px) 0;
+  overflow: auto;
+}
+
+.touch-rank-live-panel {
+  width: 100%;
+  margin-top: 24px;
+}
+
+.touch-rank-live-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  width: 100%;
+  padding: 12px 16px;
+  border: 1px solid rgba(116, 237, 255, 0.62);
+  border-radius: 7px;
+  color: #a9f2ff;
+  background: rgba(5, 39, 57, 0.82);
+  font-size: clamp(15px, 1.4vw, 22px);
+  font-weight: 750;
+  text-align: left;
+}
+
+.touch-rank-live-header strong {
+  margin-left: 8px;
+  color: #fff29b;
+  font-family: "Arial Black", Impact, sans-serif;
+  font-size: clamp(24px, 2.3vw, 38px);
+  letter-spacing: 0.04em;
+  text-shadow: 0 0 10px rgba(255, 226, 105, 0.56);
+}
+
+.touch-rank-player-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+  width: 100%;
+  margin-top: 12px;
+}
+
+.touch-rank-player-card {
+  min-width: 0;
+  padding: 14px 16px;
+  border: 1px solid color-mix(in srgb, var(--touch-player-color) 62%, #294757);
+  border-top: 4px solid var(--touch-player-color);
+  border-radius: 7px;
+  color: #d9f8ff;
+  background: rgba(5, 30, 45, 0.84);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--touch-player-color) 18%, transparent);
+  text-align: left;
+}
+
+.touch-rank-player-card header,
+.touch-rank-player-card > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.touch-rank-player-card header {
+  margin-bottom: 12px;
+  color: var(--touch-player-color);
+}
+
+.touch-rank-player-card header > span:last-child {
+  overflow: hidden;
+  color: #a8c5d0;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.touch-rank-player-identity {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.touch-rank-player-identity strong {
+  font-size: 24px;
+}
+
+.touch-rank-player-dot {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  border: 2px solid rgba(255, 255, 255, 0.82);
+  border-radius: 50%;
+  background: var(--touch-player-color);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--touch-player-color) 72%, transparent);
+}
+
+.touch-rank-player-card > div {
+  margin-top: 7px;
+  color: #8eaeba;
+  font-size: 13px;
+}
+
+.touch-rank-player-card > div strong {
+  color: #f2fdff;
+  font-size: 21px;
 }
 
 .touch-status-panel h1,

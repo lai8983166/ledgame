@@ -2973,8 +2973,11 @@ html[data-language-direction="rtl"] :is(input, textarea) {
   display: grid;
   grid-template-rows: auto 1fr auto;
   gap: clamp(14px, 2vh, 24px);
-  min-height: 100vh;
+  height: 100vh;
+  min-height: 0;
   padding: clamp(16px, 3vh, 36px);
+  box-sizing: border-box;
+  overflow: hidden;
   color: #d9e0ea;
   background:
     radial-gradient(circle at 18% 16%, rgba(68, 78, 92, 0.34), transparent 32%),
@@ -3039,12 +3042,20 @@ html[data-language-direction="rtl"] :is(input, textarea) {
   grid-template-columns: minmax(420px, 1fr) minmax(340px, 420px);
   gap: clamp(18px, 3vw, 34px);
   min-height: 0;
+  overflow: hidden;
 }
 
 .panel-area {
   display: grid;
   min-height: 0;
   place-items: center;
+  overflow: hidden;
+}
+
+.debug-side {
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
 }
 
 .led-board {

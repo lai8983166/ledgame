@@ -81,6 +81,20 @@ test("game Touch uses one pointer path and hides debug statistics by presentatio
   assert.match(source, /createWristbandPreparation/);
 });
 
+test("Rank debug Touch shows every player score, color marker and remaining time", async () => {
+  const source = await readFile(
+    new URL("../src/views/LedGameTouchView.vue", import.meta.url),
+    "utf8",
+  );
+  assert.match(source, /data-testid="touch-rank-debug-hud"/);
+  assert.match(source, /rankRemainingTimeLabel/);
+  assert.match(source, /v-for="player in rankPlayers"/);
+  assert.match(source, /touch-rank-player-dot/);
+  assert.match(source, /player\.stageScore/);
+  assert.match(source, /player\.totalScore/);
+  assert.match(source, /player\.memberPoints/);
+});
+
 test("secondary renderer is read-only and restores runtime state before broadcasts", async () => {
   const source = await readFile(
     new URL("../src/views/SecondaryDisplayView.vue", import.meta.url),

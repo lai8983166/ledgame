@@ -26,7 +26,8 @@ const engineState = ref("UNKNOWN");
 const demoType = ref(null);
 const busyAction = ref("");
 const errorMessage = ref("");
-const frameState = ref(createFrameState());
+const frameState = ref(createFrameState(16, 36));
+const standbyFrameState = createFrameState(16, 36);
 const hoverCell = ref(null);
 const gameRuntimeState = ref(null);
 const activeView = ref("games");
@@ -54,17 +55,20 @@ let removeLedFrameListener = null;
 let removeEngineStateListener = null;
 let removeSecondaryDisplayListener = null;
 
+const debugFrameState = computed(() =>
+  shouldShowDefaultStandbyFrame() ? standbyFrameState : frameState.value,
+);
 const frameAge = computed(() => {
-  if (!frameState.value.receivedAt) {
+  if (!debugFrameState.value.receivedAt) {
     return t("debug.noFrame");
   }
   const seconds = Math.max(
     0,
-    Math.round((Date.now() - frameState.value.receivedAt) / 1000),
+    Math.round((Date.now() - debugFrameState.value.receivedAt) / 1000),
   );
   return t("debug.secondsAgo", { seconds });
 });
-const frameSizeLabel = computed(() => `${frameState.value.width} x ${frameState.value.height}`);
+const frameSizeLabel = computed(() => `${debugFrameState.value.width} x ${debugFrameState.value.height}`);
 const gameplaySummary = computed(() => {
   const gameplay = gameRuntimeState.value?.gameplay;
   if (!gameplay) {
@@ -387,7 +391,7 @@ function backToGameList() {
   activeView.value = "games";
 }
 
-function createFrameState(width = 16, height = 16, receivedAt = null) {
+function createFrameState(width = 16, height = 36, receivedAt = null) {
   return {
     width,
     height,
@@ -482,6 +486,11 @@ async function sendRuntimeGameInput(x, y) {
   }
 }
 
+function shouldShowDefaultStandbyFrame() {
+  const state = String(engineState.value || "UNKNOWN").toUpperCase();
+  return ["UNKNOWN", "STOPPED", "SHUTDOWN"].includes(state);
+}
+
 function sendDebugCommand(command) {
   if (!api?.sendDebugCommand) return;
   api.sendDebugCommand(command).then((result) => {
@@ -532,7 +541,7 @@ function formatRuntimeValue(value, fallback = "-") {
     :gameplay-summary="gameplaySummary"
     :hover-cell="hoverCell"
     :is-debug-window="isDebugWindow"
-    :pixels="frameState.pixels"
+    :pixels="debugFrameState.pixels"
     :runtime-status-items="runtimeStatusItems"
     :runtime-mode="runtimeMode"
     @clear-hover-cell="clearHoverCell"

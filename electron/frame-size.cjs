@@ -1,4 +1,5 @@
 const DEFAULT_FRAME_SIZE = Object.freeze({ width: 16, height: 16 })
+const SYSTEM_IDLE_FRAME_SIZE = Object.freeze({ width: 16, height: 36 })
 
 function inferFrameSize(byteLength, ...preferredSizes) {
   const bytes = Number(byteLength)
@@ -12,6 +13,10 @@ function inferFrameSize(byteLength, ...preferredSizes) {
     if (pixelCount > 0 && width * height === pixelCount) {
       return { width, height }
     }
+  }
+
+  if (pixelCount === SYSTEM_IDLE_FRAME_SIZE.width * SYSTEM_IDLE_FRAME_SIZE.height) {
+    return { ...SYSTEM_IDLE_FRAME_SIZE }
   }
 
   const squareSize = Math.sqrt(pixelCount)
@@ -28,5 +33,6 @@ function positiveInteger(value) {
 
 module.exports = {
   DEFAULT_FRAME_SIZE,
+  SYSTEM_IDLE_FRAME_SIZE,
   inferFrameSize,
 }

@@ -28,9 +28,13 @@ test("frame dimensions use only candidates matching the RGB payload", () => {
   );
 });
 
-test("square and fixed fallbacks remain available without runtime metadata", () => {
+test("system idle, square and fixed fallbacks remain available without runtime metadata", () => {
   assert.deepEqual(inferFrameSize(8 * 8 * 3), { width: 8, height: 8 });
-  assert.deepEqual(inferFrameSize(16 * 36 * 3), { width: 24, height: 24 });
+  assert.deepEqual(inferFrameSize(16 * 36 * 3), { width: 16, height: 36 });
+  assert.deepEqual(
+    inferFrameSize(24 * 24 * 3, { width: 24, height: 24 }),
+    { width: 24, height: 24 },
+  );
   assert.deepEqual(inferFrameSize(17 * 19 * 3), { width: 16, height: 16 });
 });
 

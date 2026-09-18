@@ -82,7 +82,15 @@ function normalizeDocument(value) {
   source.palette = Array.isArray(source.palette) ? source.palette : [];
   source.levels = Array.isArray(source.levels) ? source.levels : [];
   for (const level of source.levels) {
-    level.bounds ||= { minX: 0, minY: 0, maxX: (source.siteSizeWidth || 16) - 1, maxY: (source.siteSizeHeight || 36) - 1 };
+    const width = Number(source.siteSizeWidth) || 16;
+    const height = Number(source.siteSizeHeight) || 36;
+    level.bounds ||= { minX: 0, minY: 0, maxX: width - 1, maxY: height - 1 };
+    for (const field of ["minX", "maxX", "minY", "maxY"]) {
+      const raw = level.bounds[field];
+      if (raw === null || raw === undefined || raw === "") continue;
+      const coordinate = Number(raw);
+      if (Number.isFinite(coordinate)) level.bounds[field] = Math.trunc(coordinate) + 1;
+    }
     level.rewardPoints = Number.isInteger(Number(level.rewardPoints)) && Number(level.rewardPoints) >= 0 ? Number(level.rewardPoints) : 0;
   }
   return source;
@@ -175,8 +183,9 @@ function validationField(path) {
 
 async function exportJson() {
   if (!document.value || !api?.exportFrameJson) return;
+  const exportPayload = createRankEditorPayload(document.value, props.gameId);
   const result = await api.exportFrameJson({
-    content: JSON.stringify(document.value, null, 2),
+    content: JSON.stringify(exportPayload, null, 2),
     defaultFileName: `${document.value.name || "rank-type1"}.json`,
   });
   if (!result?.canceled) statusMessage.value = t("rank.exported");
@@ -304,10 +313,10 @@ function goBack() {
             <label><span>{{ t("rank.duration") }}</span><input v-model.number="type1Config.durationSeconds" data-rank-field="level.durationSeconds" type="number" min="1" /></label>
             <label><span>{{ t('management.rankReward') }}</span><input v-model.number="type1Config.rewardPoints" data-rank-field="level.rewardPoints" type="number" min="0" max="1000000" step="1" /><small>{{ t('management.rankRewardHint') }}</small></label>
             <label><span>{{ t("rank.refreshSeconds") }}</span><input v-model.number="type1Config.refreshSeconds" type="number" min="1" /></label>
-            <label data-rank-field="level.bounds" tabindex="-1"><span>{{ t("rank.minX") }}</span><input v-model.number="type1Config.bounds.minX" type="number" min="0" /></label>
-            <label><span>{{ t("rank.maxX") }}</span><input v-model.number="type1Config.bounds.maxX" type="number" min="0" /></label>
-            <label><span>{{ t("rank.minY") }}</span><input v-model.number="type1Config.bounds.minY" type="number" min="0" /></label>
-            <label><span>{{ t("rank.maxY") }}</span><input v-model.number="type1Config.bounds.maxY" type="number" min="0" /></label>
+            <label data-rank-field="level.bounds" tabindex="-1"><span>{{ t("rank.minX") }}</span><input v-model.number="type1Config.bounds.minX" type="number" min="1" :max="document.siteSizeWidth" /></label>
+            <label><span>{{ t("rank.maxX") }}</span><input v-model.number="type1Config.bounds.maxX" type="number" min="1" :max="document.siteSizeWidth" /></label>
+            <label><span>{{ t("rank.minY") }}</span><input v-model.number="type1Config.bounds.minY" type="number" min="1" :max="document.siteSizeHeight" /></label>
+            <label><span>{{ t("rank.maxY") }}</span><input v-model.number="type1Config.bounds.maxY" type="number" min="1" :max="document.siteSizeHeight" /></label>
             <label><span>{{ t("rank.targetMin") }}</span><input v-model.number="type1Config.targetsPerPlayerMin" data-rank-field="level.targetsPerPlayerMin" type="number" min="1" /></label>
             <label><span>{{ t("rank.targetMax") }}</span><input v-model.number="type1Config.targetsPerPlayerMax" type="number" min="1" /></label>
             <label><span>{{ t("rank.bombMin") }}</span><input v-model.number="type1Config.bombMin" data-rank-field="level.bombMin" type="number" min="0" /></label>

@@ -29,7 +29,7 @@ const props = defineProps({
   },
   frameSizeLabel: {
     type: String,
-    default: "16 x 16",
+    default: "16 x 36",
   },
   gameplaySummary: {
     type: String,

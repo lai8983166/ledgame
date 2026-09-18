@@ -508,16 +508,25 @@ test("full game entry keeps the Touch idle video active across auxiliary windows
 
 test("Debug LED preview uses one canvas instead of repainting a button per pixel", async () => {
   const demoSource = await readFile(new URL("../src/views/DemoView.vue", import.meta.url), "utf8");
+  const appSource = await readFile(new URL("../src/App.vue", import.meta.url), "utf8");
   const canvasSource = await readFile(
     new URL("../src/components/DebugLedCanvas.vue", import.meta.url),
     "utf8",
   );
 
   assert.match(demoSource, /<DebugLedCanvas/);
+  assert.match(appSource, /createFrameState\(16, 36\)/);
+  assert.match(appSource, /shouldShowDefaultStandbyFrame/);
+  assert.match(appSource, /:pixels="debugFrameState\.pixels"/);
   assert.doesNotMatch(demoSource, /class="led-cell"/);
   assert.match(canvasSource, /requestAnimationFrame/);
   assert.match(canvasSource, /emit\("cell-click"/);
   assert.match(canvasSource, /emit\("hover-cell"/);
+  assert.match(canvasSource, /function fitCanvasLayout/);
+  assert.match(canvasSource, /align-items: flex-start/);
+  assert.match(canvasSource, /const cellSize = Math\.max\(/);
+  assert.match(canvasSource, /cellWidth: cellSize/);
+  assert.match(canvasSource, /cellHeight: cellSize/);
 });
 
 test("Debug gameplay input applies the runtime response through the shared state adapter", async () => {
