@@ -69,6 +69,21 @@ test("persisted application title cannot be replaced by the renderer document ti
   assert.equal(mainSource.match(/preventRendererTitleOverride\((?:mainWindow|debugWindow|touchWindow|secondaryWindow)\)/g)?.length, 4);
 });
 
+test("main window uses a dark custom title bar and renders the current brand", () => {
+  assert.match(mainSource, /windowOptions\.frame = false/);
+  assert.match(mainSource, /customMainTitleBarEnabled/);
+  assert.match(styleSource, /background: linear-gradient\(180deg, #343b43 0%, #252a30 100%\)/);
+  assert.match(preloadSource, /customTitleBarEnabled/);
+  assert.match(preloadSource, /minimizeWindow/);
+  assert.match(preloadSource, /toggleMaximizeWindow/);
+  assert.match(preloadSource, /closeWindow/);
+  assert.match(appSource, /data-testid="window-titlebar"/);
+  assert.match(appSource, /applicationIconData/);
+  assert.match(appSource, /window-titlebar-control--close/);
+  assert.match(styleSource, /\.window-titlebar\s*\{/);
+  assert.match(styleSource, /-webkit-app-region:\s*drag/);
+});
+
 test("games navigation owns the home and game-list selector", () => {
   assert.match(appSource, /class="nav-tab nav-game-tab-shell"[\s\S]*nav-game-tab-label[\s\S]*t\("nav\.games"\)/);
   assert.match(appSource, /<select[\s\S]*class="nav-game-tab"/);

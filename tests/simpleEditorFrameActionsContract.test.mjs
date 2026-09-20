@@ -121,3 +121,18 @@ test("color controls are disabled outside add mode and import/export icons follo
   assert.match(exportButton, /@click="exportCurrentFrame"[\s\S]*⬆/);
   assert.match(importButton, /@click="importFrame"[\s\S]*⬇/);
 });
+
+test("anchor editing leaves only confirm and cancel controls in the object editor", () => {
+  const objectActionsStart = editorSource.indexOf('<div class="object-actions">');
+  const objectListStart = editorSource.indexOf('<div v-if="!anchorEditMode && showObjectList"', objectActionsStart);
+  assert.ok(objectActionsStart >= 0);
+  assert.ok(objectListStart > objectActionsStart);
+  const objectActions = editorSource.slice(objectActionsStart, objectListStart);
+
+  assert.match(editorSource, /<button\s+v-if="!anchorEditMode"[\s\S]*class="soft-button compact-button object-list-toggle"/);
+  assert.match(editorSource, /<div v-if="!anchorEditMode" class="object-edit-controls">/);
+  assert.match(objectActions, /<div v-if="!anchorEditMode" class="object-action-palette"/);
+  assert.match(objectActions, /<template v-if="anchorEditMode">[\s\S]*simple\.confirm[\s\S]*simple\.cancel/);
+  assert.match(objectActions, /<template v-if="!anchorEditMode">[\s\S]*simple\.greenToAll[\s\S]*simple\.pinkToAll/);
+  assert.match(editorSource, /<div v-else class="anchor-edit-panel">[\s\S]*simple\.chooseAnchor/);
+});

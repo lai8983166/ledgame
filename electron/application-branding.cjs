@@ -4,6 +4,11 @@ const SUPPORTED_ICON_EXTENSIONS = new Set(['.ico', '.png'])
 const MAX_ICON_BYTES = 5 * 1024 * 1024
 const SUPPORTED_BACKGROUND_EXTENSIONS = new Set(['.apng', '.avif', '.bmp', '.gif', '.jpeg', '.jpg', '.png', '.webp'])
 const MAX_BACKGROUND_BYTES = 20 * 1024 * 1024
+const SUPPORTED_IDLE_MEDIA_EXTENSIONS = new Set([
+  ...SUPPORTED_BACKGROUND_EXTENSIONS,
+  '.m4v', '.mov', '.mp4', '.ogg', '.ogv', '.webm',
+])
+const MAX_IDLE_MEDIA_BYTES = 200 * 1024 * 1024
 
 function toPublicApplicationSettings(settings) {
   if (!settings || typeof settings !== 'object') return settings
@@ -80,12 +85,43 @@ async function installSecondaryDisplayBackground({ fs, nativeImage, source, user
   }
 }
 
+async function installSecondaryIdleMedia({ fs, nativeImage, source, userDataPath, now = Date.now }) {
+  const extension = path.extname(source || '').toLowerCase()
+  if (!SUPPORTED_IDLE_MEDIA_EXTENSIONS.has(extension)) {
+    throw new Error('副屏待机画面仅支持 PNG、JPG、JPEG、WEBP、BMP、GIF、AVIF 或 MP4 等视频文件')
+  }
+  const stat = await fs.stat(source)
+  if (!stat.isFile() || stat.size <= 0 || stat.size > MAX_IDLE_MEDIA_BYTES) {
+    throw new Error('副屏待机画面必须是 200MB 以内的有效文件')
+  }
+  if (SUPPORTED_BACKGROUND_EXTENSIONS.has(extension)) {
+    const image = nativeImage.createFromPath(source)
+    if (!image || image.isEmpty()) throw new Error('无法解析所选副屏待机画面')
+  }
+
+  const directory = path.join(userDataPath, 'branding')
+  const target = path.join(directory, `secondary-idle-media-${now()}${extension}`)
+  const temporary = `${target}.tmp`
+  await fs.mkdir(directory, { recursive: true })
+  try {
+    await fs.copyFile(source, temporary)
+    await fs.rename(temporary, target)
+    return target
+  } catch (error) {
+    await fs.rm(temporary, { force: true }).catch(() => {})
+    throw error
+  }
+}
+
 module.exports = {
   MAX_BACKGROUND_BYTES,
   MAX_ICON_BYTES,
   applyApplicationBrand,
   installApplicationIcon,
   installSecondaryDisplayBackground,
+  installSecondaryIdleMedia,
+  MAX_IDLE_MEDIA_BYTES,
   SUPPORTED_BACKGROUND_EXTENSIONS,
+  SUPPORTED_IDLE_MEDIA_EXTENSIONS,
   toPublicApplicationSettings,
 }

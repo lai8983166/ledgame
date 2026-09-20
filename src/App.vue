@@ -50,10 +50,13 @@ const secondaryDisplayState = ref({
   windowOpen: false,
 });
 const secondaryErrorMessage = ref("");
+const applicationTitle = ref("LED Game");
+const applicationIconData = ref("");
 let removeHelpMenuListeners = null;
 let removeLedFrameListener = null;
 let removeEngineStateListener = null;
 let removeSecondaryDisplayListener = null;
+let removeApplicationSettingsListener = null;
 
 const debugFrameState = computed(() =>
   shouldShowDefaultStandbyFrame() ? standbyFrameState : frameState.value,
@@ -123,6 +126,15 @@ onMounted(async () => {
   }
 
   attachHelpMenuListeners();
+  if (window.appSettings?.get) {
+    const settings = await window.appSettings.get();
+    applyApplicationSettings(settings);
+    await loadApplicationIcon();
+    removeApplicationSettingsListener = window.appSettings.onChanged?.((settings) => {
+      applyApplicationSettings(settings);
+      void loadApplicationIcon();
+    }) || null;
+  }
   removeSecondaryDisplayListener =
     window.secondaryDisplay?.onChanged?.((state) => applySecondaryDisplayState(state)) || null;
   await Promise.all([refreshState(), refreshSecondaryDisplayState()]);
@@ -133,9 +145,23 @@ onUnmounted(() => {
   removeLedFrameListener?.();
   removeEngineStateListener?.();
   removeSecondaryDisplayListener?.();
+  removeApplicationSettingsListener?.();
   removeHelpMenuListeners?.();
   hoverCell.value = null;
 });
+
+function applyApplicationSettings(settings) {
+  const title = typeof settings?.applicationTitle === "string" ? settings.applicationTitle.trim() : "";
+  applicationTitle.value = title || "LED Game";
+}
+
+async function loadApplicationIcon() {
+  try {
+    applicationIconData.value = (await window.appSettings?.getIconData?.())?.dataUrl || "";
+  } catch (_error) {
+    applicationIconData.value = "";
+  }
+}
 
 function attachHelpMenuListeners() {
   function onDocumentClick(event) {
@@ -554,7 +580,23 @@ function formatRuntimeValue(value, fallback = "-") {
     @debug-command="sendDebugCommand"
   />
 
-  <main v-else class="app-shell">
+  <main
+    v-else
+    class="app-shell"
+    :class="{ 'app-shell--custom-titlebar': api?.customTitleBarEnabled }"
+  >
+    <div v-if="api?.customTitleBarEnabled" class="window-titlebar" data-testid="window-titlebar">
+      <span class="window-titlebar-drag-region">
+        <img v-if="applicationIconData" class="window-titlebar-icon" :src="applicationIconData" alt="" />
+        <span v-else class="window-titlebar-icon window-titlebar-icon--fallback" aria-hidden="true">◆</span>
+        <span class="window-titlebar-title">{{ applicationTitle }}</span>
+      </span>
+      <span class="window-titlebar-controls">
+        <button type="button" class="window-titlebar-control" aria-label="Minimize" @click="api.minimizeWindow?.()">−</button>
+        <button type="button" class="window-titlebar-control" aria-label="Maximize" @click="api.toggleMaximizeWindow?.()">□</button>
+        <button type="button" class="window-titlebar-control window-titlebar-control--close" aria-label="Close" @click="api.closeWindow?.()">×</button>
+      </span>
+    </div>
     <header class="app-nav" aria-label="Primary">
       <div class="brand-mark" aria-hidden="true"></div>
       <nav class="nav-tabs">

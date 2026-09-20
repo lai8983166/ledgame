@@ -22,9 +22,10 @@ const loading = ref(true);
 const errorMessage = ref("");
 const backgroundDataUrl = ref("");
 const backgroundElement = ref(null);
-const idleVideoUrl = ref("");
 const idleVideoElement = ref(null);
-const idleVideoFailed = ref(false);
+const idleMediaUrl = ref("");
+const idleMediaType = ref("");
+const idleMediaFailed = ref(false);
 const idlePromptFading = ref(false);
 const secondaryIdlePromptText = ref("LED FLOOR GAME");
 const secondaryIdlePromptFontSize = ref(72);
@@ -50,9 +51,12 @@ const presentation = computed(() => createSecondaryDisplayPresentation(runtimeSt
 }));
 const gameplay = computed(() => presentation.value.state.gameplay || {});
 const lifecycle = computed(() => presentation.value.state.engineState);
-const isIdleVisible = computed(() => !loading.value && !errorMessage.value
-  && ["IDLE", "PREPARING"].includes(lifecycle.value));
-const showIdleVideo = computed(() => isIdleVisible.value && idleVideoUrl.value && !idleVideoFailed.value);
+const isIdleVisible = computed(() => !errorMessage.value
+  && (loading.value || ["UNKNOWN", "STOPPED", "IDLE", "PREPARING"].includes(lifecycle.value)));
+const showIdleImage = computed(() => isIdleVisible.value && idleMediaType.value === "image"
+  && idleMediaUrl.value && !idleMediaFailed.value);
+const showIdleVideo = computed(() => isIdleVisible.value && idleMediaType.value === "video"
+  && idleMediaUrl.value && !idleMediaFailed.value);
 const isResultVisible = computed(() => presentation.value.mode !== SECONDARY_DISPLAY_MODES.HUD);
 const isGameResult = computed(() => [
   SECONDARY_DISPLAY_MODES.GAME_SUCCESS,
@@ -78,6 +82,34 @@ async function loadSecondaryBackground() {
     }
   } catch (_error) {
     if (revision === backgroundLoadRevision) backgroundDataUrl.value = "";
+  }
+}
+
+async function loadIdleMedia() {
+  idleMediaFailed.value = false;
+  idleMediaUrl.value = "";
+  idleMediaType.value = "";
+  try {
+    const configured = await settingsApi?.getSecondaryIdleMedia?.();
+    if (configured?.url && (configured.mediaType === "image" || configured.mediaType === "video")) {
+      idleMediaUrl.value = configured.url;
+      idleMediaType.value = configured.mediaType;
+      return;
+    }
+  } catch (_error) {
+    // Fall back to the bundled idle animation below.
+  }
+  if (!mediaApi?.getPreviewUrl) {
+    idleMediaFailed.value = true;
+    return;
+  }
+  try {
+    const result = await mediaApi.getPreviewUrl(SECONDARY_IDLE_VIDEO_ASSET);
+    idleMediaUrl.value = result?.url || result || "";
+    idleMediaType.value = "video";
+    idleMediaFailed.value = !idleMediaUrl.value;
+  } catch (_error) {
+    idleMediaFailed.value = true;
   }
 }
 
@@ -146,10 +178,11 @@ onMounted(async () => {
   removeSettingsListener = settingsApi?.onChanged?.((settings) => {
     applyApplicationSettings(settings);
     void loadSecondaryBackground();
+    void loadIdleMedia();
   }) || null;
   void loadSecondaryBackground();
   void loadApplicationSettings();
-  void loadIdleVideo();
+  void loadIdleMedia();
   clockTimer = window.setInterval(() => {
     clockNow.value = Date.now();
   }, 250);
@@ -179,20 +212,6 @@ function playIdleVideo() {
   idleVideoElement.value?.play().catch(() => {
     // canplay will retry after the custom media protocol finishes loading.
   });
-}
-
-async function loadIdleVideo() {
-  if (!mediaApi?.getPreviewUrl) {
-    idleVideoFailed.value = true;
-    return;
-  }
-  try {
-    const result = await mediaApi.getPreviewUrl(SECONDARY_IDLE_VIDEO_ASSET);
-    idleVideoUrl.value = result?.url || result || "";
-    idleVideoFailed.value = !idleVideoUrl.value;
-  } catch (_error) {
-    idleVideoFailed.value = true;
-  }
 }
 
 function startIdlePromptAnimation() {
@@ -236,35 +255,39 @@ function displayValue(value) {
     ></div>
     <div class="secondary-runtime-grid" aria-hidden="true"></div>
 
-    <section v-if="loading" class="secondary-runtime-center" aria-live="polite">
-      <span>LED GAME</span>
-      <h1>{{ t("common.loading") }}</h1>
-    </section>
-
-    <section v-else-if="errorMessage" class="secondary-runtime-center secondary-runtime-error">
+    <section v-if="errorMessage" class="secondary-runtime-center secondary-runtime-error">
       <span>CONNECTION</span>
       <h1>{{ t("secondaryDisplay.runtimeUnavailable") }}</h1>
       <p>{{ errorMessage }}</p>
     </section>
 
     <section v-else-if="isIdleVisible" class="secondary-idle" data-testid="secondary-display-idle">
+      <img
+        v-if="showIdleImage"
+        class="secondary-idle-image"
+        :src="idleMediaUrl"
+        alt=""
+        aria-hidden="true"
+        @error="idleMediaFailed = true"
+      />
       <video
-        v-if="showIdleVideo"
+        v-else-if="showIdleVideo"
         ref="idleVideoElement"
         class="secondary-idle-video"
-        :src="idleVideoUrl"
+        :src="idleMediaUrl"
         autoplay
         loop
         muted
         playsinline
         aria-hidden="true"
         @canplay="playIdleVideo"
-        @error="idleVideoFailed = true"
+        @error="idleMediaFailed = true"
       ></video>
       <div class="secondary-idle-action">
         <IdlePromptDisplay
           :text="secondaryIdlePromptText"
           :font-size="secondaryIdlePromptFontSize"
+          :allow-wrap="true"
           :fading="idlePromptFading"
           @animation-end="idlePromptFading = false"
         />
@@ -373,7 +396,7 @@ function displayValue(value) {
 .secondary-runtime-grid { position: absolute; inset: 0; opacity: 0.18; background-image: linear-gradient(rgba(105, 166, 197, 0.16) 1px, transparent 1px), linear-gradient(90deg, rgba(105, 166, 197, 0.16) 1px, transparent 1px); background-size: 52px 52px; }
 .secondary-runtime-content, .secondary-runtime-center { position: relative; z-index: 1; }
 .secondary-idle { position: relative; z-index: 1; width: 100%; height: 100%; overflow: hidden; }
-.secondary-idle-video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; background: #071018; }
+.secondary-idle-image, .secondary-idle-video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; background: #071018; }
 .secondary-idle-action { position: relative; z-index: 1; display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; background: rgba(7, 16, 24, 0.34); }
 .secondary-runtime-center { height: 100%; display: grid; place-content: center; gap: 12px; padding: 6vh 7vw; text-align: center; }
 .secondary-runtime-center span, .game-heading > span { color: #63cde1; font-weight: 850; text-transform: uppercase; }

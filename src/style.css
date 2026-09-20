@@ -38,6 +38,94 @@ button {
     linear-gradient(145deg, #f4f6f9 0%, #e8edf3 100%);
 }
 
+.app-shell--custom-titlebar {
+  padding-top: calc(clamp(18px, 3vh, 42px) + 48px);
+}
+
+.window-titlebar {
+  position: fixed;
+  inset: 0 0 auto;
+  z-index: 120;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  padding: 0 18px 0 16px;
+  color: #f7fafc;
+  background: linear-gradient(180deg, #343b43 0%, #252a30 100%);
+  box-shadow: inset 0 -1px 0 rgba(0, 0, 0, 0.45);
+  -webkit-app-region: drag;
+}
+
+.window-titlebar-drag-region {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  gap: 10px;
+  max-width: calc(100% - 150px);
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  -webkit-app-region: drag;
+}
+
+.window-titlebar-icon {
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+  object-fit: contain;
+  border-radius: 6px;
+  -webkit-app-region: drag;
+}
+
+.window-titlebar-icon--fallback {
+  display: inline-grid;
+  place-items: center;
+  color: #252a30;
+  background: linear-gradient(145deg, #f6f9fb, #aeb8c3);
+  font-size: 14px;
+  box-shadow: inset 2px 2px 4px rgba(255, 255, 255, 0.78), inset -2px -2px 4px rgba(31, 38, 47, 0.35);
+}
+
+.window-titlebar-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.window-titlebar-controls {
+  display: inline-flex;
+  align-items: stretch;
+  align-self: stretch;
+  margin-left: auto;
+  -webkit-app-region: no-drag;
+}
+
+.window-titlebar-control {
+  width: 52px;
+  min-width: 52px;
+  padding: 0;
+  border: 0;
+  color: #f7fafc;
+  background: transparent;
+  cursor: pointer;
+  font-size: 22px;
+  line-height: 1;
+  -webkit-app-region: no-drag;
+}
+
+.window-titlebar-control:hover,
+.window-titlebar-control:focus-visible {
+  outline: none;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.window-titlebar-control--close:hover,
+.window-titlebar-control--close:focus-visible {
+  background: #c53945;
+}
+
 .app-shell > .workspace {
   min-width: 0;
   min-height: 0;
@@ -51,6 +139,10 @@ button {
   grid-template-rows: auto minmax(0, 1fr);
   padding: 12px 16px 6px;
   overflow: hidden;
+}
+
+.app-shell--custom-titlebar:has(.simple-editor-fit-viewport) {
+  padding-top: 60px;
 }
 
 .app-nav {
@@ -2636,6 +2728,22 @@ html[data-language-direction="rtl"] :is(input, textarea) {
 
 .object-actions .color-copy-pink {
   color: #a65c91;
+}
+
+.anchor-edit-panel {
+  display: grid;
+  gap: 6px;
+  padding: 14px 12px;
+  border: 1px dashed rgba(93, 119, 145, 0.42);
+  border-radius: 12px;
+  color: #687789;
+  background: rgba(238, 243, 248, 0.66);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.anchor-edit-panel strong {
+  color: #3d5368;
 }
 
 .sprite-preview-panel {

@@ -6,6 +6,7 @@ function detectWindowKind(search) {
 }
 
 const windowKind = detectWindowKind(window.location.search)
+const customTitleBarEnabled = windowKind === 'main' && process.platform === 'win32'
 
 function isEditableElement(target) {
   return Boolean(
@@ -45,6 +46,10 @@ const secondaryRuntimeApi = {
 
 const fullLedGameApi = {
   windowKind,
+  customTitleBarEnabled,
+  minimizeWindow: () => ipcRenderer.invoke('window:minimize'),
+  toggleMaximizeWindow: () => ipcRenderer.invoke('window:toggle-maximize'),
+  closeWindow: () => ipcRenderer.invoke('window:close'),
   restoreFocus: () => ipcRenderer.invoke('window:restore-focus'),
   enterGameFlow: (options) => ipcRenderer.invoke('game-flow:enter', options),
   openDebugPanel: () => ipcRenderer.invoke('open-debug-panel'),
@@ -150,7 +155,9 @@ contextBridge.exposeInMainWorld('appLanguage', {
 
 contextBridge.exposeInMainWorld('appSettings', {
   get: () => ipcRenderer.invoke('app-settings:get'),
+  getIconData: () => ipcRenderer.invoke('app-settings:icon-data'),
   getSecondaryBackground: () => ipcRenderer.invoke('secondary-display:background'),
+  getSecondaryIdleMedia: () => ipcRenderer.invoke('secondary-display:idle-media'),
   testMemberPlatform: (settings) => ipcRenderer.invoke('app-settings:test-member-platform', settings),
   ...(windowKind === 'main'
     ? {
@@ -158,6 +165,8 @@ contextBridge.exposeInMainWorld('appSettings', {
         chooseIcon: () => ipcRenderer.invoke('app-settings:choose-icon'),
         chooseSecondaryBackground: () => ipcRenderer.invoke('app-settings:choose-secondary-background'),
         clearSecondaryBackground: () => ipcRenderer.invoke('app-settings:clear-secondary-background'),
+        chooseSecondaryIdleMedia: () => ipcRenderer.invoke('app-settings:choose-secondary-idle-media'),
+        clearSecondaryIdleMedia: () => ipcRenderer.invoke('app-settings:clear-secondary-idle-media'),
       }
     : {}),
   onChanged: (callback) => {

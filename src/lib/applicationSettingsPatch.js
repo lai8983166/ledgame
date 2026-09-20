@@ -19,6 +19,9 @@ export function createApplicationSettingsPatch(settings) {
   if (settings && Object.prototype.hasOwnProperty.call(settings, "secondaryDisplayBackgroundPath")) {
     patch.secondaryDisplayBackgroundPath = settings.secondaryDisplayBackgroundPath || null;
   }
+  if (settings && Object.prototype.hasOwnProperty.call(settings, "secondaryIdleMediaPath")) {
+    patch.secondaryIdleMediaPath = settings.secondaryIdleMediaPath || null;
+  }
   if (settings && Object.prototype.hasOwnProperty.call(settings, "memberPlatformHost")) {
     patch.memberPlatformHost = settings.memberPlatformHost;
   }

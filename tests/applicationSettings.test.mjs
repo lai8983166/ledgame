@@ -32,6 +32,7 @@ const BRAND_DEFAULTS = {
   applicationTitle: "LED Game",
   applicationIconPath: null,
   secondaryDisplayBackgroundPath: null,
+  secondaryIdleMediaPath: null,
   touchExitPassword: "888888",
   secondaryIdlePromptText: "LED FLOOR GAME",
   secondaryIdlePromptFontSize: 72,
@@ -182,6 +183,7 @@ test("application title, managed icon and touch exit password persist with safe 
       applicationTitle: "  Fun Floor  ",
       applicationIconPath: iconPath,
       secondaryDisplayBackgroundPath: path.join(directory, "branding", "secondary-display-background.png"),
+      secondaryIdleMediaPath: path.join(directory, "branding", "secondary-idle-media-1.mp4"),
       touchExitPassword: "123456",
     });
     assert.equal(saved.applicationTitle, "Fun Floor");
@@ -189,6 +191,10 @@ test("application title, managed icon and touch exit password persist with safe 
     assert.equal(
       saved.secondaryDisplayBackgroundPath,
       path.resolve(directory, "branding", "secondary-display-background.png"),
+    );
+    assert.equal(
+      saved.secondaryIdleMediaPath,
+      path.resolve(directory, "branding", "secondary-idle-media-1.mp4"),
     );
     assert.equal(saved.touchExitPassword, "123456");
     assert.deepEqual(await createApplicationSettingsStore({ fs, settingsPath }).get(), saved);

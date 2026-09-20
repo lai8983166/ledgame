@@ -3,6 +3,7 @@ defineProps({
   text: { type: String, default: "" },
   fontSize: { type: Number, default: 72 },
   fading: { type: Boolean, default: false },
+  allowWrap: { type: Boolean, default: false },
 });
 defineEmits(["animation-end"]);
 </script>
@@ -10,7 +11,7 @@ defineEmits(["animation-end"]);
 <template>
   <strong
     class="touch-idle-prompt"
-    :class="{ fading }"
+    :class="{ fading, 'touch-idle-prompt--wrap': allowWrap }"
     :style="{ '--idle-prompt-font-size': `${fontSize}px` }"
     aria-live="polite"
     @animationend="$emit('animation-end')"
@@ -63,6 +64,12 @@ defineEmits(["animation-end"]);
   transform-origin: center;
 }
 
+.touch-idle-prompt--wrap {
+  width: min(92vw, 2200px);
+  max-width: calc(100% - 120px);
+  white-space: normal;
+}
+
 .touch-idle-title-layer {
   grid-area: 1 / 1;
   display: block;
@@ -72,6 +79,13 @@ defineEmits(["animation-end"]);
   white-space: nowrap;
   transform: scaleX(1.1);
   transform-origin: center;
+}
+
+.touch-idle-prompt--wrap .touch-idle-title-layer {
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .touch-idle-title-depth {

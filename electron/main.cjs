@@ -25,6 +25,7 @@ const {
   applyApplicationBrand: applyBrandToWindows,
   installApplicationIcon,
   installSecondaryDisplayBackground,
+  installSecondaryIdleMedia,
   toPublicApplicationSettings,
 } = require('./application-branding.cjs')
 const { createSplashLifecycle } = require('./splash-lifecycle.cjs')
@@ -69,6 +70,7 @@ const preferredBackendPort = Number(process.env.LED_PORTABLE_BACKEND_PORT || 376
 const framePort = Number(process.env.LED_DEBUG_TCP_PORT || 3002)
 const runtimeStateThrottleMs = Number(process.env.LED_RUNTIME_STATE_THROTTLE_MS || 100)
 const mediaProtocol = 'led-media'
+const idleMediaProtocol = 'led-idle-media'
 const mediaRootName = 'media'
 const imageExtensions = new Set(['.apng', '.avif', '.bmp', '.gif', '.jpeg', '.jpg', '.png', '.svg', '.webp'])
 const videoExtensions = new Set(['.m4v', '.mov', '.mp4', '.ogg', '.ogv', '.webm'])
@@ -76,7 +78,18 @@ const audioExtensions = new Set(['.mp3', '.wav', '.ogg', '.m4a', '.aac', '.flac'
 const runtimeLogOptions = resolveRuntimeLogOptions(process.env)
 const layoutDiagnosticsEnabled = process.env.LED_LAYOUT_DIAGNOSTICS === 'true'
 
+const customMainTitleBarEnabled = process.platform === 'win32'
+
 protocol.registerSchemesAsPrivileged([
+  {
+    scheme: idleMediaProtocol,
+    privileges: {
+      standard: true,
+      secure: true,
+      supportFetchAPI: true,
+      stream: true,
+    },
+  },
   {
     scheme: mediaProtocol,
     privileges: {
@@ -220,6 +233,33 @@ async function readSecondaryDisplayBackground() {
   }
 }
 
+function isManagedSecondaryIdleMediaPath(filePath) {
+  if (typeof filePath !== 'string' || !filePath.trim()) return false
+  const brandingDirectory = path.resolve(app.getPath('userData'), 'branding')
+  const resolved = path.resolve(filePath)
+  const relative = path.relative(brandingDirectory, resolved)
+  return Boolean(relative && !relative.startsWith('..') && !path.isAbsolute(relative)
+    && /^secondary-idle-media(?:-\d+)?\.[a-z0-9]+$/i.test(path.basename(resolved)))
+}
+
+async function getSecondaryIdleMediaPreview() {
+  const settings = await applicationSettings.get()
+  const configuredPath = settings.secondaryIdleMediaPath
+  if (!isManagedSecondaryIdleMediaPath(configuredPath)) return { url: null, mediaType: null }
+  try {
+    const stat = await fs.stat(configuredPath)
+    if (!stat.isFile() || stat.size <= 0) return { url: null, mediaType: null }
+    const extension = path.extname(configuredPath).toLowerCase()
+    const mediaType = imageExtensions.has(extension)
+      ? 'image'
+      : videoExtensions.has(extension) ? 'video' : null
+    if (!mediaType) return { url: null, mediaType: null }
+    return { url: `${idleMediaProtocol}://current`, mediaType }
+  } catch (_error) {
+    return { url: null, mediaType: null }
+  }
+}
+
 function currentDisplayDescriptors() {
   return describeDisplays(screen.getAllDisplays(), screen.getPrimaryDisplay())
 }
@@ -338,7 +378,7 @@ function createWindow() {
     minHeight: 720,
   })
 
-  mainWindow = new BrowserWindow({
+  const windowOptions = {
     width: bounds.width,
     height: bounds.height,
     minWidth: bounds.minWidth,
@@ -361,7 +401,11 @@ function createWindow() {
       // OS display scaling from being read as zoom and re-introducing clipping.
       zoomFactor: 1.0,
     },
-  })
+  }
+  if (customMainTitleBarEnabled) {
+    windowOptions.frame = false
+  }
+  mainWindow = new BrowserWindow(windowOptions)
   preventRendererTitleOverride(mainWindow)
   mainWindow.setMenuBarVisibility(false)
   logWindowGeometry(mainWindow, 'main-window-created')
@@ -726,6 +770,20 @@ async function openSecondaryDisplay() {
     throw new Error('SECONDARY_DISPLAY_UNAVAILABLE')
   }
   createSecondaryWindow(display)
+  return getSecondaryDisplayState()
+}
+
+async function openAutomaticSecondaryDisplay() {
+  const displays = currentDisplayDescriptors().filter((display) => display.selectable)
+  if (!displays.length) return null
+  const settings = await applicationSettings.get()
+  const selected = matchSecondaryDisplay(displays, settings.secondaryDisplay)
+  const display = selected || displays[0]
+  if (!selected) {
+    await updateApplicationSettings({ secondaryDisplay: toDisplaySelection(display) })
+  }
+  createSecondaryWindow(display)
+  await broadcastSecondaryDisplayStatus()
   return getSecondaryDisplayState()
 }
 
@@ -1704,6 +1762,23 @@ ipcMain.handle('window:restore-focus', (event) => {
   const targetWindow = BrowserWindow.fromWebContents(event.sender)
   return restoreBrowserWindowFocus(targetWindow)
 })
+ipcMain.handle('window:minimize', (event) => {
+  const targetWindow = BrowserWindow.fromWebContents(event.sender)
+  if (targetWindow && !targetWindow.isDestroyed()) targetWindow.minimize()
+  return true
+})
+ipcMain.handle('window:toggle-maximize', (event) => {
+  const targetWindow = BrowserWindow.fromWebContents(event.sender)
+  if (!targetWindow || targetWindow.isDestroyed()) return false
+  if (targetWindow.isMaximized()) targetWindow.unmaximize()
+  else targetWindow.maximize()
+  return targetWindow.isMaximized()
+})
+ipcMain.handle('window:close', (event) => {
+  const targetWindow = BrowserWindow.fromWebContents(event.sender)
+  if (targetWindow && !targetWindow.isDestroyed()) targetWindow.close()
+  return true
+})
 ipcMain.on('game:editable-focus', (event, focused) => {
   const targetWindow = BrowserWindow.fromWebContents(event.sender)
   if (!targetWindow || targetWindow !== touchWindow || targetWindow.isDestroyed()) {
@@ -1929,6 +2004,22 @@ ipcMain.handle('media:open-folder', () => openMediaFolder())
 ipcMain.handle('app-language:get', () => languagePreferences.get())
 ipcMain.handle('app-language:set', (_event, locale) => setApplicationLanguage(locale))
 ipcMain.handle('app-settings:get', async () => toPublicApplicationSettings(await applicationSettings.get()))
+ipcMain.handle('app-settings:icon-data', async () => {
+  const settings = await applicationSettings.get()
+  const configuredPath = settings?.applicationIconPath
+  const configuredIcon = configuredPath && nodeFs.existsSync(configuredPath)
+    ? nativeImage.createFromPath(configuredPath)
+    : null
+  if (configuredIcon && !configuredIcon.isEmpty()) {
+    return { dataUrl: configuredIcon.toDataURL() }
+  }
+  try {
+    const defaultIcon = await app.getFileIcon(process.execPath, { size: 'small' })
+    return { dataUrl: defaultIcon && !defaultIcon.isEmpty() ? defaultIcon.toDataURL() : null }
+  } catch (_error) {
+    return { dataUrl: null }
+  }
+})
 ipcMain.handle('app-settings:update', (_event, patch) => updateApplicationSettings(patch))
 ipcMain.handle('app-settings:choose-icon', async (event) => {
   const result = await showNativeDialogWithFocusRestore({
@@ -1967,6 +2058,41 @@ ipcMain.handle('app-settings:choose-secondary-background', async (event) => {
     settings: await updateApplicationSettings({ secondaryDisplayBackgroundPath: target }),
   }
 })
+ipcMain.handle('app-settings:choose-secondary-idle-media', async (event) => {
+  const result = await showNativeDialogWithFocusRestore({
+    BrowserWindow, dialog, event, method: 'showOpenDialog',
+    options: {
+      title: '选择副屏待机画面',
+      properties: ['openFile'],
+      filters: [{
+        name: '待机画面',
+        extensions: ['png', 'jpg', 'jpeg', 'webp', 'bmp', 'gif', 'apng', 'avif', 'mp4', 'm4v', 'mov', 'webm', 'ogv', 'ogg'],
+      }],
+    },
+  })
+  if (result.canceled || !result.filePaths?.[0]) return { canceled: true }
+  const previous = await applicationSettings.get()
+  const target = await installSecondaryIdleMedia({
+    fs,
+    nativeImage,
+    source: result.filePaths[0],
+    userDataPath: app.getPath('userData'),
+  })
+  const settings = await updateApplicationSettings({ secondaryIdleMediaPath: target })
+  if (previous.secondaryIdleMediaPath && previous.secondaryIdleMediaPath !== target
+    && isManagedSecondaryIdleMediaPath(previous.secondaryIdleMediaPath)) {
+    await fs.rm(previous.secondaryIdleMediaPath, { force: true }).catch(() => {})
+  }
+  return { canceled: false, settings }
+})
+ipcMain.handle('app-settings:clear-secondary-idle-media', async () => {
+  const settings = await applicationSettings.get()
+  const result = await updateApplicationSettings({ secondaryIdleMediaPath: null })
+  if (isManagedSecondaryIdleMediaPath(settings.secondaryIdleMediaPath)) {
+    await fs.rm(settings.secondaryIdleMediaPath, { force: true }).catch(() => {})
+  }
+  return result
+})
 ipcMain.handle('app-settings:clear-secondary-background', async () => {
   const settings = await applicationSettings.get()
   const result = await updateApplicationSettings({ secondaryDisplayBackgroundPath: null })
@@ -1980,6 +2106,7 @@ ipcMain.handle('app-settings:clear-secondary-background', async () => {
   return result
 })
 ipcMain.handle('secondary-display:background', () => readSecondaryDisplayBackground())
+ipcMain.handle('secondary-display:idle-media', () => getSecondaryIdleMediaPreview())
 ipcMain.handle('game:reorder', (_event, gameIds) => backendRequest('/games/display-order', {
   method: 'PUT', body: JSON.stringify({ gameIds }),
 }))
@@ -2146,6 +2273,26 @@ if (layoutDiagnosticsEnabled) {
   })
 }
 
+function registerIdleMediaProtocol() {
+  protocol.handle(idleMediaProtocol, async () => {
+    const settings = await applicationSettings.get()
+    const configuredPath = settings.secondaryIdleMediaPath
+    if (!isManagedSecondaryIdleMediaPath(configuredPath)) {
+      return new Response('Secondary idle media is not configured', { status: 404 })
+    }
+    try {
+      const stat = await fs.stat(configuredPath)
+      const extension = path.extname(configuredPath).toLowerCase()
+      if (!stat.isFile() || (!imageExtensions.has(extension) && !videoExtensions.has(extension))) {
+        return new Response('Secondary idle media is not a supported file', { status: 404 })
+      }
+      return electronNet.fetch(pathToFileURL(configuredPath).toString())
+    } catch (_error) {
+      return new Response('Secondary idle media is unavailable', { status: 404 })
+    }
+  })
+}
+
 app.whenReady()
   .then(async () => {
     // The app has no native menu. Removing it keeps the Windows content bounds
@@ -2153,14 +2300,23 @@ app.whenReady()
     Menu.setApplicationMenu(null)
     createSplashWindow()
     registerMediaProtocol()
+    registerIdleMediaProtocol()
     await startEmbeddedBackend()
     startFrameServer()
     startRuntimeStateStream()
     createWindow()
     applyApplicationBrand(await applicationSettings.get())
+    void openAutomaticSecondaryDisplay().catch((error) => {
+      appendStartupLog(`Automatic secondary display open failed: ${error.message || String(error)}`)
+    })
 
     screen.on('display-added', () => {
       void broadcastSecondaryDisplayStatus()
+      if (!secondaryWindow || secondaryWindow.isDestroyed()) {
+        void openAutomaticSecondaryDisplay().catch((error) => {
+          appendStartupLog(`Automatic secondary display open failed: ${error.message || String(error)}`)
+        })
+      }
     })
     screen.on('display-metrics-changed', () => {
       void broadcastSecondaryDisplayStatus()

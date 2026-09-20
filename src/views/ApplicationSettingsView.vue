@@ -27,6 +27,7 @@ const saved = ref({
   applicationTitle: "LED Game",
   applicationIconPath: "",
   secondaryDisplayBackgroundPath: "",
+  secondaryIdleMediaPath: "",
   touchExitPassword: "",
 });
 const draft = reactive({
@@ -41,6 +42,7 @@ const draft = reactive({
   applicationTitle: "LED Game",
   applicationIconPath: "",
   secondaryDisplayBackgroundPath: "",
+  secondaryIdleMediaPath: "",
   touchExitPassword: "",
 });
 let removeSettingsListener = null;
@@ -66,12 +68,17 @@ const dirty = computed(
     || draft.secondaryIdlePromptFontSize !== saved.value.secondaryIdlePromptFontSize
     || draft.applicationTitle !== saved.value.applicationTitle
     || draft.secondaryDisplayBackgroundPath !== saved.value.secondaryDisplayBackgroundPath
+    || draft.secondaryIdleMediaPath !== saved.value.secondaryIdleMediaPath
     || Boolean(draft.touchExitPassword),
 );
 const applicationIconLabel = computed(() => draft.applicationIconPath || t("management.defaultIcon"));
 const secondaryBackgroundLabel = computed(() => {
   if (!draft.secondaryDisplayBackgroundPath) return t("management.defaultBackground");
   return String(draft.secondaryDisplayBackgroundPath).split(/[\\/]/).pop();
+});
+const secondaryIdleMediaLabel = computed(() => {
+  if (!draft.secondaryIdleMediaPath) return t("applicationSettings.defaultSecondaryIdleMedia");
+  return String(draft.secondaryIdleMediaPath).split(/[\\/]/).pop();
 });
 
 onMounted(async () => {
@@ -139,6 +146,8 @@ function applySettings(settings) {
     applicationIconPath: typeof settings?.applicationIconPath === "string" ? settings.applicationIconPath : "",
     secondaryDisplayBackgroundPath: typeof settings?.secondaryDisplayBackgroundPath === "string"
       ? settings.secondaryDisplayBackgroundPath : "",
+    secondaryIdleMediaPath: typeof settings?.secondaryIdleMediaPath === "string"
+      ? settings.secondaryIdleMediaPath : "",
     touchExitPassword: "",
   };
   saved.value = normalized;
@@ -153,6 +162,7 @@ function applySettings(settings) {
   draft.applicationTitle = normalized.applicationTitle;
   draft.applicationIconPath = normalized.applicationIconPath;
   draft.secondaryDisplayBackgroundPath = normalized.secondaryDisplayBackgroundPath;
+  draft.secondaryIdleMediaPath = normalized.secondaryIdleMediaPath;
   draft.touchExitPassword = "";
 }
 
@@ -183,6 +193,27 @@ async function clearSecondaryBackground() {
     applySettings(await api.clearSecondaryBackground());
   } catch (error) {
     errorMessage.value = error?.message || t("management.backgroundClearFailed");
+  }
+}
+
+async function chooseSecondaryIdleMedia() {
+  if (!api?.chooseSecondaryIdleMedia) return;
+  errorMessage.value = "";
+  try {
+    const result = await api.chooseSecondaryIdleMedia();
+    if (!result?.canceled && result?.settings) applySettings(result.settings);
+  } catch (error) {
+    errorMessage.value = error?.message || t("applicationSettings.idleMediaChooseFailed");
+  }
+}
+
+async function clearSecondaryIdleMedia() {
+  if (!api?.clearSecondaryIdleMedia || !draft.secondaryIdleMediaPath) return;
+  errorMessage.value = "";
+  try {
+    applySettings(await api.clearSecondaryIdleMedia());
+  } catch (error) {
+    errorMessage.value = error?.message || t("applicationSettings.idleMediaClearFailed");
   }
 }
 
@@ -323,6 +354,16 @@ async function testMemberPlatform() {
             </span>
             <small>{{ t("applicationSettings.secondaryIdlePromptFontSizeHint") }}</small>
           </label>
+          <div class="application-settings-actions application-settings-idle-media-actions">
+            <button class="application-settings-secondary" type="button" @click="chooseSecondaryIdleMedia">
+              {{ t("applicationSettings.chooseSecondaryIdleMedia") }}
+            </button>
+            <span>{{ secondaryIdleMediaLabel }}</span>
+            <button v-if="draft.secondaryIdleMediaPath" class="application-settings-secondary" type="button" @click="clearSecondaryIdleMedia">
+              {{ t("applicationSettings.clearSecondaryIdleMedia") }}
+            </button>
+          </div>
+          <small>{{ t("applicationSettings.secondaryIdleMediaHint") }}</small>
         </fieldset>
 
         <label class="application-settings-field">

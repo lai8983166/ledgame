@@ -64,6 +64,13 @@ test("secondary display matching never falls back to primary or an unrelated scr
   );
 });
 
+test("startup automatically opens the first available external display", async () => {
+  const source = await readFile(new URL("../electron/main.cjs", import.meta.url), "utf8");
+  assert.match(source, /async function openAutomaticSecondaryDisplay\(\)/);
+  assert.match(source, /void openAutomaticSecondaryDisplay\(\)\.catch/);
+  assert.match(source, /currentDisplayDescriptors\(\)\.filter\(\(display\) => display\.selectable\)/);
+});
+
 test("secondary runtime view shows generic game time without treating Rank milliseconds as global time", async () => {
   const source = await readFile(new URL("../src/views/SecondaryDisplayView.vue", import.meta.url), "utf8");
 
@@ -91,8 +98,10 @@ test("secondary runtime reuses the animated idle display with the floor-game tit
   assert.match(source, /dashboard\/idle\.mp4/);
   assert.match(source, /data-testid="secondary-display-idle"/);
   assert.match(source, /<IdlePromptDisplay[\s\S]*:text="secondaryIdlePromptText"/);
-  assert.match(source, /@error="idleVideoFailed = true"/);
-  assert.match(source, /\["IDLE", "PREPARING"\]\.includes\(lifecycle\.value\)/);
+  assert.match(source, /@error="idleMediaFailed = true"/);
+  assert.match(source, /getSecondaryIdleMedia/);
+  assert.match(source, /showIdleImage/);
+  assert.match(source, /\["UNKNOWN", "STOPPED", "IDLE", "PREPARING"\]\.includes\(lifecycle\.value\)/);
   assert.match(source, /secondaryIdlePromptText/);
   assert.match(source, /secondaryIdlePromptFontSize/);
   assert.match(idleComponent, /touch-idle-title-depth/);

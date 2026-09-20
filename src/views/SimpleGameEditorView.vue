@@ -3438,6 +3438,7 @@ function formatRuntimeSummary(value) {
               <div class="object-panel-head-actions">
                 <p>{{ t("simple.itemCount", { count: frameObjects.length }) }}</p>
                 <button
+                  v-if="!anchorEditMode"
                   class="soft-button compact-button object-list-toggle"
                   type="button"
                   :aria-label="t(showObjectList ? 'simple.showSpritePreview' : 'simple.showObjects')"
@@ -3449,7 +3450,7 @@ function formatRuntimeSummary(value) {
                 </button>
               </div>
             </div>
-            <div class="object-edit-controls">
+            <div v-if="!anchorEditMode" class="object-edit-controls">
               <EditorInteractionModeSwitch
                 :model-value="interactionMode"
                 :options="interactionModeOptions"
@@ -3457,7 +3458,7 @@ function formatRuntimeSummary(value) {
               />
             </div>
             <div class="object-actions">
-              <div class="object-action-palette" :aria-label="t('simple.color')" role="group">
+              <div v-if="!anchorEditMode" class="object-action-palette" :aria-label="t('simple.color')" role="group">
                 <button
                   v-for="color in colorOptions"
                   :key="color.index"
@@ -3621,6 +3622,7 @@ function formatRuntimeSummary(value) {
                   <EditorActionIcon name="trash" />
                 </button>
               </template>
+              <template v-if="!anchorEditMode">
               <button
                 class="soft-button compact-button object-icon-button color-copy-button color-copy-green"
                 :disabled="frames.length <= 1 || frameColorObjectCounts[0] === 0"
@@ -3661,8 +3663,9 @@ function formatRuntimeSummary(value) {
               >
                 <EditorActionIcon name="copy-color" />
               </button>
+              </template>
             </div>
-            <div v-if="showObjectList" class="object-list">
+            <div v-if="!anchorEditMode && showObjectList" class="object-list">
               <button
                 v-for="object in frameObjects"
                 :key="object.id"
@@ -3686,7 +3689,7 @@ function formatRuntimeSummary(value) {
                 </span>
               </button>
             </div>
-            <div v-else class="sprite-preview-panel">
+            <div v-else-if="!anchorEditMode" class="sprite-preview-panel">
               <div class="sprite-preview-heading">
                 <strong>{{ t("simple.spritePreview") }}</strong>
                 <small v-if="spriteDimensionFilter">{{ t("simple.spritePreviewCount", { count: filteredEditorSprites.length }) }}</small>
@@ -3721,6 +3724,10 @@ function formatRuntimeSummary(value) {
                   <small>{{ sprite.width }} × {{ sprite.height }} · {{ sprite.points.length }} {{ t("simple.spritePointsUnit") }}</small>
                 </button>
               </div>
+            </div>
+            <div v-else class="anchor-edit-panel">
+              <strong>{{ t("simple.editAnchor") }}</strong>
+              <span>{{ t("simple.chooseAnchor") }}</span>
             </div>
           </div>
           <div class="editor-side-rail">

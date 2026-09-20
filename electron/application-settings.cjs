@@ -30,6 +30,7 @@ const SECONDARY_IDLE_PROMPT_FONT_SIZE_MAX = 200
 const APPLICATION_TITLE_DEFAULT = 'LED Game'
 const TOUCH_EXIT_PASSWORD_DEFAULT = '888888'
 const SECONDARY_DISPLAY_BACKGROUND_DEFAULT = null
+const SECONDARY_IDLE_MEDIA_DEFAULT = null
 const DEFAULT_APPLICATION_SETTINGS = Object.freeze({
   entryMethod: 'touch',
   mode: 'debug',
@@ -43,6 +44,7 @@ const DEFAULT_APPLICATION_SETTINGS = Object.freeze({
   applicationTitle: APPLICATION_TITLE_DEFAULT,
   applicationIconPath: null,
   secondaryDisplayBackgroundPath: SECONDARY_DISPLAY_BACKGROUND_DEFAULT,
+  secondaryIdleMediaPath: SECONDARY_IDLE_MEDIA_DEFAULT,
   touchExitPassword: TOUCH_EXIT_PASSWORD_DEFAULT,
 })
 
@@ -158,6 +160,9 @@ function normalizeApplicationSettings(value) {
     secondaryDisplayBackgroundPath: typeof source.secondaryDisplayBackgroundPath === 'string'
       && source.secondaryDisplayBackgroundPath.trim()
       ? path.resolve(source.secondaryDisplayBackgroundPath) : SECONDARY_DISPLAY_BACKGROUND_DEFAULT,
+    secondaryIdleMediaPath: typeof source.secondaryIdleMediaPath === 'string'
+      && source.secondaryIdleMediaPath.trim()
+      ? path.resolve(source.secondaryIdleMediaPath) : SECONDARY_IDLE_MEDIA_DEFAULT,
     touchExitPassword: normalizeTouchExitPassword(source.touchExitPassword),
   }
 }
@@ -181,6 +186,10 @@ function validateSettingsPatch(value) {
   if ('secondaryDisplayBackgroundPath' in patch && patch.secondaryDisplayBackgroundPath !== null
     && (typeof patch.secondaryDisplayBackgroundPath !== 'string' || !patch.secondaryDisplayBackgroundPath.trim())) {
     throw new Error('Secondary display background path must be a file path or null')
+  }
+  if ('secondaryIdleMediaPath' in patch && patch.secondaryIdleMediaPath !== null
+    && (typeof patch.secondaryIdleMediaPath !== 'string' || !patch.secondaryIdleMediaPath.trim())) {
+    throw new Error('Secondary idle media path must be a file path or null')
   }
   if ('memberPlatformHost' in patch && (typeof patch.memberPlatformHost !== 'string'
     || normalizeMemberPlatformHost(patch.memberPlatformHost) !== patch.memberPlatformHost.trim())) {
@@ -305,6 +314,7 @@ module.exports = {
   SECONDARY_IDLE_PROMPT_MAX_LENGTH,
   TOUCH_EXIT_PASSWORD_DEFAULT,
   SECONDARY_DISPLAY_BACKGROUND_DEFAULT,
+  SECONDARY_IDLE_MEDIA_DEFAULT,
   createApplicationSettingsStore,
   normalizeApplicationSettings,
   normalizeSecondaryDisplay,

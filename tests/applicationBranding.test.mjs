@@ -11,6 +11,7 @@ const {
   applyApplicationBrand,
   installApplicationIcon,
   installSecondaryDisplayBackground,
+  installSecondaryIdleMedia,
   toPublicApplicationSettings,
 } = require("../electron/application-branding.cjs");
 const { createApplicationSettingsStore } = require("../electron/application-settings.cjs");
@@ -94,6 +95,25 @@ test("secondary display backgrounds are converted to a managed PNG", async () =>
     });
     assert.equal(target, path.join(directory, "branding", "secondary-display-background.png"));
     assert.deepEqual(await readFile(target), Buffer.from("managed-png"));
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("secondary idle media keeps image and video formats for runtime playback", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "led-game-idle-media-"));
+  const source = path.join(directory, "standby.mp4");
+  try {
+    await writeFile(source, "video", "utf8");
+    const target = await installSecondaryIdleMedia({
+      fs,
+      nativeImage: { createFromPath: () => ({ isEmpty: () => false }) },
+      source,
+      userDataPath: directory,
+      now: () => 7,
+    });
+    assert.equal(target, path.join(directory, "branding", "secondary-idle-media-7.mp4"));
+    assert.equal(await readFile(target, "utf8"), "video");
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
