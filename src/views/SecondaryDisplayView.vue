@@ -1,11 +1,12 @@
 <script setup>
-import { computed, onMounted, onUnmounted, ref, watch } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { normalizeRuntimeState } from "../lib/gameFlowState.js";
 import {
   createSecondaryDisplayPresentation,
   SECONDARY_DISPLAY_MODES,
 } from "../lib/secondaryDisplayPresentation.js";
+import IdlePromptDisplay from "../components/IdlePromptDisplay.vue";
 import stageSuccessImage from "../assets/secondary-display/stage-success.png";
 import stageFailureImage from "../assets/secondary-display/stage-failure.png";
 import gameSuccessImage from "../assets/secondary-display/game-success.png";
@@ -14,17 +15,26 @@ import gameFailureImage from "../assets/secondary-display/game-failure.png";
 const { t } = useI18n();
 const api = window.ledGame;
 const settingsApi = window.appSettings;
+const mediaApi = window.mediaLibrary;
+const SECONDARY_IDLE_VIDEO_ASSET = "dashboard/idle.mp4";
 const runtimeState = ref(normalizeRuntimeState(null));
 const loading = ref(true);
 const errorMessage = ref("");
 const backgroundDataUrl = ref("");
 const backgroundElement = ref(null);
+const idleVideoUrl = ref("");
+const idleVideoElement = ref(null);
+const idleVideoFailed = ref(false);
+const idlePromptFading = ref(false);
+const secondaryIdlePromptText = ref("LED FLOOR GAME");
+const secondaryIdlePromptFontSize = ref(72);
 const stateObservedAt = ref(Date.now());
 const clockNow = ref(Date.now());
 let removeStateListener = null;
 let removeSettingsListener = null;
 let clockTimer = null;
 let backgroundLoadRevision = 0;
+let idlePromptTimer = null;
 
 watch(backgroundDataUrl, (dataUrl) => {
   const element = backgroundElement.value;
@@ -40,6 +50,9 @@ const presentation = computed(() => createSecondaryDisplayPresentation(runtimeSt
 }));
 const gameplay = computed(() => presentation.value.state.gameplay || {});
 const lifecycle = computed(() => presentation.value.state.engineState);
+const isIdleVisible = computed(() => !loading.value && !errorMessage.value
+  && ["IDLE", "PREPARING"].includes(lifecycle.value));
+const showIdleVideo = computed(() => isIdleVisible.value && idleVideoUrl.value && !idleVideoFailed.value);
 const isResultVisible = computed(() => presentation.value.mode !== SECONDARY_DISPLAY_MODES.HUD);
 const isGameResult = computed(() => [
   SECONDARY_DISPLAY_MODES.GAME_SUCCESS,
@@ -68,6 +81,25 @@ async function loadSecondaryBackground() {
   }
 }
 
+function applyApplicationSettings(settings) {
+  const text = typeof settings?.secondaryIdlePromptText === "string"
+    ? settings.secondaryIdlePromptText.trim()
+    : "";
+  secondaryIdlePromptText.value = text || "LED FLOOR GAME";
+  const fontSize = Number(settings?.secondaryIdlePromptFontSize);
+  secondaryIdlePromptFontSize.value = Number.isInteger(fontSize) && fontSize >= 32 && fontSize <= 200
+    ? fontSize
+    : 72;
+}
+
+async function loadApplicationSettings() {
+  try {
+    applyApplicationSettings(await settingsApi?.get?.());
+  } catch (_error) {
+    applyApplicationSettings(null);
+  }
+}
+
 const resultVisual = computed(() => {
   switch (presentation.value.mode) {
     case SECONDARY_DISPLAY_MODES.STAGE_SUCCESS:
@@ -93,14 +125,31 @@ const resultVisual = computed(() => {
   }
 });
 
+watch(isIdleVisible, (visible) => {
+  if (visible) {
+    startIdlePromptAnimation();
+    return;
+  }
+  stopIdlePromptAnimation();
+});
+
+watch(showIdleVideo, async (visible) => {
+  if (!visible) return;
+  await nextTick();
+  playIdleVideo();
+});
+
 onMounted(async () => {
   removeStateListener = api?.onEngineState?.((state) => {
     applyRuntimeState(state);
   });
-  removeSettingsListener = settingsApi?.onChanged?.(() => {
+  removeSettingsListener = settingsApi?.onChanged?.((settings) => {
+    applyApplicationSettings(settings);
     void loadSecondaryBackground();
   }) || null;
   void loadSecondaryBackground();
+  void loadApplicationSettings();
+  void loadIdleVideo();
   clockTimer = window.setInterval(() => {
     clockNow.value = Date.now();
   }, 250);
@@ -123,7 +172,50 @@ onUnmounted(() => {
   removeSettingsListener?.();
   backgroundLoadRevision += 1;
   if (clockTimer) window.clearInterval(clockTimer);
+  stopIdlePromptAnimation();
 });
+
+function playIdleVideo() {
+  idleVideoElement.value?.play().catch(() => {
+    // canplay will retry after the custom media protocol finishes loading.
+  });
+}
+
+async function loadIdleVideo() {
+  if (!mediaApi?.getPreviewUrl) {
+    idleVideoFailed.value = true;
+    return;
+  }
+  try {
+    const result = await mediaApi.getPreviewUrl(SECONDARY_IDLE_VIDEO_ASSET);
+    idleVideoUrl.value = result?.url || result || "";
+    idleVideoFailed.value = !idleVideoUrl.value;
+  } catch (_error) {
+    idleVideoFailed.value = true;
+  }
+}
+
+function startIdlePromptAnimation() {
+  stopIdlePromptAnimation();
+  idlePromptTimer = window.setInterval(() => {
+    if (!isIdleVisible.value) {
+      stopIdlePromptAnimation();
+      return;
+    }
+    idlePromptFading.value = false;
+    window.requestAnimationFrame(() => {
+      if (isIdleVisible.value) idlePromptFading.value = true;
+    });
+  }, 3000);
+}
+
+function stopIdlePromptAnimation() {
+  if (idlePromptTimer !== null) {
+    window.clearInterval(idlePromptTimer);
+    idlePromptTimer = null;
+  }
+  idlePromptFading.value = false;
+}
 
 function displayValue(value) {
   return value === null || value === undefined || value === "" ? "—" : value;
@@ -153,6 +245,30 @@ function displayValue(value) {
       <span>CONNECTION</span>
       <h1>{{ t("secondaryDisplay.runtimeUnavailable") }}</h1>
       <p>{{ errorMessage }}</p>
+    </section>
+
+    <section v-else-if="isIdleVisible" class="secondary-idle" data-testid="secondary-display-idle">
+      <video
+        v-if="showIdleVideo"
+        ref="idleVideoElement"
+        class="secondary-idle-video"
+        :src="idleVideoUrl"
+        autoplay
+        loop
+        muted
+        playsinline
+        aria-hidden="true"
+        @canplay="playIdleVideo"
+        @error="idleVideoFailed = true"
+      ></video>
+      <div class="secondary-idle-action">
+        <IdlePromptDisplay
+          :text="secondaryIdlePromptText"
+          :font-size="secondaryIdlePromptFontSize"
+          :fading="idlePromptFading"
+          @animation-end="idlePromptFading = false"
+        />
+      </div>
     </section>
 
     <section v-else class="secondary-runtime-content">
@@ -256,6 +372,9 @@ function displayValue(value) {
 .secondary-runtime--custom-background .secondary-runtime-background { opacity: 0.48; }
 .secondary-runtime-grid { position: absolute; inset: 0; opacity: 0.18; background-image: linear-gradient(rgba(105, 166, 197, 0.16) 1px, transparent 1px), linear-gradient(90deg, rgba(105, 166, 197, 0.16) 1px, transparent 1px); background-size: 52px 52px; }
 .secondary-runtime-content, .secondary-runtime-center { position: relative; z-index: 1; }
+.secondary-idle { position: relative; z-index: 1; width: 100%; height: 100%; overflow: hidden; }
+.secondary-idle-video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; background: #071018; }
+.secondary-idle-action { position: relative; z-index: 1; display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; background: rgba(7, 16, 24, 0.34); }
 .secondary-runtime-center { height: 100%; display: grid; place-content: center; gap: 12px; padding: 6vh 7vw; text-align: center; }
 .secondary-runtime-center span, .game-heading > span { color: #63cde1; font-weight: 850; text-transform: uppercase; }
 .secondary-runtime-center h1, .secondary-runtime-center p { margin: 0; }

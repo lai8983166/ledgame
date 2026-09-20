@@ -70,11 +70,26 @@ test("persisted application title cannot be replaced by the renderer document ti
 });
 
 test("games navigation owns the home and game-list selector", () => {
-  assert.match(appSource, /<select[\s\S]*class="nav-tab nav-game-tab"/);
-  assert.doesNotMatch(appSource, /<label[\s\S]*nav-game-tab/);
+  assert.match(appSource, /class="nav-tab nav-game-tab-shell"[\s\S]*nav-game-tab-label[\s\S]*t\("nav\.games"\)/);
+  assert.match(appSource, /<select[\s\S]*class="nav-game-tab"/);
+  assert.doesNotMatch(appSource, /class="nav-tab nav-game-tab"/);
   assert.match(appSource, /v-model="gameSection"/);
   assert.match(appSource, /option value="home"/);
   assert.match(appSource, /option value="list"/);
   assert.match(appSource, /:section="gameSection"/);
   assert.doesNotMatch(gameListSource, /game-section-switcher/);
+});
+
+test("management game list hides the test-only demo game", () => {
+  assert.match(gameListSource, /isDemoGame[\s\S]*simple-demo/);
+  assert.match(gameListSource, /result\.games\.filter\(\(game\) => !isDemoGame\(game\)\)/);
+});
+
+test("standalone editor validation buttons are hidden while validation remains internal", async () => {
+  const simpleSource = await readFile(new URL("../src/views/SimpleGameEditorView.vue", import.meta.url), "utf8");
+  const rankSource = await readFile(new URL("../src/views/RankGameEditorView.vue", import.meta.url), "utf8");
+  assert.doesNotMatch(simpleSource, /@click="validateEditor"/);
+  assert.doesNotMatch(rankSource, /@click="validate"/);
+  assert.match(simpleSource, /validateGameEditor/);
+  assert.match(rankSource, /validateRankGameEditor/);
 });

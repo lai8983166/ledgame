@@ -567,25 +567,22 @@ function formatRuntimeValue(value, fallback = "-") {
         >
           {{ busyAction === "game-flow" ? t("nav.entering") : t("nav.enterGame") }}
         </button>
-        <button
-          class="nav-tab"
-          :class="{ active: activeView === 'demo' }"
-          type="button"
-          @click="activeView = 'demo'"
-        >
-          {{ t("nav.demo") }}
-        </button>
-        <select
-          v-model="gameSection"
-          class="nav-tab nav-game-tab"
+        <div
+          class="nav-tab nav-game-tab-shell"
           :class="{ active: ['games', 'simple-editor', 'rank-editor'].includes(activeView) }"
-          :aria-label="t('nav.games')"
-          @click.stop
-          @change="selectGameSection($event.target.value)"
         >
-          <option value="home">{{ t("gameCategories.home") }}</option>
-          <option value="list">{{ t("gameCategories.gameList") }}</option>
-        </select>
+          <span class="nav-game-tab-label">{{ t("nav.games") }}</span>
+          <select
+            v-model="gameSection"
+            class="nav-game-tab"
+            :aria-label="t('nav.games')"
+            @click.stop
+            @change="selectGameSection($event.target.value)"
+          >
+            <option value="home">{{ t("gameCategories.home") }}</option>
+            <option value="list">{{ t("gameCategories.gameList") }}</option>
+          </select>
+        </div>
         <button
           class="nav-tab"
           :class="{ active: activeView === 'media' }"

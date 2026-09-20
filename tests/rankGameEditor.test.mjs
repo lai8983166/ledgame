@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { createRankEditorPayload } from "../src/lib/rankGameEditor.js";
 
@@ -29,4 +32,36 @@ test("Rank editor keeps non-coordinate level data and clamps coordinates at zero
     bounds: { minX: 0, minY: 1, maxX: 19, maxY: 3 },
     durationSeconds: 30,
   });
+});
+
+test("Rank editor exposes the shared media picker and previews for all lifecycle media", async () => {
+  const sourcePath = path.resolve(
+    path.dirname(fileURLToPath(import.meta.url)),
+    "../src/views/RankGameEditorView.vue",
+  );
+  const source = await readFile(sourcePath, "utf8");
+
+  for (const pattern of [
+    /MediaPickerDialog/,
+    /commonConfig\.gameStartAudio/,
+    /commonConfig\.gameEndSuccessAudio/,
+    /commonConfig\.gameEndFailAudio/,
+    /commonConfig\.levelPassAudio/,
+    /commonConfig\.levelRestartAudio/,
+    /audio\.scoreSound/,
+    /audio\.injurySound/,
+    /gif\.levelFailure/,
+    /gif\.levelSettlement/,
+    /gif\.gameFailure/,
+    /gif\.gameOver/,
+    /level\.backgroundVoice/,
+    /level\.gameplayIntro/,
+    /rank-media-image-grid/,
+    /rank-media-audio-grid/,
+    /rank\.imageMediaHint/,
+    /buildMediaPreviewUrl/,
+    /<audio :src="audioPreview\.url"/,
+  ]) {
+    assert.match(source, pattern);
+  }
 });

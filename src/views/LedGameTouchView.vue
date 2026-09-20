@@ -10,6 +10,7 @@ import {
 } from "vue";
 import { useI18n } from "vue-i18n";
 import LanguageSelectionPanel from "../components/LanguageSelectionPanel.vue";
+import IdlePromptDisplay from "../components/IdlePromptDisplay.vue";
 import TouchMatrixCanvas from "../components/TouchMatrixCanvas.vue";
 import {
   extractErrorMessage,
@@ -1284,34 +1285,12 @@ async function confirmReturnToIdle() {
       @click="wakeTouch"
       @keydown="handleIdleKeydown"
     >
-      <strong
-        class="touch-idle-prompt"
-        :class="{ fading: idlePromptFading }"
-        :style="{ '--idle-prompt-font-size': `${touchIdlePromptFontSize}px` }"
-        @animationend="idlePromptFading = false"
-      >
-        <span
-          class="touch-idle-title-layer touch-idle-title-depth"
-          aria-hidden="true"
-        >
-          {{ idlePrompt }}
-        </span>
-        <span
-          class="touch-idle-title-layer touch-idle-title-glow"
-          aria-hidden="true"
-        >
-          {{ idlePrompt }}
-        </span>
-        <span class="touch-idle-title-layer touch-idle-title-face">
-          {{ idlePrompt }}
-        </span>
-        <span
-          class="touch-idle-title-layer touch-idle-title-highlight"
-          aria-hidden="true"
-        >
-          {{ idlePrompt }}
-        </span>
-      </strong>
+      <IdlePromptDisplay
+        :text="idlePrompt"
+        :font-size="touchIdlePromptFontSize"
+        :fading="idlePromptFading"
+        @animation-end="idlePromptFading = false"
+      />
       <button
         class="touch-language-trigger"
         type="button"

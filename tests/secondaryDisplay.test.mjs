@@ -82,3 +82,20 @@ test("secondary runtime view keeps gameplay score and accumulated member points 
   assert.match(source, /rankSecondary\.totalScore[\s\S]*player\.totalScore/);
   assert.match(source, /secondaryDisplay\.memberPoints[\s\S]*player\.memberPoints/);
 });
+
+test("secondary runtime reuses the animated idle display with the floor-game title", async () => {
+  const source = await readFile(new URL("../src/views/SecondaryDisplayView.vue", import.meta.url), "utf8");
+  const idleComponent = await readFile(new URL("../src/components/IdlePromptDisplay.vue", import.meta.url), "utf8");
+  const touchSource = await readFile(new URL("../src/views/LedGameTouchView.vue", import.meta.url), "utf8");
+
+  assert.match(source, /dashboard\/idle\.mp4/);
+  assert.match(source, /data-testid="secondary-display-idle"/);
+  assert.match(source, /<IdlePromptDisplay[\s\S]*:text="secondaryIdlePromptText"/);
+  assert.match(source, /@error="idleVideoFailed = true"/);
+  assert.match(source, /\["IDLE", "PREPARING"\]\.includes\(lifecycle\.value\)/);
+  assert.match(source, /secondaryIdlePromptText/);
+  assert.match(source, /secondaryIdlePromptFontSize/);
+  assert.match(idleComponent, /touch-idle-title-depth/);
+  assert.match(idleComponent, /touch-idle-prompt-fade/);
+  assert.match(touchSource, /<IdlePromptDisplay/);
+});

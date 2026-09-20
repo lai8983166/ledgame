@@ -46,7 +46,7 @@ const secondaryRuntimeApi = {
 const fullLedGameApi = {
   windowKind,
   restoreFocus: () => ipcRenderer.invoke('window:restore-focus'),
-  enterGameFlow: () => ipcRenderer.invoke('game-flow:enter'),
+  enterGameFlow: (options) => ipcRenderer.invoke('game-flow:enter', options),
   openDebugPanel: () => ipcRenderer.invoke('open-debug-panel'),
   startFixed: () => ipcRenderer.invoke('engine:start-fixed'),
   startInput: () => ipcRenderer.invoke('engine:start-input'),

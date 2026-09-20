@@ -1097,13 +1097,14 @@ async function startGame() {
       id: gameId,
       startLevelIndex: activeLevelIndex.value,
       launchMethod: "debug",
+      runtimeMode: "SIMULATION",
     });
     runtimeResult.value = result?.data || result;
     runtimeStatusMessage.value = t("simple.startSuccess");
     previewStatusMessage.value = t("simple.previewAvailable");
     // 启动成功后自动弹出/切换到 debug 面板；打开失败不影响已成功的启动。
     try {
-      await api?.openDebugPanel?.();
+      await api?.enterGameFlow?.({ mode: "debug" });
       previewStatusMessage.value = t("simple.previewOpened");
     } catch (openError) {
       previewStatusMessage.value = t("simple.previewAutoFailed");
@@ -3757,14 +3758,6 @@ function formatRuntimeSummary(value) {
                 @click="openPreview"
               >
                 {{ t("simple.openPreview") }}
-              </button>
-              <button
-                class="soft-button runtime-start-button"
-                :disabled="Boolean(busyAction) || !document"
-                type="button"
-                @click="validateEditor"
-              >
-                {{ t("simple.validate") }}
               </button>
               <button
                 class="soft-button runtime-start-button"

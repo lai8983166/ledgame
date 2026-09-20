@@ -45,9 +45,10 @@ const categoryName = ref("");
 const categoryCover = ref("");
 const categorySaving = ref(false);
 const categoryError = ref("");
-const visibleGames = computed(() => selectedCategory.value
+const isDemoGame = (game) => String(game?.name || "").trim().toLowerCase() === "simple-demo";
+const visibleGames = computed(() => (selectedCategory.value
   ? gamesInCategory(games.value, selectedCategory.value.id)
-  : games.value);
+  : games.value).filter((game) => !isDemoGame(game)));
 const displayGames = computed(() => ordering.value ? orderDraft.value : visibleGames.value);
 
 watch(
@@ -70,7 +71,7 @@ async function loadGames() {
   warningMessage.value = "";
   try {
     const result = await loadSupportedGames(api, { includeHidden: true });
-    games.value = result.games;
+    games.value = result.games.filter((game) => !isDemoGame(game));
     if (result.initializationError) {
       warningMessage.value = t("games.seedWarning", {
         message: extractErrorMessage(result.initializationError, t("games.seedFailed")),

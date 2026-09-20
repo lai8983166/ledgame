@@ -7,6 +7,12 @@ export function createApplicationSettingsPatch(settings) {
     },
     touchIdlePromptFontSize: settings?.touchIdlePromptFontSize,
   };
+  if (settings && Object.prototype.hasOwnProperty.call(settings, "secondaryIdlePromptText")) {
+    patch.secondaryIdlePromptText = settings.secondaryIdlePromptText;
+  }
+  if (settings && Object.prototype.hasOwnProperty.call(settings, "secondaryIdlePromptFontSize")) {
+    patch.secondaryIdlePromptFontSize = settings.secondaryIdlePromptFontSize;
+  }
   if (settings && Object.prototype.hasOwnProperty.call(settings, "applicationTitle")) {
     patch.applicationTitle = settings.applicationTitle;
   }

@@ -136,7 +136,7 @@ test("debug game entry applies the split bounds to both auxiliary windows", asyn
     source.indexOf("function normalizeTouchPresentationMode("),
   );
   const enterGameFlowSource = source.slice(
-    source.indexOf("async function enterGameFlow()"),
+    source.indexOf("async function enterGameFlow("),
     source.indexOf("function executePreparationRequest"),
   );
 

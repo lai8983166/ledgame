@@ -1473,10 +1473,11 @@ function refreshDatabase() {
   })
 }
 
-async function enterGameFlow() {
+async function enterGameFlow(options = {}) {
   const settings = await applicationSettings.get()
   currentEntryMethod = settings.entryMethod
-  const windowPlan = gameFlowWindowPlan(settings.mode)
+  const requestedMode = options?.mode === 'debug' ? 'debug' : settings.mode
+  const windowPlan = gameFlowWindowPlan(requestedMode)
   const splitBounds = windowPlan.openDebugPanel ? resolveDebugGameSplitBounds() : null
   if (windowPlan.openDebugPanel) {
     createDebugWindow(splitBounds.debug)
@@ -1710,7 +1711,7 @@ ipcMain.on('game:editable-focus', (event, focused) => {
   }
   touchKeyboardEditableFocused = Boolean(focused)
 })
-ipcMain.handle('game-flow:enter', () => enterGameFlow())
+ipcMain.handle('game-flow:enter', (_event, options) => enterGameFlow(options))
 
 ipcMain.handle('frame:latest', () => latestFrame)
 ipcMain.handle('frame:export-json', async (event, payload) => {

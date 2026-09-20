@@ -22,6 +22,11 @@ const TOUCH_IDLE_PROMPT_MAX_LENGTH = 48
 const TOUCH_IDLE_PROMPT_FONT_SIZE_DEFAULT = 72
 const TOUCH_IDLE_PROMPT_FONT_SIZE_MIN = 32
 const TOUCH_IDLE_PROMPT_FONT_SIZE_MAX = 200
+const SECONDARY_IDLE_PROMPT_DEFAULT = 'LED FLOOR GAME'
+const SECONDARY_IDLE_PROMPT_MAX_LENGTH = 64
+const SECONDARY_IDLE_PROMPT_FONT_SIZE_DEFAULT = 72
+const SECONDARY_IDLE_PROMPT_FONT_SIZE_MIN = 32
+const SECONDARY_IDLE_PROMPT_FONT_SIZE_MAX = 200
 const APPLICATION_TITLE_DEFAULT = 'LED Game'
 const TOUCH_EXIT_PASSWORD_DEFAULT = '888888'
 const SECONDARY_DISPLAY_BACKGROUND_DEFAULT = null
@@ -33,6 +38,8 @@ const DEFAULT_APPLICATION_SETTINGS = Object.freeze({
   secondaryDisplay: null,
   touchIdlePromptTexts: TOUCH_IDLE_PROMPT_DEFAULTS,
   touchIdlePromptFontSize: TOUCH_IDLE_PROMPT_FONT_SIZE_DEFAULT,
+  secondaryIdlePromptText: SECONDARY_IDLE_PROMPT_DEFAULT,
+  secondaryIdlePromptFontSize: SECONDARY_IDLE_PROMPT_FONT_SIZE_DEFAULT,
   applicationTitle: APPLICATION_TITLE_DEFAULT,
   applicationIconPath: null,
   secondaryDisplayBackgroundPath: SECONDARY_DISPLAY_BACKGROUND_DEFAULT,
@@ -101,6 +108,20 @@ function normalizeTouchIdlePromptFontSize(value) {
     : TOUCH_IDLE_PROMPT_FONT_SIZE_DEFAULT
 }
 
+function normalizeSecondaryIdlePromptText(value) {
+  const text = typeof value === 'string' ? value.trim() : ''
+  return text && Array.from(text).length <= SECONDARY_IDLE_PROMPT_MAX_LENGTH
+    ? text : SECONDARY_IDLE_PROMPT_DEFAULT
+}
+
+function normalizeSecondaryIdlePromptFontSize(value) {
+  return Number.isInteger(value)
+    && value >= SECONDARY_IDLE_PROMPT_FONT_SIZE_MIN
+    && value <= SECONDARY_IDLE_PROMPT_FONT_SIZE_MAX
+    ? value
+    : SECONDARY_IDLE_PROMPT_FONT_SIZE_DEFAULT
+}
+
 function normalizeMemberPlatformHost(value) {
   const host = typeof value === 'string' ? value.trim() : ''
   return host && !host.includes('/') && !host.includes(':') ? host : DEFAULT_APPLICATION_SETTINGS.memberPlatformHost
@@ -129,6 +150,8 @@ function normalizeApplicationSettings(value) {
       source.touchIdlePromptTexts ?? source.touchIdlePromptText,
     ),
     touchIdlePromptFontSize: normalizeTouchIdlePromptFontSize(source.touchIdlePromptFontSize),
+    secondaryIdlePromptText: normalizeSecondaryIdlePromptText(source.secondaryIdlePromptText),
+    secondaryIdlePromptFontSize: normalizeSecondaryIdlePromptFontSize(source.secondaryIdlePromptFontSize),
     applicationTitle: normalizeApplicationTitle(source.applicationTitle),
     applicationIconPath: typeof source.applicationIconPath === 'string' && source.applicationIconPath.trim()
       ? path.resolve(source.applicationIconPath) : null,
@@ -190,6 +213,21 @@ function validateSettingsPatch(value) {
   ) {
     throw new Error(
       `Touch idle prompt font size must be an integer between ${TOUCH_IDLE_PROMPT_FONT_SIZE_MIN} and ${TOUCH_IDLE_PROMPT_FONT_SIZE_MAX}`,
+    )
+  }
+  if ('secondaryIdlePromptText' in patch && (typeof patch.secondaryIdlePromptText !== 'string'
+    || !patch.secondaryIdlePromptText.trim()
+    || Array.from(patch.secondaryIdlePromptText.trim()).length > SECONDARY_IDLE_PROMPT_MAX_LENGTH)) {
+    throw new Error(`Secondary idle prompt text must contain 1 to ${SECONDARY_IDLE_PROMPT_MAX_LENGTH} characters`)
+  }
+  if (
+    'secondaryIdlePromptFontSize' in patch &&
+    (!Number.isInteger(patch.secondaryIdlePromptFontSize)
+      || patch.secondaryIdlePromptFontSize < SECONDARY_IDLE_PROMPT_FONT_SIZE_MIN
+      || patch.secondaryIdlePromptFontSize > SECONDARY_IDLE_PROMPT_FONT_SIZE_MAX)
+  ) {
+    throw new Error(
+      `Secondary idle prompt font size must be an integer between ${SECONDARY_IDLE_PROMPT_FONT_SIZE_MIN} and ${SECONDARY_IDLE_PROMPT_FONT_SIZE_MAX}`,
     )
   }
   if (
@@ -260,6 +298,11 @@ module.exports = {
   TOUCH_IDLE_PROMPT_FONT_SIZE_MAX,
   TOUCH_IDLE_PROMPT_FONT_SIZE_MIN,
   TOUCH_IDLE_PROMPT_MAX_LENGTH,
+  SECONDARY_IDLE_PROMPT_DEFAULT,
+  SECONDARY_IDLE_PROMPT_FONT_SIZE_DEFAULT,
+  SECONDARY_IDLE_PROMPT_FONT_SIZE_MAX,
+  SECONDARY_IDLE_PROMPT_FONT_SIZE_MIN,
+  SECONDARY_IDLE_PROMPT_MAX_LENGTH,
   TOUCH_EXIT_PASSWORD_DEFAULT,
   SECONDARY_DISPLAY_BACKGROUND_DEFAULT,
   createApplicationSettingsStore,

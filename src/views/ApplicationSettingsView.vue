@@ -22,6 +22,8 @@ const saved = ref({
   memberPlatformPort: 8090,
   touchIdlePromptTexts: defaultPromptTexts(),
   touchIdlePromptFontSize: 72,
+  secondaryIdlePromptText: "LED FLOOR GAME",
+  secondaryIdlePromptFontSize: 72,
   applicationTitle: "LED Game",
   applicationIconPath: "",
   secondaryDisplayBackgroundPath: "",
@@ -34,6 +36,8 @@ const draft = reactive({
   memberPlatformPort: 8090,
   touchIdlePromptTexts: defaultPromptTexts(),
   touchIdlePromptFontSize: 72,
+  secondaryIdlePromptText: "LED FLOOR GAME",
+  secondaryIdlePromptFontSize: 72,
   applicationTitle: "LED Game",
   applicationIconPath: "",
   secondaryDisplayBackgroundPath: "",
@@ -58,6 +62,8 @@ const dirty = computed(
     || Number(draft.memberPlatformPort) !== Number(saved.value.memberPlatformPort)
     || JSON.stringify(draft.touchIdlePromptTexts) !== JSON.stringify(saved.value.touchIdlePromptTexts)
     || draft.touchIdlePromptFontSize !== saved.value.touchIdlePromptFontSize
+    || draft.secondaryIdlePromptText !== saved.value.secondaryIdlePromptText
+    || draft.secondaryIdlePromptFontSize !== saved.value.secondaryIdlePromptFontSize
     || draft.applicationTitle !== saved.value.applicationTitle
     || draft.secondaryDisplayBackgroundPath !== saved.value.secondaryDisplayBackgroundPath
     || Boolean(draft.touchExitPassword),
@@ -103,6 +109,7 @@ function applySettings(settings) {
     ]),
   );
   const promptFontSize = Number(settings?.touchIdlePromptFontSize);
+  const secondaryPromptFontSize = Number(settings?.secondaryIdlePromptFontSize);
   const normalized = {
     entryMethod: ["touch", "coin", "wristband"].includes(settings?.entryMethod)
       ? settings.entryMethod
@@ -119,6 +126,14 @@ function applySettings(settings) {
     touchIdlePromptFontSize: Number.isInteger(promptFontSize) && promptFontSize >= 32 && promptFontSize <= 200
       ? promptFontSize
       : 72,
+    secondaryIdlePromptText: typeof settings?.secondaryIdlePromptText === "string"
+      && settings.secondaryIdlePromptText.trim()
+      ? settings.secondaryIdlePromptText.trim()
+      : "LED FLOOR GAME",
+    secondaryIdlePromptFontSize: Number.isInteger(secondaryPromptFontSize)
+      && secondaryPromptFontSize >= 32 && secondaryPromptFontSize <= 200
+      ? secondaryPromptFontSize
+      : 72,
     applicationTitle: typeof settings?.applicationTitle === "string" && settings.applicationTitle.trim()
       ? settings.applicationTitle.trim() : "LED Game",
     applicationIconPath: typeof settings?.applicationIconPath === "string" ? settings.applicationIconPath : "",
@@ -133,6 +148,8 @@ function applySettings(settings) {
   draft.memberPlatformPort = normalized.memberPlatformPort;
   draft.touchIdlePromptTexts = normalized.touchIdlePromptTexts;
   draft.touchIdlePromptFontSize = normalized.touchIdlePromptFontSize;
+  draft.secondaryIdlePromptText = normalized.secondaryIdlePromptText;
+  draft.secondaryIdlePromptFontSize = normalized.secondaryIdlePromptFontSize;
   draft.applicationTitle = normalized.applicationTitle;
   draft.applicationIconPath = normalized.applicationIconPath;
   draft.secondaryDisplayBackgroundPath = normalized.secondaryDisplayBackgroundPath;
@@ -276,6 +293,37 @@ async function testMemberPlatform() {
           </span>
           <small>{{ t("applicationSettings.idlePromptFontSizeHint") }}</small>
         </label>
+
+        <fieldset class="application-settings-connection">
+          <legend>{{ t("applicationSettings.secondaryIdleTitle") }}</legend>
+          <label class="application-settings-field">
+            <span>{{ t("applicationSettings.secondaryIdlePromptText") }}</span>
+            <input
+              v-model.trim="draft.secondaryIdlePromptText"
+              type="text"
+              maxlength="64"
+              autocomplete="off"
+            />
+            <small>{{ t("applicationSettings.secondaryIdlePromptTextHint") }}</small>
+          </label>
+          <label class="application-settings-field">
+            <span>{{ t("applicationSettings.secondaryIdlePromptFontSize") }}</span>
+            <span class="application-settings-input-row">
+              <input
+                v-model.number="draft.secondaryIdlePromptFontSize"
+                type="number"
+                min="32"
+                max="200"
+                step="1"
+                inputmode="numeric"
+              />
+              <span class="application-settings-range-hint">
+                {{ t("applicationSettings.idlePromptFontSizeRange") }}
+              </span>
+            </span>
+            <small>{{ t("applicationSettings.secondaryIdlePromptFontSizeHint") }}</small>
+          </label>
+        </fieldset>
 
         <label class="application-settings-field">
           <span>{{ t("applicationSettings.mode") }}</span>

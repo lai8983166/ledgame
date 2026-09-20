@@ -36,6 +36,11 @@ export const kioskMessages = {
       idlePromptFontSize: "待机文字大小",
       idlePromptFontSizeRange: "32-200 px",
       idlePromptFontSizeHint: "字号过大时会根据屏幕宽度缩小。",
+      secondaryIdleTitle: "副屏待机标题",
+      secondaryIdlePromptText: "副屏待机文字",
+      secondaryIdlePromptTextHint: "副屏待机时显示的标题，最多 64 个字符。",
+      secondaryIdlePromptFontSize: "副屏待机文字大小",
+      secondaryIdlePromptFontSizeHint: "副屏待机标题的字号，范围 32-200 px。",
       defaultIdlePrompt: "开始游戏",
       memberPlatform: {
         title: "会员管理端连接",
@@ -197,6 +202,11 @@ export const kioskMessages = {
       idlePromptFontSize: "Idle text size",
       idlePromptFontSizeRange: "32-200 px",
       idlePromptFontSizeHint: "The text scales down when the screen is narrow.",
+      secondaryIdleTitle: "Secondary idle title",
+      secondaryIdlePromptText: "Secondary idle text",
+      secondaryIdlePromptTextHint: "The title shown on the secondary display before a game starts, up to 64 characters.",
+      secondaryIdlePromptFontSize: "Secondary idle text size",
+      secondaryIdlePromptFontSizeHint: "The secondary idle title size, from 32 to 200 px.",
       defaultIdlePrompt: "Start Game",
       memberPlatform: {
         title: "Member platform connection",

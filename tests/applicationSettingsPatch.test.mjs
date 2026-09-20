@@ -37,7 +37,11 @@ test("application settings IPC patch includes the managed secondary background p
     mode: "game",
     touchIdlePromptTexts: {},
     touchIdlePromptFontSize: 72,
+    secondaryIdlePromptText: "FLOOR READY",
+    secondaryIdlePromptFontSize: 96,
     secondaryDisplayBackgroundPath: "C:\\data\\secondary-display-background.png",
   });
   assert.equal(patch.secondaryDisplayBackgroundPath, "C:\\data\\secondary-display-background.png");
+  assert.equal(patch.secondaryIdlePromptText, "FLOOR READY");
+  assert.equal(patch.secondaryIdlePromptFontSize, 96);
 });

@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
-test("Simple editor quick start remains direct and does not save or open Touch", async () => {
+test("Simple editor quick start opens the shared Touch and DebugPanel flow", async () => {
   const source = await readFile(new URL("../src/views/SimpleGameEditorView.vue", import.meta.url), "utf8");
   const startFunction = source.slice(
     source.indexOf("async function startGame()"),
@@ -11,10 +11,11 @@ test("Simple editor quick start remains direct and does not save or open Touch",
 
   assert.match(startFunction, /api\.startGame\(/);
   assert.match(startFunction, /launchMethod:\s*["']debug["']/);
+  assert.match(startFunction, /runtimeMode:\s*["']SIMULATION["']/);
   assert.match(startFunction, /startLevelIndex:\s*activeLevelIndex\.value/);
-  assert.match(startFunction, /openDebugPanel/);
+  assert.match(startFunction, /enterGameFlow\?\.\(\{ mode: ["']debug["'] \}\)/);
   assert.doesNotMatch(startFunction, /saveGameEditor/);
-  assert.doesNotMatch(startFunction, /enterGameFlow|createPreparation/);
+  assert.doesNotMatch(startFunction, /createPreparation/);
 });
 
 test("Touch view does not create audio playback or consume legacy audio actions", async () => {

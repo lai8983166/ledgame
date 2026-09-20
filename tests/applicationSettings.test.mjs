@@ -33,6 +33,8 @@ const BRAND_DEFAULTS = {
   applicationIconPath: null,
   secondaryDisplayBackgroundPath: null,
   touchExitPassword: "888888",
+  secondaryIdlePromptText: "LED FLOOR GAME",
+  secondaryIdlePromptFontSize: 72,
 };
 
 test("application settings normalize missing and unsupported fields to safe defaults", () => {
@@ -84,12 +86,16 @@ test("application settings persist valid values atomically and restore across in
         "en-US": "Get Ready",
       },
       touchIdlePromptFontSize: 96,
+      secondaryIdlePromptText: "  FLOOR READY  ",
+      secondaryIdlePromptFontSize: 96,
     });
     assert.equal(saved.entryMethod, "wristband");
     assert.equal(saved.mode, "game");
     assert.equal(saved.touchIdlePromptTexts["zh-CN"], "准备开始");
     assert.equal(saved.touchIdlePromptTexts["en-US"], "Get Ready");
     assert.equal(saved.touchIdlePromptFontSize, 96);
+    assert.equal(saved.secondaryIdlePromptText, "FLOOR READY");
+    assert.equal(saved.secondaryIdlePromptFontSize, 96);
     assert.deepEqual(JSON.parse(await readFile(settingsPath, "utf8")), saved);
     assert.deepEqual(
       await createApplicationSettingsStore({ fs, settingsPath }).get(),
@@ -134,6 +140,18 @@ test("application settings reject invalid writes and recover damaged JSON", asyn
     await assert.rejects(
       () => store.update({ touchIdlePromptFontSize: 201 }),
       /between 32 and 200/,
+    );
+    await assert.rejects(
+      () => store.update({ secondaryIdlePromptText: "   " }),
+      /Secondary idle prompt text/,
+    );
+    await assert.rejects(
+      () => store.update({ secondaryIdlePromptText: "x".repeat(65) }),
+      /Secondary idle prompt text/,
+    );
+    await assert.rejects(
+      () => store.update({ secondaryIdlePromptFontSize: 201 }),
+      /Secondary idle prompt font size/,
     );
     await assert.rejects(
       () => store.update({ memberPlatformHost: "http://bad-host" }),

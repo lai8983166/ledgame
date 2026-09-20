@@ -119,9 +119,9 @@ button {
 }
 
 .nav-game-tab {
-  min-width: 106px;
+  min-width: 0;
   min-height: 40px;
-  padding: 0 10px;
+  padding: 0 4px 0 0;
   border: 0;
   border-radius: 14px;
   color: #7a8492;
@@ -130,11 +130,27 @@ button {
   font: inherit;
   font-size: 14px;
   font-weight: 650;
-  text-align: center;
+  text-align: left;
   transition:
     color 160ms ease,
     background 160ms ease,
     box-shadow 160ms ease;
+}
+
+.nav-game-tab-shell {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 138px;
+  padding: 0 10px 0 13px;
+}
+
+.nav-game-tab-label {
+  flex: 0 0 auto;
+}
+
+.nav-game-tab-shell .nav-game-tab {
+  flex: 1 1 auto;
 }
 
 .nav-game-tab.active {
