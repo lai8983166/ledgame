@@ -352,7 +352,7 @@ onBeforeUnmount(() => {
   display: grid;
   place-items: center;
   padding: 24px;
-  background: rgba(20, 27, 37, 0.56);
+  background: var(--ui-overlay);
 }
 
 .global-config-dialog {
@@ -362,10 +362,10 @@ onBeforeUnmount(() => {
   width: min(1080px, 100%);
   height: min(900px, 94vh);
   padding: 22px;
-  border: 1px solid rgba(255, 255, 255, 0.76);
-  border-radius: 8px;
-  background: #eef1f5;
-  box-shadow: 0 24px 70px rgba(25, 34, 46, 0.38);
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius-dialog);
+  background: var(--ui-elevated);
+  box-shadow: var(--ui-shadow);
   outline: none;
 }
 
@@ -378,14 +378,14 @@ onBeforeUnmount(() => {
 
 .global-config-header h2 {
   margin: 0;
-  color: #2f3845;
+  color: var(--ui-text);
   font-size: 18px;
   font-weight: 680;
 }
 
 .global-config-header p {
   margin: 4px 0 0;
-  color: #7c8795;
+  color: var(--ui-muted);
   font-size: 12px;
 }
 
@@ -399,7 +399,7 @@ onBeforeUnmount(() => {
 
 .global-config-section h3 {
   margin: 0 0 10px;
-  color: #425063;
+  color: var(--ui-text);
   font-size: 14px;
   font-weight: 680;
 }
@@ -413,7 +413,7 @@ onBeforeUnmount(() => {
 .global-config-field {
   display: grid;
   gap: 6px;
-  color: #687384;
+  color: var(--ui-text-secondary);
   font-size: 13px;
   font-weight: 650;
 }
@@ -425,11 +425,11 @@ onBeforeUnmount(() => {
   max-width: 100%;
   min-height: 38px;
   padding: 0 12px;
-  border: 1px solid rgba(255, 255, 255, 0.72);
+  border: 1px solid var(--ui-border);
   border-radius: 12px;
-  background: #eef1f5;
-  box-shadow: inset 4px 4px 8px rgba(178, 187, 201, 0.34), inset -4px -4px 8px rgba(255, 255, 255, 0.8);
-  color: #343d4a;
+  background: var(--ui-input);
+  box-shadow: var(--ui-inset);
+  color: var(--ui-text-secondary);
   font-size: 13px;
 }
 
@@ -448,24 +448,24 @@ onBeforeUnmount(() => {
   min-height: 38px;
   padding: 0 10px;
   border-radius: 12px;
-  background: #e6ebf2;
-  color: #425063;
+  background: var(--ui-surface);
+  color: var(--ui-text-secondary);
   font-size: 12px;
-  box-shadow: inset 3px 3px 6px rgba(178, 187, 201, 0.3);
+  box-shadow: var(--ui-shadow);
 }
 
 .global-config-checkbox {
   display: flex;
   align-items: center;
   gap: 8px;
-  color: #425063;
+  color: var(--ui-text-secondary);
   font-size: 13px;
   font-weight: 600;
 }
 
 .global-config-error {
   margin: 0;
-  color: #b66b73;
+  color: var(--ui-error);
   font-size: 13px;
 }
 
@@ -481,7 +481,7 @@ onBeforeUnmount(() => {
   display: grid;
   place-items: center;
   justify-self: center;
-  background: #070a0f;
+  background: var(--ui-surface);
   border-radius: 8px;
   overflow: hidden;
 }
@@ -494,7 +494,7 @@ onBeforeUnmount(() => {
 }
 
 .global-config-inline-preview-placeholder {
-  color: #5a6573;
+  color: var(--ui-text-secondary);
   font-size: 12px;
 }
 
@@ -521,7 +521,7 @@ onBeforeUnmount(() => {
   display: grid;
   place-items: center;
   padding: 24px;
-  background: rgba(20, 27, 37, 0.56);
+  background: var(--ui-overlay);
 }
 
 .audio-player-dialog {
@@ -529,10 +529,10 @@ onBeforeUnmount(() => {
   gap: 16px;
   width: min(420px, 100%);
   padding: 18px;
-  border: 1px solid rgba(255, 255, 255, 0.76);
-  border-radius: 8px;
-  background: #eef1f5;
-  box-shadow: 0 24px 70px rgba(25, 34, 46, 0.38);
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius-dialog);
+  background: var(--ui-elevated);
+  box-shadow: var(--ui-shadow);
 }
 
 .audio-player-header {
@@ -544,14 +544,14 @@ onBeforeUnmount(() => {
 
 .audio-player-header h3 {
   margin: 0;
-  color: #2f3845;
+  color: var(--ui-text);
   font-size: 15px;
   font-weight: 680;
 }
 
 .audio-player-header p {
   margin: 4px 0 0;
-  color: #7c8795;
+  color: var(--ui-muted);
   font-size: 12px;
 }
 

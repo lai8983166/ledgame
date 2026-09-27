@@ -141,7 +141,7 @@ function close() {
   display: grid;
   place-items: center;
   padding: 24px;
-  background: rgba(12, 17, 23, 0.72);
+  background: var(--ui-overlay);
 }
 
 .simple-level-preview-dialog {
@@ -151,10 +151,10 @@ function close() {
   width: min(760px, calc(100vw - 48px));
   max-height: calc(100vh - 48px);
   padding: 18px;
-  border: 1px solid #3e4b5c;
-  border-radius: 8px;
-  background: #171d25;
-  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.34);
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius-dialog);
+  background: var(--ui-elevated);
+  box-shadow: var(--ui-shadow);
 }
 
 .simple-level-preview-dialog header,
@@ -171,23 +171,23 @@ function close() {
 }
 
 .simple-level-preview-dialog h2 {
-  color: #f2f5f8;
+  color: var(--ui-text);
   font-size: 1rem;
 }
 
 .simple-level-preview-dialog header p {
   margin-top: 4px;
-  color: #96a4b5;
+  color: var(--ui-muted);
   font-size: 0.78rem;
 }
 
 .simple-level-preview-dialog header button {
   width: 34px;
   height: 34px;
-  border: 1px solid #4b596a;
+  border: 1px solid var(--ui-border);
   border-radius: 6px;
-  color: #dce3eb;
-  background: #222b36;
+  color: var(--ui-text-secondary);
+  background: var(--ui-elevated);
   cursor: pointer;
   font-size: 1.25rem;
 }
@@ -198,9 +198,9 @@ function close() {
   display: grid;
   place-items: center;
   padding: 14px;
-  border: 1px solid #303b49;
+  border: 1px solid var(--ui-border);
   border-radius: 6px;
-  background: #090c10;
+  background: var(--ui-surface);
   overflow: hidden;
   pointer-events: none;
   user-select: none;
@@ -218,18 +218,18 @@ function close() {
 }
 
 .simple-level-preview-dialog footer {
-  color: #aab5c2;
+  color: var(--ui-text-secondary);
   font-size: 0.84rem;
 }
 
 .simple-level-preview-dialog footer strong {
-  color: #f2f5f8;
+  color: var(--ui-text);
 }
 
 .simple-level-preview-empty {
   display: grid;
   min-height: 240px;
   place-items: center;
-  color: #96a4b5;
+  color: var(--ui-muted);
 }
 </style>

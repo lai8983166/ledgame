@@ -146,7 +146,7 @@ async function selectDisplay(display) {
   display: grid;
   place-items: center;
   padding: 24px;
-  background: rgba(34, 43, 55, 0.38);
+  background: var(--ui-overlay);
 }
 
 .display-picker {
@@ -156,10 +156,10 @@ async function selectDisplay(display) {
   gap: 18px;
   overflow: auto;
   padding: 24px;
-  border: 1px solid #ccd5e0;
-  border-radius: 8px;
-  background: #f8fafc;
-  box-shadow: 0 24px 70px rgba(34, 43, 55, 0.28);
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius-dialog);
+  background: var(--ui-surface);
+  box-shadow: var(--ui-shadow);
 }
 
 .display-picker header,
@@ -171,7 +171,7 @@ async function selectDisplay(display) {
 }
 
 .display-picker header span {
-  color: #6d7c8d;
+  color: var(--ui-text-secondary);
   font-size: 11px;
   font-weight: 800;
 }
@@ -186,8 +186,8 @@ async function selectDisplay(display) {
   height: 42px;
   border: 0;
   border-radius: 6px;
-  color: #556273;
-  background: #e8edf3;
+  color: var(--ui-text-secondary);
+  background: var(--ui-surface);
   cursor: pointer;
   font-size: 24px;
 }
@@ -204,22 +204,22 @@ async function selectDisplay(display) {
   align-items: center;
   gap: 14px;
   padding: 12px 14px;
-  border: 1px solid #c8d1dc;
+  border: 1px solid var(--ui-border);
   border-radius: 7px;
-  color: #3f4b5a;
-  background: #fff;
+  color: var(--ui-text-secondary);
+  background: var(--ui-surface);
   cursor: pointer;
   text-align: left;
 }
 
 .display-picker-item.selected {
-  border-color: #4c739c;
-  box-shadow: inset 0 0 0 1px #4c739c;
+  border-color: var(--ui-border-strong);
+  box-shadow: var(--ui-selected-shadow);
 }
 
 .display-picker-item:disabled {
-  color: #9aa3ad;
-  background: #edf0f3;
+  color: var(--ui-text-disabled);
+  background: var(--ui-surface);
   cursor: not-allowed;
 }
 
@@ -244,11 +244,11 @@ async function selectDisplay(display) {
 }
 
 .display-picker-copy small {
-  color: #788493;
+  color: var(--ui-muted);
 }
 
 .display-picker-selected {
-  color: #315f8d;
+  color: var(--ui-accent);
   font-size: 12px;
   font-weight: 750;
 }
@@ -260,20 +260,20 @@ async function selectDisplay(display) {
 .display-picker footer button {
   min-height: 40px;
   padding: 0 18px;
-  border: 1px solid #bbc6d2;
+  border: 1px solid var(--ui-border);
   border-radius: 6px;
-  color: #455363;
-  background: #eef2f6;
+  color: var(--ui-text-secondary);
+  background: var(--ui-surface);
   cursor: pointer;
 }
 
 .display-picker-empty {
   padding: 34px;
-  color: #7b8794;
+  color: var(--ui-muted);
   text-align: center;
 }
 
 .display-picker-error {
-  color: #ad3d45;
+  color: var(--ui-error);
 }
 </style>

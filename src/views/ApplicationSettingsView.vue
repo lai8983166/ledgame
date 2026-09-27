@@ -427,15 +427,15 @@ async function testMemberPlatform() {
   display: grid;
   gap: 22px;
   padding: 30px;
-  border: 1px solid #cfd7e1;
+  border: 1px solid var(--ui-border);
   border-radius: 8px;
-  background: #f8fafc;
-  box-shadow: 0 16px 34px rgba(72, 86, 104, 0.12);
+  background: var(--ui-surface);
+  box-shadow: var(--ui-shadow);
 }
 
 .application-settings-panel > p {
   margin: 0;
-  color: #687483;
+  color: var(--ui-muted);
 }
 
 .application-settings-field {
@@ -445,27 +445,27 @@ async function testMemberPlatform() {
 }
 
 .application-settings-field > span {
-  color: #354252;
+  color: var(--ui-text-secondary);
   font-weight: 720;
 }
 
 .application-settings-field select {
   min-height: 46px;
   padding: 0 13px;
-  border: 1px solid #b9c4d1;
+  border: 1px solid var(--ui-border);
   border-radius: 6px;
-  color: #344151;
-  background: #fff;
+  color: var(--ui-text-secondary);
+  background: var(--ui-input);
   font: inherit;
 }
 
 .application-settings-field input {
   min-height: 46px;
   padding: 0 13px;
-  border: 1px solid #b9c4d1;
+  border: 1px solid var(--ui-border);
   border-radius: 6px;
-  color: #344151;
-  background: #fff;
+  color: var(--ui-text-secondary);
+  background: var(--ui-input);
   font: inherit;
 }
 
@@ -483,17 +483,17 @@ async function testMemberPlatform() {
 .application-settings-range-hint {
   flex: none;
   padding: 5px 9px;
-  border: 1px solid #c8d4e2;
+  border: 1px solid var(--ui-border);
   border-radius: 5px;
-  color: #536579;
-  background: #eef3f8;
+  color: var(--ui-muted);
+  background: var(--ui-surface);
   font-size: 13px;
   font-weight: 700;
   white-space: nowrap;
 }
 
 .application-settings-field small {
-  color: #7b8694;
+  color: var(--ui-muted);
 }
 
 .application-settings-connection {
@@ -501,19 +501,19 @@ async function testMemberPlatform() {
   gap: 14px;
   max-width: 620px;
   padding: 18px;
-  border: 1px solid #cfd7e1;
+  border: 1px solid var(--ui-border);
   border-radius: 6px;
 }
 
 .application-settings-connection legend {
   padding: 0 6px;
-  color: #354252;
+  color: var(--ui-text-secondary);
   font-weight: 720;
 }
 
 .application-settings-connection > p {
   margin: 0;
-  color: #687483;
+  color: var(--ui-muted);
 }
 
 .application-settings-actions {
@@ -529,7 +529,7 @@ async function testMemberPlatform() {
 .application-settings-background-actions > span {
   min-width: 0;
   overflow: hidden;
-  color: #687483;
+  color: var(--ui-text-secondary);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -539,40 +539,40 @@ async function testMemberPlatform() {
   min-height: 44px;
   border: 0;
   border-radius: 6px;
-  color: #fff;
-  background: #365f8c;
+  color: var(--ui-deep);
+  background: var(--ui-gradient);
   cursor: pointer;
   font-weight: 700;
 }
 
 .application-settings-save:disabled {
-  color: #929ba6;
-  background: #dce2e8;
+  color: var(--ui-text-disabled);
+  background: var(--ui-surface);
   cursor: not-allowed;
 }
 
 .application-settings-secondary {
   min-height: 42px;
   padding: 0 16px;
-  border: 1px solid #9eafc1;
+  border: 1px solid var(--ui-border);
   border-radius: 6px;
-  color: #365f8c;
-  background: #fff;
+  color: var(--ui-accent);
+  background: var(--ui-surface);
   cursor: pointer;
   font-weight: 700;
 }
 
 .application-settings-secondary:disabled {
-  color: #929ba6;
+  color: var(--ui-text-disabled);
   cursor: wait;
 }
 
 .application-settings-success {
-  color: #2f7552;
+  color: var(--ui-success);
   font-weight: 650;
 }
 
 .application-settings-error {
-  color: #ad3d45 !important;
+  color: var(--ui-error) !important;
 }
 </style>

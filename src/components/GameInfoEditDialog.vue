@@ -206,7 +206,7 @@ onBeforeUnmount(() => {
   display: grid;
   place-items: center;
   padding: 20px;
-  background: rgba(20, 27, 37, 0.56);
+  background: var(--ui-overlay);
 }
 
 .game-info-dialog {
@@ -216,10 +216,10 @@ onBeforeUnmount(() => {
   max-height: calc(100vh - 40px);
   padding: 22px;
   overflow-y: auto;
-  border: 1px solid rgba(255, 255, 255, 0.76);
-  border-radius: 8px;
-  background: #eef1f5;
-  box-shadow: 0 24px 70px rgba(25, 34, 46, 0.38);
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius-dialog);
+  background: var(--ui-elevated);
+  box-shadow: var(--ui-shadow);
   outline: none;
 }
 
@@ -239,14 +239,14 @@ onBeforeUnmount(() => {
 }
 
 .game-info-header h2 {
-  color: #2f3845;
+  color: var(--ui-text);
   font-size: 18px;
 }
 
 .game-info-header p,
 .game-info-cover-path {
   margin-top: 4px;
-  color: #76818f;
+  color: var(--ui-muted);
   font-size: 12px;
 }
 
@@ -255,18 +255,18 @@ onBeforeUnmount(() => {
   justify-items: center;
   gap: 12px;
 }
-.game-info-name { display: grid; gap: 6px; width: 100%; color: #4f5b69; font-size: 13px; font-weight: 700; }
-.game-info-name input { padding: 10px 12px; border: 1px solid #b9c5d2; border-radius: 6px; background: white; }
-.game-info-category { display: grid; gap: 6px; width: 100%; color: #4f5b69; font-size: 13px; font-weight: 700; }
-.game-info-category select { min-height: 40px; padding: 0 12px; border: 1px solid #b9c5d2; border-radius: 6px; background: white; color: #343d4a; }
-.game-info-visibility { display: flex; align-items: flex-start; gap: 10px; width: 100%; color: #4f5b69; font-size: 13px; }
-.game-info-visibility input { width: 18px; height: 18px; margin-top: 1px; accent-color: #5968e8; }
+.game-info-name { display: grid; gap: 6px; width: 100%; color: var(--ui-text-secondary); font-size: 13px; font-weight: 700; }
+.game-info-name input { padding: 10px 12px; border: 1px solid var(--ui-border); border-radius: 6px; background: var(--ui-input); }
+.game-info-category { display: grid; gap: 6px; width: 100%; color: var(--ui-text-secondary); font-size: 13px; font-weight: 700; }
+.game-info-category select { min-height: 40px; padding: 0 12px; border: 1px solid var(--ui-border); border-radius: 6px; background: var(--ui-input); color: var(--ui-text-secondary); }
+.game-info-visibility { display: flex; align-items: flex-start; gap: 10px; width: 100%; color: var(--ui-text-secondary); font-size: 13px; }
+.game-info-visibility input { width: 18px; height: 18px; margin-top: 1px; accent-color: var(--ui-accent); }
 .game-info-visibility span { display: grid; gap: 3px; }
-.game-info-visibility small { color: #76818f; font-size: 11px; font-weight: 400; }
+.game-info-visibility small { color: var(--ui-muted); font-size: 11px; font-weight: 400; }
 
 .game-info-label {
   justify-self: start;
-  color: #4f5b69;
+  color: var(--ui-text-secondary);
   font-size: 13px;
   font-weight: 700;
 }
@@ -277,10 +277,10 @@ onBeforeUnmount(() => {
   width: 183px;
   height: 308px;
   overflow: hidden;
-  border: 1px solid rgba(143, 155, 170, 0.42);
+  border: 1px solid var(--ui-border);
   border-radius: 6px;
-  color: #778391;
-  background: #dfe5ec;
+  color: var(--ui-text-secondary);
+  background: var(--ui-surface);
 }
 
 .game-info-cover-preview img {

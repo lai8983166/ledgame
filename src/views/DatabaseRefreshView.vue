@@ -142,12 +142,11 @@ onUnmounted(() => {
   justify-content: space-between;
   gap: 28px;
   padding: 30px;
-  border: 1px solid rgba(255, 255, 255, 0.78);
+  border: 1px solid var(--ui-border);
   border-radius: 20px;
-  background: rgba(238, 241, 245, 0.76);
+  background: var(--ui-surface);
   box-shadow:
-    12px 12px 24px rgba(178, 187, 201, 0.35),
-    -12px -12px 24px rgba(255, 255, 255, 0.84);
+    var(--ui-shadow);
 }
 
 .database-refresh-copy {
@@ -155,7 +154,7 @@ onUnmounted(() => {
 }
 
 .database-refresh-eyebrow {
-  color: #748195;
+  color: var(--ui-text-secondary);
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -164,7 +163,7 @@ onUnmounted(() => {
 
 .database-refresh-panel h2 {
   margin: 10px 0 0;
-  color: #2f3845;
+  color: var(--ui-text);
   font-size: 24px;
 }
 
@@ -173,7 +172,7 @@ onUnmounted(() => {
 }
 
 .database-refresh-warning {
-  color: #a86754;
+  color: var(--ui-error);
   font-weight: 650;
 }
 
@@ -197,21 +196,21 @@ onUnmounted(() => {
 }
 
 .database-refresh-result.success {
-  color: #356849;
-  border-color: #b8d8c2;
-  background: #edf8f0;
+  color: var(--ui-success);
+  border-color: var(--ui-border);
+  background: var(--ui-success-bg);
 }
 
 .database-refresh-result.warning {
-  color: #806132;
-  border-color: #e7d4a9;
-  background: #fff8e8;
+  color: var(--ui-warning);
+  border-color: var(--ui-border);
+  background: var(--ui-surface);
 }
 
 .database-refresh-result.error {
-  color: #8c5058;
-  border-color: #e5bdc2;
-  background: #fff1f2;
+  color: var(--ui-error);
+  border-color: var(--ui-error-border);
+  background: var(--ui-error-bg);
 }
 
 @media (max-width: 700px) {

@@ -3870,4 +3870,75 @@ fieldset:disabled {
     animation: none;
   }
 }
+/* Only active UI surfaces are themed; idle video, prompt and game artwork keep their styles. */
+.touch-shell:not([data-state="IDLE"]) {
+  color-scheme: dark;
+}
+
+.touch-shell:not([data-state="IDLE"]) :is(.touch-config, .touch-game-list, .touch-rank-live-header, .touch-rank-player-card),
+.touch-return-idle-dialog,
+.touch-exit-keypad {
+  border-color: var(--ui-border);
+  background: var(--ui-panel);
+  box-shadow: var(--ui-shadow);
+  border-radius: var(--ui-radius-card);
+}
+
+.touch-shell:not([data-state="IDLE"]) :is(.touch-kicker, .touch-wizard-heading > span) {
+  color: var(--ui-accent);
+}
+
+.touch-shell:not([data-state="IDLE"]) :is(.touch-config input, .touch-config select),
+.touch-return-idle-dialog :is(input, select),
+.touch-exit-code {
+  color: var(--ui-text);
+  border-color: var(--ui-border);
+  background: var(--ui-input);
+}
+
+.touch-shell:not([data-state="IDLE"]) :is(.touch-primary-button, .touch-wizard-next, .touch-wizard-start) {
+  color: var(--ui-deep);
+  background: var(--ui-gradient);
+  border-radius: var(--ui-radius-control);
+  clip-path: none;
+  box-shadow: var(--ui-glow);
+  text-shadow: none;
+  font-style: normal;
+}
+
+.touch-shell:not([data-state="IDLE"]) :is(.touch-secondary-button, .touch-wizard-back, .touch-wizard-cancel) {
+  color: var(--ui-accent);
+  background: var(--ui-surface);
+  border: 1px solid var(--ui-border-strong);
+  border-radius: var(--ui-radius-control);
+  clip-path: none;
+  text-shadow: none;
+  box-shadow: none;
+  font-style: normal;
+}
+
+.touch-shell:not([data-state="IDLE"]) :is(.touch-wizard-next, .touch-wizard-start, .touch-primary-button):disabled {
+  opacity: .45;
+  box-shadow: none;
+}
+
+.touch-shell:not([data-state="IDLE"]) :is(.touch-participant-slot, .touch-game-card) {
+  border-color: var(--ui-border);
+  background: var(--ui-panel);
+}
+
+.touch-shell:not([data-state="IDLE"]) .touch-game-card.selected {
+  border-color: var(--ui-accent);
+  box-shadow: var(--ui-selected-shadow);
+}
+
+.touch-shell:not([data-state="IDLE"]) .touch-participant-slot.accepted {
+  border-color: var(--ui-success);
+  background: var(--ui-success-bg);
+}
+
+.touch-shell:not([data-state="IDLE"]) :is(button, input, select):focus-visible {
+  outline: 2px solid var(--ui-accent);
+  outline-offset: 3px;
+}
 </style>

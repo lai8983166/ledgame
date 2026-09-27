@@ -467,4 +467,47 @@ function displayValue(value) {
 @media (prefers-reduced-motion: reduce) {
   .secondary-runtime-main, .result-layer, .result-layer::before, .settling-orbit { transition: none; animation: none; }
 }
+/* Keep standby, player colors, images and the custom background layer untouched. */
+.secondary-runtime:has(.secondary-runtime-content) {
+  color: var(--ui-text);
+  background: var(--ui-base);
+}
+.secondary-runtime:has(.secondary-runtime-content)::before {
+  background: var(--ui-gradient);
+  box-shadow: var(--ui-glow);
+}
+.secondary-runtime-content .game-heading h1 {
+  color: var(--ui-text);
+}
+.secondary-runtime-content .game-heading > span {
+  color: var(--ui-accent);
+}
+.stage-label, .game-time-label, .lifecycle-label {
+  border-color: var(--ui-border);
+  border-radius: var(--ui-radius-control);
+  background: rgba(20, 8, 38, var(--secondary-header-alpha));
+}
+.hud-stat, .rank-player-card {
+  border-radius: var(--ui-radius-card);
+  background: rgba(20, 8, 38, var(--secondary-panel-alpha));
+}
+.hud-stat > span, .rank-player-card > div span {
+  color: var(--ui-text-secondary);
+}
+.hud-stat {
+  padding: clamp(16px, 2vw, 40px);
+}
+.hud-stat > strong {
+  font-size: clamp(40px, 6vw, 116px);
+  overflow-wrap: anywhere;
+  text-overflow: clip;
+  line-height: 1.05;
+}
+.game-time-label strong {
+  color: var(--ui-accent);
+}
+.result-layer {
+  border-color: var(--ui-border-strong);
+  background: rgba(10, 1, 24, var(--secondary-result-alpha));
+}
 </style>

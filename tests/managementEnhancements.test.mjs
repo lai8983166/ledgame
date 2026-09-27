@@ -72,7 +72,7 @@ test("persisted application title cannot be replaced by the renderer document ti
 test("main window uses a dark custom title bar and renders the current brand", () => {
   assert.match(mainSource, /windowOptions\.frame = false/);
   assert.match(mainSource, /customMainTitleBarEnabled/);
-  assert.match(styleSource, /background: linear-gradient\(180deg, #343b43 0%, #252a30 100%\)/);
+  assert.match(styleSource, /\.window-titlebar\s*\{[^}]*background:\s*var\(--ui-deep\)/);
   assert.match(preloadSource, /customTitleBarEnabled/);
   assert.match(preloadSource, /minimizeWindow/);
   assert.match(preloadSource, /toggleMaximizeWindow/);

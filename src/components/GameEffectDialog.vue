@@ -410,7 +410,7 @@ onBeforeUnmount(() => {
   display: grid;
   place-items: center;
   padding: 18px;
-  background: rgba(14, 23, 32, 0.62);
+  background: var(--ui-overlay);
 }
 
 .game-effect-dialog {
@@ -420,10 +420,10 @@ onBeforeUnmount(() => {
   width: min(1080px, 100%);
   height: min(760px, 96vh);
   padding: 20px;
-  border: 1px solid rgba(255, 255, 255, 0.8);
-  border-radius: 16px;
-  background: #eef3f6;
-  box-shadow: 0 26px 80px rgba(10, 20, 30, 0.42);
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius-dialog);
+  background: var(--ui-elevated);
+  box-shadow: var(--ui-shadow);
   outline: none;
 }
 
@@ -444,15 +444,15 @@ onBeforeUnmount(() => {
 
 .game-effect-header h2,
 .game-effect-section-head h3 {
-  color: #2d3d4b;
+  color: var(--ui-text);
 }
 
 .game-effect-header h2 { font-size: 20px; }
 .game-effect-header p,
 .game-effect-grid-size,
-.game-effect-help { color: #74808e; font-size: 12px; }
+.game-effect-help { color: var(--ui-muted); font-size: 12px; }
 
-.game-effect-header .game-effect-target { color: #4b6f94; font-weight: 700; }
+.game-effect-header .game-effect-target { color: var(--ui-accent); font-weight: 700; }
 
 .game-effect-body {
   display: grid;
@@ -466,9 +466,9 @@ onBeforeUnmount(() => {
   min-width: 0;
   min-height: 0;
   padding: 16px;
-  border: 1px solid rgba(190, 199, 212, 0.72);
+  border: 1px solid var(--ui-border);
   border-radius: 14px;
-  background: #f5f7fa;
+  background: var(--ui-surface);
 }
 
 .game-effect-form {
@@ -481,7 +481,7 @@ onBeforeUnmount(() => {
 .game-effect-form label {
   display: grid;
   gap: 5px;
-  color: #596574;
+  color: var(--ui-text-secondary);
   font-size: 13px;
   font-weight: 700;
 }
@@ -489,6 +489,16 @@ onBeforeUnmount(() => {
 .game-effect-form select,
 .game-effect-form input {
   min-width: 0;
+}
+
+.game-effect-form select,
+.game-effect-form input:not([type="checkbox"]):not([type="radio"]) {
+  min-height: 34px;
+  padding: 0 9px;
+  border: 1px solid var(--ui-border);
+  border-radius: 6px;
+  background: var(--ui-input);
+  color: var(--ui-text);
 }
 
 .game-effect-color-fieldset {
@@ -501,7 +511,7 @@ onBeforeUnmount(() => {
 
 .game-effect-color-fieldset legend {
   padding: 0;
-  color: #596574;
+  color: var(--ui-text-secondary);
   font-size: 13px;
   font-weight: 700;
 }
@@ -519,9 +529,9 @@ onBeforeUnmount(() => {
   gap: 8px !important;
   min-width: 0;
   padding: 8px 10px;
-  border: 1px solid #d8dee7;
+  border: 1px solid var(--ui-border);
   border-radius: 8px;
-  background: #fff;
+  background: var(--ui-surface);
   cursor: pointer;
 }
 
@@ -557,7 +567,7 @@ onBeforeUnmount(() => {
 
 .game-effect-field-error,
 .game-effect-validation-summary {
-  color: #a04f59;
+  color: var(--ui-error);
   font-size: 12px;
   font-weight: 600;
 }

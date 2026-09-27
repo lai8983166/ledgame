@@ -48,12 +48,12 @@ const panels = [
 
 <style scoped>
 .elc408-assistant {
-  --elc-accent: #4f7eb6;
-  --elc-accent-soft: #dfe8f4;
-  --elc-border: #d4dce6;
-  --elc-surface: #f8fafc;
-  --elc-text: #344050;
-  --elc-muted: #778392;
+  --elc-accent: var(--ui-accent);
+  --elc-accent-soft: var(--ui-active);
+  --elc-border: var(--ui-border);
+  --elc-surface: var(--ui-elevated);
+  --elc-text: var(--ui-text);
+  --elc-muted: var(--ui-muted);
   display: flex;
   flex-direction: column;
   gap: 18px;
@@ -91,7 +91,7 @@ const panels = [
   padding: 4px;
   border: 1px solid var(--elc-border);
   border-radius: 8px;
-  background: #e8edf3;
+  background: var(--ui-surface);
 }
 .elc408-segment {
   min-height: 36px;
@@ -99,7 +99,7 @@ const panels = [
   border: 0;
   border-radius: 6px;
   background: transparent;
-  color: #697585;
+  color: var(--ui-text-secondary);
   cursor: pointer;
   font-size: 0.84rem;
   font-weight: 650;
@@ -109,9 +109,9 @@ const panels = [
   color: var(--elc-text);
 }
 .elc408-segment.active {
-  color: #315d91;
+  color: var(--ui-accent);
   background: var(--elc-surface);
-  box-shadow: 0 1px 3px rgba(75, 91, 111, 0.16);
+  box-shadow: var(--ui-selected-shadow);
 }
 .elc408-panels {
   flex: 1;
@@ -121,8 +121,8 @@ const panels = [
   padding: 18px;
   border: 1px solid var(--elc-border);
   border-radius: 8px;
-  background: rgba(248, 250, 252, 0.78);
-  box-shadow: 0 10px 28px rgba(77, 91, 108, 0.09);
+  background: var(--ui-surface);
+  box-shadow: var(--ui-shadow);
   overflow: hidden;
 }
 .elc408-panels > * {

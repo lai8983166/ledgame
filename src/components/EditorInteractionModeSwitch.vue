@@ -99,10 +99,9 @@ function handleKeydown(event, index, option) {
   padding: 6px;
   overflow: hidden;
   border-radius: 8px;
-  background: #e8edf3;
+  background: var(--ui-surface);
   box-shadow:
-    inset 6px 6px 12px rgba(180, 189, 203, 0.42),
-    inset -6px -6px 12px rgba(255, 255, 255, 0.88);
+    var(--ui-shadow);
 }
 
 .editor-mode-option {
@@ -116,14 +115,13 @@ function handleKeydown(event, index, option) {
   align-items: center;
   justify-content: space-between;
   padding: 7px 5px;
-  border: 1px solid rgba(255, 255, 255, 0.72);
-  border-top-color: rgba(255, 255, 255, 0.92);
+  border: 1px solid var(--ui-border);
+  border-top-color: var(--ui-border);
   border-radius: 4px;
-  color: #596371;
-  background: #eef1f5;
+  color: var(--ui-text-secondary);
+  background: var(--ui-surface);
   box-shadow:
-    5px 5px 10px rgba(178, 187, 201, 0.34),
-    -5px -5px 10px rgba(255, 255, 255, 0.82);
+    var(--ui-shadow);
   cursor: pointer;
   transition: all 0.1s linear;
 }
@@ -140,7 +138,7 @@ function handleKeydown(event, index, option) {
 }
 
 .editor-mode-option:focus-within {
-  outline: 2px solid #70d6b3;
+  outline: 2px solid var(--ui-accent);
   outline-offset: 2px;
 }
 
@@ -152,10 +150,9 @@ function handleKeydown(event, index, option) {
   width: 100%;
   height: 13px;
   border-radius: 4px 4px 2px 2px;
-  background: #eef1f5;
+  background: var(--ui-surface);
   box-shadow:
-    inset 0 5px 3px 1px rgba(178, 187, 201, 0.38),
-    inset 0 -5px 2px rgba(255, 255, 255, 0.52);
+    var(--ui-shadow);
   opacity: 0;
   transform: perspective(300px) rotateX(50deg);
   transition: all 0.1s linear;
@@ -163,17 +160,11 @@ function handleKeydown(event, index, option) {
 
 .editor-mode-option.selected {
   margin-top: 5px;
-  border-color: #70d6b3;
+  border-color: var(--ui-border-strong);
   border-radius: 0 0 4px 4px;
   box-shadow:
-    inset 7px 7px 13px rgba(178, 187, 201, 0.42),
-    inset -6px -6px 12px rgba(255, 255, 255, 0.86),
-    inset 0 -18px 14px rgba(178, 187, 201, 0.3),
-    4px 4px 8px rgba(178, 187, 201, 0.22),
-    -4px -4px 8px rgba(255, 255, 255, 0.72),
-    0 0 0 2px rgba(112, 214, 179, 0.42),
-    0 0 12px rgba(112, 214, 179, 0.3);
-  background: #e1e9e8;
+    var(--ui-selected-shadow);
+  background: var(--ui-active);
   transform: perspective(200px) rotateX(-14deg);
   transform-origin: 50% 40%;
 }
@@ -188,13 +179,12 @@ function handleKeydown(event, index, option) {
   width: 15px;
   height: 15px;
   place-items: center;
-  border: 1px solid rgba(255, 255, 255, 0.86);
+  border: 1px solid var(--ui-border-strong);
   border-radius: 50%;
-  color: #fff;
-  background: #3f8f79;
+  color: var(--ui-text-secondary);
+  background: var(--ui-active);
   box-shadow:
-    1px 1px 3px rgba(83, 94, 108, 0.34),
-    inset 1px 1px 2px rgba(255, 255, 255, 0.4);
+    var(--ui-selected-shadow);
   font-size: 10px;
   font-weight: 900;
   line-height: 1;
@@ -207,7 +197,7 @@ function handleKeydown(event, index, option) {
 .editor-mode-icon {
   position: relative;
   z-index: 2;
-  color: #596371;
+  color: var(--ui-text-secondary);
   font-size: 18px;
   font-weight: 800;
   line-height: 18px;
@@ -217,7 +207,7 @@ function handleKeydown(event, index, option) {
   position: relative;
   z-index: 2;
   overflow: hidden;
-  color: #596371;
+  color: var(--ui-text-secondary);
   font-size: 11px;
   font-weight: 800;
   line-height: 13px;
@@ -228,8 +218,8 @@ function handleKeydown(event, index, option) {
 
 .editor-mode-option.selected .editor-mode-icon,
 .editor-mode-option.selected .editor-mode-text {
-  color: #3f8f79;
-  text-shadow: 0 0 7px rgba(112, 214, 179, 0.48), 1px 1px 2px rgba(255, 255, 255, 0.76);
+  color: var(--ui-success);
+  text-shadow: none;
 }
 
 .editor-mode-bottom-line {
@@ -237,14 +227,14 @@ function handleKeydown(event, index, option) {
   z-index: 2;
   width: 100%;
   height: 4px;
-  border-top: 1px solid rgba(178, 187, 201, 0.52);
+  border-top: 1px solid var(--ui-border);
   border-radius: 999px;
-  background: #dfe5ec;
-  box-shadow: 0 0 3px rgba(178, 187, 201, 0.62);
+  background: var(--ui-surface);
+  box-shadow: var(--ui-shadow);
 }
 
 .editor-mode-option.selected .editor-mode-bottom-line {
-  border-top-color: rgba(63, 143, 121, 0.48);
-  background: #d2dce2;
+  border-top-color: var(--ui-border-strong);
+  background: var(--ui-active);
 }
 </style>

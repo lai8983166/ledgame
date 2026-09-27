@@ -90,15 +90,15 @@ onBeforeUnmount(() => window.removeEventListener("keydown", handleKeydown));
 </template>
 
 <style scoped>
-.game-category-edit-backdrop { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; padding: 20px; background: rgba(20, 27, 37, 0.56); }
-.game-category-edit-dialog { display: grid; gap: 14px; width: min(480px, 100%); padding: 22px; border: 1px solid rgba(255, 255, 255, 0.76); border-radius: 8px; background: #eef1f5; box-shadow: 0 24px 70px rgba(25, 34, 46, 0.38); outline: none; }
+.game-category-edit-backdrop { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; padding: 20px; background: var(--ui-overlay); }
+.game-category-edit-dialog { display: grid; gap: 14px; width: min(480px, 100%); padding: 22px; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-dialog); background: var(--ui-elevated); box-shadow: var(--ui-shadow); outline: none; }
 .game-category-edit-header, .game-category-edit-footer, .game-category-edit-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .game-category-edit-header h2, .game-category-edit-header p, .game-category-edit-path { margin: 0; }
-.game-category-edit-header h2 { color: #2f3845; font-size: 18px; }
-.game-category-edit-header p, .game-category-edit-path { margin-top: 4px; color: #76818f; font-size: 12px; }
-.game-category-edit-field { display: grid; gap: 6px; color: #4f5b69; font-size: 13px; font-weight: 700; }
-.game-category-edit-field input { min-height: 40px; padding: 0 12px; border: 1px solid #b9c5d2; border-radius: 6px; background: #fff; }
-.game-category-edit-label { color: #4f5b69; font-size: 13px; font-weight: 700; }
+.game-category-edit-header h2 { color: var(--ui-text); font-size: 18px; }
+.game-category-edit-header p, .game-category-edit-path { margin-top: 4px; color: var(--ui-muted); font-size: 12px; }
+.game-category-edit-field { display: grid; gap: 6px; color: var(--ui-text-secondary); font-size: 13px; font-weight: 700; }
+.game-category-edit-field input { min-height: 40px; padding: 0 12px; border: 1px solid var(--ui-border); border-radius: 6px; background: var(--ui-input); }
+.game-category-edit-label { color: var(--ui-text-secondary); font-size: 13px; font-weight: 700; }
 .game-category-edit-path { overflow-wrap: anywhere; }
 .game-category-edit-actions { justify-content: flex-start; }
 .game-category-edit-footer { justify-content: flex-end; margin-top: 4px; }

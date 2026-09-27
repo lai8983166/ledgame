@@ -223,33 +223,33 @@ function mapFieldErrors(message) {
   flex-direction: column;
   gap: 7px;
   min-width: 0;
-  color: #3d4857;
+  color: var(--ui-text-secondary);
   font-size: 0.84rem;
   font-weight: 620;
 }
 .elc408-field > span {
-  color: #596575;
+  color: var(--ui-text-secondary);
 }
 .elc408-field input,
 .elc408-field select {
   width: 100%;
   min-height: 40px;
   padding: 0 11px;
-  border: 1px solid #cbd5e1;
+  border: 1px solid var(--ui-border);
   border-radius: 6px;
   outline: none;
-  color: #344050;
-  background: #fff;
+  color: var(--ui-text-secondary);
+  background: var(--ui-input);
   font-weight: 500;
   transition: border-color 140ms ease, box-shadow 140ms ease;
 }
 .elc408-field input:focus,
 .elc408-field select:focus {
-  border-color: #6e96c4;
-  box-shadow: 0 0 0 3px rgba(79, 126, 182, 0.14);
+  border-color: var(--ui-border-strong);
+  box-shadow: var(--ui-selected-shadow);
 }
 .elc408-field small {
-  color: #7a8694;
+  color: var(--ui-muted);
   font-weight: 500;
 }
 .elc408-field-hint {
@@ -264,19 +264,19 @@ function mapFieldErrors(message) {
   gap: 10px;
   min-height: 40px;
   padding: 0 12px;
-  border: 1px solid #d7dee7;
+  border: 1px solid var(--ui-border);
   border-radius: 6px;
-  background: #f1f5f9;
+  background: var(--ui-surface);
   cursor: pointer;
 }
 .elc408-checkbox input {
   width: 16px;
   min-height: 16px;
   margin: 0;
-  accent-color: #4f7eb6;
+  accent-color: var(--ui-accent);
 }
 .elc408-checkbox > span {
-  color: #455161;
+  color: var(--ui-text-secondary);
 }
 .elc408-actions {
   grid-column: 1 / -1;
@@ -289,24 +289,24 @@ function mapFieldErrors(message) {
 .elc408-actions button {
   min-height: 40px;
   padding: 0 18px;
-  border: 1px solid #c2ccd8;
+  border: 1px solid var(--ui-border);
   border-radius: 6px;
-  color: #4b5868;
-  background: #fff;
+  color: var(--ui-text-secondary);
+  background: var(--ui-surface);
   cursor: pointer;
   font-size: 0.84rem;
   font-weight: 680;
-  box-shadow: 0 3px 8px rgba(79, 126, 182, 0.2);
+  box-shadow: var(--ui-shadow);
 }
 .elc408-actions button.primary {
-  border-color: #3f6fa8;
-  color: #fff;
-  background: #4f7eb6;
+  border-color: var(--ui-border);
+  color: var(--ui-deep);
+  background: var(--ui-gradient);
 }
 .elc408-actions button.secondary:hover:not(:disabled) {
-  border-color: #8eacd0;
-  color: #315d91;
-  background: #e7eef7;
+  border-color: var(--ui-border-strong);
+  color: var(--ui-text-disabled);
+  background: var(--ui-active);
 }
 .elc408-actions button:disabled {
   opacity: 0.48;
@@ -316,13 +316,13 @@ function mapFieldErrors(message) {
 .elc408-success {
   grid-column: 1 / -1;
   margin: 0;
-  color: #34805f;
+  color: var(--ui-success);
   font-size: 0.85rem;
 }
 .elc408-error {
   grid-column: 1 / -1;
   margin: 0;
-  color: #b35f68;
+  color: var(--ui-error);
   font-size: 0.85rem;
 }
 @media (max-width: 680px) {

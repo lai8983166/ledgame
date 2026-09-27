@@ -628,13 +628,13 @@ function logHexPreview(entry) {
 .elc408-debug-controls fieldset {
   margin: 0;
   padding: 8px 10px 10px;
-  border: 1px solid #d6dee7;
+  border: 1px solid var(--ui-border);
   border-radius: 6px;
-  background: #f5f8fb;
+  background: var(--ui-surface);
 }
 .elc408-debug-controls legend {
   padding: 0 5px;
-  color: #596575;
+  color: var(--ui-text-secondary);
   font-size: 0.76rem;
   font-weight: 700;
 }
@@ -643,22 +643,22 @@ function logHexPreview(entry) {
   width: 100%;
   min-height: 34px;
   padding: 0 9px;
-  border: 1px solid #cbd5e1;
+  border: 1px solid var(--ui-border);
   border-radius: 6px;
   outline: none;
-  color: #344050;
-  background: #fff;
+  color: var(--ui-text-secondary);
+  background: var(--ui-input);
   font-size: 0.81rem;
 }
 .elc408-debug-controls select:focus,
 .elc408-debug-controls input:focus {
-  border-color: #6e96c4;
-  box-shadow: 0 0 0 3px rgba(79, 126, 182, 0.13);
+  border-color: var(--ui-border-strong);
+  box-shadow: var(--ui-selected-shadow);
 }
 .elc408-debug-controls small {
   display: block;
   margin-top: 5px;
-  color: #7a8694;
+  color: var(--ui-muted);
   font-size: 0.75rem;
 }
 .elc408-coordinate-grid {
@@ -671,7 +671,7 @@ function logHexPreview(entry) {
   grid-template-columns: 18px minmax(0, 1fr);
   align-items: center;
   gap: 5px;
-  color: #667386;
+  color: var(--ui-text-secondary);
   font-size: 0.76rem;
   font-weight: 700;
 }
@@ -683,19 +683,19 @@ function logHexPreview(entry) {
   flex: 1;
   min-height: 36px;
   padding: 0 12px;
-  border: 1px solid #c2ccd8;
+  border: 1px solid var(--ui-border);
   border-radius: 6px;
-  color: #4b5868;
-  background: #fff;
+  color: var(--ui-text-secondary);
+  background: var(--ui-surface);
   cursor: pointer;
   font-size: 0.81rem;
   font-weight: 680;
 }
 .elc408-debug-actions button.primary {
-  border-color: #3f6fa8;
-  color: #fff;
-  background: #4f7eb6;
-  box-shadow: 0 3px 8px rgba(79, 126, 182, 0.2);
+  border-color: var(--ui-border);
+  color: var(--ui-text-secondary);
+  background: var(--ui-surface);
+  box-shadow: var(--ui-shadow);
 }
 .elc408-debug-actions button:disabled {
   opacity: 0.48;
@@ -714,8 +714,8 @@ function logHexPreview(entry) {
   flex-direction: column;
   gap: 3px;
   padding: 7px 4px;
-  border-bottom: 1px solid #dde4ec;
-  color: #3f4b5a;
+  border-bottom: 1px solid var(--ui-border);
+  color: var(--ui-text-secondary);
   font-size: 0.8rem;
 }
 .elc408-mac {
@@ -723,21 +723,21 @@ function logHexPreview(entry) {
   font-weight: 650;
 }
 .elc408-source {
-  color: #7a8694;
+  color: var(--ui-text-secondary);
   font-size: 0.72rem;
 }
 .elc408-empty {
-  color: #7a8694;
+  color: var(--ui-muted);
   font-size: 0.8rem;
   margin: 0;
 }
 .elc408-runtime-state {
   margin: 2px 0;
   padding: 9px 11px;
-  border-left: 3px solid #4f7eb6;
+  border-left: 3px solid var(--ui-border);
   border-radius: 0 6px 6px 0;
-  color: #536071;
-  background: #e6edf5;
+  color: var(--ui-text-secondary);
+  background: var(--ui-surface);
   font-size: 0.78rem;
 }
 .elc408-debug-log {
@@ -747,9 +747,9 @@ function logHexPreview(entry) {
   gap: 10px;
   min-width: 0;
   padding: 14px;
-  border: 1px solid #d4dce6;
+  border: 1px solid var(--ui-border);
   border-radius: 6px;
-  background: #f8fafc;
+  background: var(--ui-surface);
   overflow: hidden;
 }
 .elc408-debug-log header {
@@ -760,7 +760,7 @@ function logHexPreview(entry) {
 }
 .elc408-debug-log header h2 {
   margin: 0;
-  color: #3b4655;
+  color: var(--ui-text);
   font-size: 0.95rem;
   font-weight: 700;
 }
@@ -772,32 +772,32 @@ function logHexPreview(entry) {
 .elc408-capture-state {
   padding: 3px 7px;
   border-radius: 999px;
-  color: #687586;
-  background: #e7ecf2;
+  color: var(--ui-text-secondary);
+  background: var(--ui-surface);
   font-size: 0.7rem;
   font-weight: 700;
 }
 .elc408-capture-state.active {
-  color: #286346;
-  background: #dcefe5;
+  color: var(--ui-success);
+  background: var(--ui-active);
 }
 .elc408-capture-state.failed {
-  color: #9a3f3f;
-  background: #f6dfdf;
+  color: var(--ui-error);
+  background: var(--ui-surface);
 }
 .elc408-log-truncated {
   margin-left: 6px;
-  color: #8a6570;
+  color: var(--ui-text-secondary);
   font-family: inherit;
   font-size: 0.68rem;
 }
 .elc408-debug-log header button {
   min-height: 32px;
   padding: 0 12px;
-  border: 1px solid #c5cfdb;
+  border: 1px solid var(--ui-border);
   border-radius: 6px;
-  color: #596575;
-  background: #fff;
+  color: var(--ui-text-secondary);
+  background: var(--ui-surface);
   cursor: pointer;
   font-size: 0.78rem;
   font-weight: 650;
@@ -805,36 +805,36 @@ function logHexPreview(entry) {
 .elc408-log-table-wrap {
   flex: 1;
   min-height: 0;
-  border: 1px solid #d6dee7;
+  border: 1px solid var(--ui-border);
   border-radius: 6px;
-  background: #fff;
+  background: var(--ui-surface);
   overflow: auto;
 }
 .elc408-debug-log table {
   width: 100%;
   border-collapse: collapse;
-  color: #485465;
+  color: var(--ui-text-secondary);
   font-size: 0.77rem;
 }
 .elc408-debug-log th,
 .elc408-debug-log td {
   padding: 8px 10px;
   text-align: left;
-  border-bottom: 1px solid #e3e8ee;
+  border-bottom: 1px solid var(--ui-border);
   vertical-align: top;
 }
 .elc408-debug-log th {
   position: sticky;
   top: 0;
   z-index: 1;
-  color: #647181;
-  background: #edf2f7;
+  color: var(--ui-text-secondary);
+  background: var(--ui-surface);
   font-size: 0.72rem;
   font-weight: 750;
   text-transform: uppercase;
 }
 .elc408-debug-log tbody tr:hover {
-  background: #f6f8fb;
+  background: var(--ui-active);
 }
 .elc408-hex {
   font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
@@ -863,45 +863,45 @@ function logHexPreview(entry) {
   width: 30px;
   min-height: 24px;
   padding: 0 4px;
-  border: 1px solid #c5cfdb;
+  border: 1px solid var(--ui-border);
   border-radius: 4px;
-  color: #596575;
-  background: #fff;
+  color: var(--ui-text-secondary);
+  background: var(--ui-surface);
   cursor: pointer;
   font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
   font-size: 0.72rem;
   line-height: 1;
 }
 .elc408-log-expand:hover {
-  border-color: #6e96c4;
-  color: #3f6fa8;
-  background: #f4f8fc;
+  border-color: var(--ui-border-strong);
+  color: var(--ui-accent);
+  background: var(--ui-active);
 }
 .elc408-log-expand:focus-visible {
-  outline: 2px solid rgba(79, 126, 182, 0.42);
+  outline: 2px solid var(--ui-accent);
   outline-offset: 1px;
 }
 .elc408-debug-log .send {
-  color: #9a681d;
+  color: var(--ui-warning);
   font-weight: 700;
 }
 .elc408-debug-log .receive {
-  color: #277455;
+  color: var(--ui-success);
   font-weight: 700;
 }
 .elc408-success {
   margin: 0;
-  color: #34805f;
+  color: var(--ui-success);
   font-size: 0.8rem;
 }
 .elc408-error {
   margin: 0;
-  color: #b35f68;
+  color: var(--ui-error);
   font-size: 0.8rem;
 }
 .elc408-send-hint {
   margin: 0;
-  color: #7a8694;
+  color: var(--ui-muted);
   font-size: 0.75rem;
 }
 @media (max-width: 760px) {

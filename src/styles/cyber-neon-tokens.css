@@ -1,0 +1,41 @@
+/* Grid Style A: local, presentation-only tokens. No fonts or assets are fetched. */
+:root {
+  --ui-base: #0a0118;
+  --ui-deep: #05010f;
+  --ui-elevated: #140826;
+  --ui-surface: #0f0520;
+  --ui-panel: rgba(20, 8, 50, 0.55);
+  --ui-input: #080313;
+  --ui-card: rgba(255, 255, 255, 0.03);
+  --ui-hover: rgba(0, 240, 255, 0.06);
+  --ui-active: rgba(0, 240, 255, 0.12);
+  --ui-accent: #00f0ff;
+  --ui-magenta: #ff00d4;
+  --ui-purple: #a855f7;
+  --ui-success: #65e6a1;
+  --ui-warning: #facc15;
+  --ui-error: #ff8498;
+  --ui-text: #ffffff;
+  --ui-text-secondary: rgba(255, 255, 255, 0.78);
+  --ui-muted: rgba(255, 255, 255, 0.56);
+  --ui-text-disabled: rgba(255, 255, 255, 0.32);
+  --ui-border: rgba(0, 240, 255, 0.18);
+  --ui-border-strong: rgba(0, 240, 255, 0.55);
+  --ui-error-border: rgba(255, 95, 124, 0.5);
+  --ui-error-bg: rgba(239, 68, 100, 0.09);
+  --ui-success-bg: rgba(34, 197, 94, 0.09);
+  --ui-overlay: rgba(5, 1, 15, 0.78);
+  --ui-gradient: linear-gradient(135deg, #00f0ff, #ff00d4);
+  --ui-shadow: 0 4px 16px rgba(0, 0, 0, 0.28);
+  --ui-inset: inset 0 1px 3px rgba(0, 0, 0, 0.24);
+  --ui-selected-shadow: inset 0 0 0 1px var(--ui-border-strong), 0 0 18px rgba(0, 240, 255, 0.12);
+  --ui-glow: 0 0 12px rgba(0, 240, 255, 0.22);
+  --ui-radius-control: 6px;
+  --ui-radius-card: 14px;
+  --ui-radius-dialog: 20px;
+  --ui-font: 'Rajdhani', 'Segoe UI', 'Microsoft YaHei', 'PingFang SC', sans-serif;
+  --ui-font-display: 'Orbitron', 'Segoe UI', 'Microsoft YaHei', 'PingFang SC', sans-serif;
+  --ui-font-mono: 'JetBrains Mono', Consolas, monospace;
+  --ui-duration: 150ms;
+  --ui-ease: cubic-bezier(0.2, 0.9, 0.3, 1);
+}

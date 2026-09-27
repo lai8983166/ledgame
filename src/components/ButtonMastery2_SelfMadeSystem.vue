@@ -38,13 +38,13 @@ defineExpose({
   position: relative;
   min-height: 58px;
   padding: 3px;
-  border: 1pt solid #e9ebea;
+  border: 1pt solid var(--ui-border);
   border-top-width: 0;
   border-radius: calc(6pt + 3px);
   appearance: none;
-  color: #20242a;
-  background: linear-gradient(#dfe1e0, #7f8180);
-  box-shadow: 0 5px 15px 0 #0004;
+  color: var(--ui-text-secondary);
+  background: var(--ui-surface);
+  box-shadow: var(--ui-shadow);
   cursor: pointer;
   font: inherit;
   font-weight: 600;
@@ -59,7 +59,7 @@ defineExpose({
 }
 
 .button-mastery-2:focus-visible {
-  outline: 2px solid rgba(46, 63, 83, 0.54);
+  outline: 2px solid var(--ui-accent);
   outline-offset: 3px;
 }
 
@@ -75,7 +75,7 @@ defineExpose({
 
 .button-mastery-2:hover:not(:disabled) {
   transform: translateY(-5px);
-  box-shadow: 0 10px 15px 0 #0004;
+  box-shadow: var(--ui-selected-shadow);
 }
 
 .button-mastery-2:hover:not(:active, :disabled)::before {
@@ -84,7 +84,7 @@ defineExpose({
 
 .button-mastery-2:active:not(:disabled) {
   transform: translateY(0);
-  box-shadow: 0 5px 15px 0 #0000;
+  box-shadow: var(--ui-shadow);
   transition:
     transform 0.3s,
     box-shadow 0.3s;
@@ -96,7 +96,7 @@ defineExpose({
 }
 
 .button-mastery-2.danger {
-  color: #5f2f39;
+  color: var(--ui-error);
 }
 
 .button-mastery-2__outer {
@@ -104,7 +104,7 @@ defineExpose({
   height: 100%;
   padding: 4pt;
   border-radius: 6pt;
-  background: linear-gradient(#fdfffe, #eceeed, #fdfffe);
+  background: var(--ui-surface);
 }
 
 .button-mastery-2__inner {
@@ -116,8 +116,8 @@ defineExpose({
   gap: 4pt;
   padding: 8pt 14pt;
   border-radius: 9999px;
-  background: linear-gradient(#eef0ef, #fafcfb, #eef0ef);
-  text-shadow: 0 1px 1px #0004;
+  background: var(--ui-surface);
+  text-shadow: none;
   white-space: nowrap;
 }
 

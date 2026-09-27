@@ -217,7 +217,7 @@ onBeforeUnmount(() => {
   display: grid;
   place-items: center;
   padding: 24px;
-  background: rgba(20, 27, 37, 0.56);
+  background: var(--ui-overlay);
 }
 
 .media-picker-dialog {
@@ -227,10 +227,10 @@ onBeforeUnmount(() => {
   width: min(900px, 100%);
   height: min(620px, 90vh);
   padding: 20px;
-  border: 1px solid rgba(255, 255, 255, 0.76);
-  border-radius: 8px;
-  background: #eef1f5;
-  box-shadow: 0 24px 70px rgba(25, 34, 46, 0.38);
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius-dialog);
+  background: var(--ui-elevated);
+  box-shadow: var(--ui-shadow);
   outline: none;
 }
 
@@ -243,14 +243,14 @@ onBeforeUnmount(() => {
 
 .media-picker-header h2 {
   margin: 0;
-  color: #2f3845;
+  color: var(--ui-text);
   font-size: 18px;
   font-weight: 680;
 }
 
 .media-picker-header p {
   margin: 4px 0 0;
-  color: #7c8795;
+  color: var(--ui-muted);
   font-size: 12px;
 }
 
@@ -268,10 +268,10 @@ onBeforeUnmount(() => {
   align-content: start;
   min-height: 0;
   padding: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.72);
+  border: 1px solid var(--ui-border);
   border-radius: 14px;
-  background: #e6ebf2;
-  box-shadow: inset 4px 4px 10px rgba(178, 187, 201, 0.34);
+  background: var(--ui-surface);
+  box-shadow: var(--ui-shadow);
   overflow: auto;
 }
 
@@ -288,16 +288,16 @@ onBeforeUnmount(() => {
 }
 
 .media-picker-row:hover {
-  background: rgba(255, 255, 255, 0.6);
+  background: var(--ui-active);
 }
 
 .media-picker-row.selected {
-  background: #f4f7fa;
-  box-shadow: 4px 4px 10px rgba(178, 187, 201, 0.3), -4px -4px 10px rgba(255, 255, 255, 0.8);
+  background: var(--ui-active);
+  box-shadow: var(--ui-selected-shadow);
 }
 
 .media-picker-row-name {
-  color: #343d4a;
+  color: var(--ui-text-secondary);
   font-size: 13px;
   font-weight: 650;
   overflow: hidden;
@@ -306,7 +306,7 @@ onBeforeUnmount(() => {
 }
 
 .media-picker-row-path {
-  color: #8a94a2;
+  color: var(--ui-text-secondary);
   font-size: 11px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -318,12 +318,12 @@ onBeforeUnmount(() => {
   place-items: center;
   min-height: 0;
   padding: 14px;
-  border: 1px solid rgba(255, 255, 255, 0.72);
+  border: 1px solid var(--ui-border);
   border-radius: 14px;
-  background: #070a0f;
-  box-shadow: inset 4px 4px 10px rgba(0, 0, 0, 0.4);
+  background: var(--ui-surface);
+  box-shadow: var(--ui-shadow);
   overflow: auto;
-  color: #cdd6e0;
+  color: var(--ui-text-secondary);
 }
 
 .media-picker-image {
@@ -342,7 +342,7 @@ onBeforeUnmount(() => {
   justify-items: center;
   gap: 14px;
   padding: 18px;
-  color: #e6ecf3;
+  color: var(--ui-text-secondary);
 }
 
 .media-picker-audio-name {
@@ -351,12 +351,12 @@ onBeforeUnmount(() => {
 
 .media-picker-hint {
   margin: 0;
-  color: #c2cad4;
+  color: var(--ui-muted);
   font-size: 13px;
 }
 
 .media-picker-hint.error {
-  color: #e0949b;
+  color: var(--ui-error);
 }
 
 .media-picker-actions {
