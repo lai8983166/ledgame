@@ -1300,7 +1300,24 @@ const languageCopy = {
   "ro-RO": { title: "Limbă", subtitle: "Limba aplicației", description: "Selectați limba interfeței. Modificarea se aplică imediat tuturor ferestrelor deschise.", current: "Limba curentă", saveError: "Limba nu a putut fi salvată" },
   "ar-SA": { title: "اللغة", subtitle: "لغة التطبيق", description: "اختر لغة الواجهة. يُطبّق التغيير فورًا على جميع النوافذ المفتوحة.", current: "اللغة الحالية", saveError: "تعذر حفظ اللغة" },
 };
+const windowControlCopy = {
+  "zh-CN": { minimize: "最小化", maximize: "最大化", close: "关闭" },
+  "en-US": { minimize: "Minimize", maximize: "Maximize", close: "Close" },
+  "es-ES": { minimize: "Minimizar", maximize: "Maximizar", close: "Cerrar" },
+  "pt-PT": { minimize: "Minimizar", maximize: "Maximizar", close: "Fechar" },
+  "fr-FR": { minimize: "Réduire", maximize: "Agrandir", close: "Fermer" },
+  "de-DE": { minimize: "Minimieren", maximize: "Maximieren", close: "Schließen" },
+  "pl-PL": { minimize: "Minimalizuj", maximize: "Maksymalizuj", close: "Zamknij" },
+  "ru-RU": { minimize: "Свернуть", maximize: "Развернуть", close: "Закрыть" },
+  "vi-VN": { minimize: "Thu nhỏ", maximize: "Phóng to", close: "Đóng" },
+  "it-IT": { minimize: "Riduci a icona", maximize: "Ingrandisci", close: "Chiudi" },
+  "cs-CZ": { minimize: "Minimalizovat", maximize: "Maximalizovat", close: "Zavřít" },
+  "ko-KR": { minimize: "최소화", maximize: "최대화", close: "닫기" },
+  "ro-RO": { minimize: "Minimizare", maximize: "Maximizare", close: "Închidere" },
+  "ar-SA": { minimize: "تصغير", maximize: "تكبير", close: "إغلاق" },
+};
 for (const locale of canonicalLocales) {
+  mergedMessages[locale] = mergeCatalog(mergedMessages[locale] || {}, { windowControls: windowControlCopy[locale] });
   if (languageCopy[locale]) {
     mergedMessages[locale] = mergeCatalog(mergedMessages[locale] || {}, { language: languageCopy[locale] });
   }

@@ -592,9 +592,9 @@ function formatRuntimeValue(value, fallback = "-") {
         <span class="window-titlebar-title">{{ applicationTitle }}</span>
       </span>
       <span class="window-titlebar-controls">
-        <button type="button" class="window-titlebar-control" aria-label="Minimize" @click="api.minimizeWindow?.()">−</button>
-        <button type="button" class="window-titlebar-control" aria-label="Maximize" @click="api.toggleMaximizeWindow?.()">□</button>
-        <button type="button" class="window-titlebar-control window-titlebar-control--close" aria-label="Close" @click="api.closeWindow?.()">×</button>
+        <button type="button" class="window-titlebar-control" :aria-label="t('windowControls.minimize')" @click="api.minimizeWindow?.()">−</button>
+        <button type="button" class="window-titlebar-control" :aria-label="t('windowControls.maximize')" @click="api.toggleMaximizeWindow?.()">□</button>
+        <button type="button" class="window-titlebar-control window-titlebar-control--close" :aria-label="t('windowControls.close')" @click="api.closeWindow?.()">×</button>
       </span>
     </div>
     <header class="app-nav" aria-label="Primary">

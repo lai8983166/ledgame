@@ -25,7 +25,7 @@ test("object list is collapsed by default and can be toggled", () => {
   assert.match(editorSource, /const showObjectList = ref\(false\)/);
   assert.match(editorSource, /:aria-pressed="showObjectList"/);
   assert.match(editorSource, /@click="showObjectList = !showObjectList"/);
-  assert.match(editorSource, /<div v-if="showObjectList" class="object-list">/);
+  assert.match(editorSource, /<div v-if="!anchorEditMode && showObjectList" class="object-list">/);
   assert.match(editorSource, /simple\.showObjects/);
   assert.match(editorSource, /simple\.showSpritePreview/);
 });
@@ -50,7 +50,7 @@ test("sprite brush filters the library and creates a sprite object", () => {
   assert.match(editorSource, /runRgbEdit\(currentFrameRgbHistoryTargets\(\), "create-sprite-object"/);
   assert.match(editorSource, /class="[^\"]*object-sprite-button[^\"]*"/);
   assert.match(editorSource, /<EditorActionIcon name="sprite" \/>/);
-  assert.match(editorSource, /<div v-else class="sprite-preview-panel">/);
+  assert.match(editorSource, /<div v-else-if="!anchorEditMode" class="sprite-preview-panel">/);
   assert.match(editorSource, /v-model="spriteSearchText"/);
   assert.match(editorSource, /v-for="sprite in filteredEditorSprites"/);
   assert.match(editorSource, /@click="selectEditorSprite\(sprite\)"/);
