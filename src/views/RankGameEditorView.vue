@@ -414,7 +414,6 @@ function goBack() {
                 <label><span v-text="field.label"></span><input :value="mediaValue(field.path)" readonly v-bind="{ placeholder: t('globalConfig.notSelected') }" /></label>
                 <div class="rank-media-actions">
                   <button class="soft-button compact-button" type="button" :disabled="Boolean(busy)" @click="openMediaPicker(field)">{{ t("globalConfig.choose") }}</button>
-                  <button class="soft-button compact-button" type="button" :disabled="Boolean(busy) || !mediaValue(field.path)" @click="clearMedia(field)">{{ t("globalConfig.clear") }}</button>
                 </div>
               </article>
             </div>

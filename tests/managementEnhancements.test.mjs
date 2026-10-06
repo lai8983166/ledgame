@@ -85,19 +85,18 @@ test("main window uses a dark custom title bar and renders the current brand", (
 });
 
 test("games navigation owns the home and game-list selector", () => {
-  assert.match(appSource, /class="nav-tab nav-game-tab-shell"[\s\S]*nav-game-tab-label[\s\S]*t\("nav\.games"\)/);
-  assert.match(appSource, /<select[\s\S]*class="nav-game-tab"/);
-  assert.doesNotMatch(appSource, /class="nav-tab nav-game-tab"/);
-  assert.match(appSource, /v-model="gameSection"/);
-  assert.match(appSource, /option value="home"/);
-  assert.match(appSource, /option value="list"/);
+  assert.match(appSource, /data-testid="game-menu-button"/);
+  assert.match(appSource, /selectGameSection\('home'\)/);
+  assert.match(appSource, /selectGameSection\('list'\)/);
+  assert.doesNotMatch(appSource, /v-model="gameSection"/);
   assert.match(appSource, /:section="gameSection"/);
   assert.doesNotMatch(gameListSource, /game-section-switcher/);
 });
 
 test("management game list hides the test-only demo game", () => {
   assert.match(gameListSource, /isDemoGame[\s\S]*simple-demo/);
-  assert.match(gameListSource, /result\.games\.filter\(\(game\) => !isDemoGame\(game\)\)/);
+  assert.match(gameListSource, /filter\(\(game\) => !isDemoGame\(game\)\)/);
+  assert.match(gameListSource, /games\.value = result\.games;/);
 });
 
 test("standalone editor validation buttons are hidden while validation remains internal", async () => {

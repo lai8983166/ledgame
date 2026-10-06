@@ -1,0 +1,20 @@
+<!doctype html><html><head><meta charset="utf-8" /></head><body><div id="app"></div>
+<script type="module">
+import { createApp, h } from 'vue';
+import { i18n, initializeApplicationLocale } from '../../src/i18n/index.js';
+import MediaPickerDialog from '../../src/components/MediaPickerDialog.vue';
+import GameGlobalConfigDialog from '../../src/components/GameGlobalConfigDialog.vue';
+import '../../src/style.css';
+let app;
+await initializeApplicationLocale();
+window.mountComponent = (component, props) => {
+  app?.unmount();
+  window.componentEvents = [];
+  app = createApp({ render: () => h({ MediaPickerDialog, GameGlobalConfigDialog }[component], {
+    ...props,
+    onSelect: path => window.componentEvents.push(['select', path]),
+    onCancel: () => window.componentEvents.push(['cancel']),
+  }) });
+  app.use(i18n).mount('#app');
+};
+</script></body></html>

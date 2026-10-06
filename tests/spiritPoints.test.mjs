@@ -28,6 +28,7 @@ test("createSpiritUpdatePayload clamps dimensions and returns structured points"
 test("createSpiritCreatePayload trims name and reuses shape normalization", () => {
   assert.deepEqual(createSpiritCreatePayload("  New spirit  ", 2, 2, [[1, 1], [2, 1]]), {
     name: "New spirit",
+    color: 0,
     width: 2,
     height: 2,
     points: [[1, 1]],

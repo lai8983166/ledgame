@@ -1872,6 +1872,9 @@ ipcMain.handle('game:list', () => backendRequest('/game'))
 ipcMain.handle('game:playable-list', () => backendRequest('/games/playable'))
 ipcMain.handle('game:manageable-list', () => backendRequest('/games/manageable'))
 ipcMain.handle('game-categories:list', () => backendRequest('/game-categories'))
+ipcMain.handle('game-categories:reorder', (_event, categoryIds) => backendRequest('/game-categories/display-order', {
+  method: 'PUT', body: JSON.stringify({ categoryIds }),
+}))
 ipcMain.handle('game-categories:create', (_event, payload) => backendRequest('/game-categories', {
   method: 'POST', body: JSON.stringify(payload || {}),
 }))

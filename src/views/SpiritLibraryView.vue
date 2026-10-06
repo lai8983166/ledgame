@@ -5,6 +5,7 @@ import SpiritPointEditorDialog from "../components/SpiritPointEditorDialog.vue";
 import { confirmWithRendererFocus } from "../lib/rendererFocus.js";
 import { createDebouncedPrefix, filterByNamePrefix } from "../lib/debouncedPrefixFilter.js";
 import { requestSpiritDeletion } from "../lib/spiritLibraryState.js";
+import { spiritColorCss } from "../lib/spiritPoints.js";
 
 const DEFAULT_PREVIEW_GAP = 2;
 const { t } = useI18n();
@@ -374,8 +375,8 @@ onBeforeUnmount(() => {
               <p>{{ selectedSpirit.id }}</p>
             </div>
             <div class="spirit-preview-actions">
-              <span class="spirit-badge" :class="{ basic: selectedSpirit.basic }">
-                {{ t(selectedSpirit.basic ? "spirits.basic" : "spirits.custom") }}
+              <span v-if="selectedSpirit.basic" class="spirit-badge basic">
+                {{ t("spirits.basic") }}
               </span>
               <button class="soft-button" type="button" @click="openSpiritEditor">{{ t("spirits.edit") }}</button>
               <button class="soft-button spirit-delete-button" type="button" :disabled="deletingSpirit" @click="deleteSelectedSpirit">{{ t(deletingSpirit ? 'management.deleting' : 'management.delete') }}</button>
@@ -392,6 +393,7 @@ onBeforeUnmount(() => {
                   gridTemplateColumns: `repeat(${previewWidth}, minmax(0, 1fr))`,
                   gridTemplateRows: `repeat(${previewHeight}, minmax(0, 1fr))`,
                   gap: `${previewCellGap}px`,
+                  '--spirit-color': spiritColorCss(selectedSpirit.color),
                 }"
               >
                 <span

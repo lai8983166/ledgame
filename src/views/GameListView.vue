@@ -7,7 +7,7 @@ import SimpleGameCard from "../components/SimpleGameCard.vue";
 import { useI18n } from "vue-i18n";
 import { extractErrorMessage } from "../lib/gameFlowState.js";
 import { loadSupportedGames } from "../lib/gameCatalog.js";
-import { createOrderDraft, moveOrderItem, orderedGameIds } from "../lib/catalogOrdering.js";
+import { reorderVisibleSlots, orderedGameIds } from "../lib/catalogOrdering.js";
 import { gamesInCategory, normalizeGameCategoryList } from "../lib/gameCategories.js";
 
 const { t } = useI18n({ useScope: "global" });
@@ -35,9 +35,10 @@ const editFirstCatalog = ref("");
 const editLoading = ref(false);
 const editSaving = ref(false);
 const editError = ref("");
-const ordering = ref(false);
-const orderDraft = ref([]);
 const orderSaving = ref(false);
+const dragSource = ref(null);
+const dragKind = ref('');
+const dropTarget = ref(null);
 const selectedCategory = ref(null);
 const categoryDialogOpen = ref(false);
 const editingCategory = ref(null);
@@ -49,14 +50,13 @@ const isDemoGame = (game) => String(game?.name || "").trim().toLowerCase() === "
 const visibleGames = computed(() => (selectedCategory.value
   ? gamesInCategory(games.value, selectedCategory.value.id)
   : games.value).filter((game) => !isDemoGame(game)));
-const displayGames = computed(() => ordering.value ? orderDraft.value : visibleGames.value);
+const displayGames = visibleGames;
 
 watch(
   () => props.section,
   () => {
     selectedCategory.value = null;
-    ordering.value = false;
-    orderDraft.value = [];
+    endDrag();
   },
 );
 
@@ -71,7 +71,7 @@ async function loadGames() {
   warningMessage.value = "";
   try {
     const result = await loadSupportedGames(api, { includeHidden: true });
-    games.value = result.games.filter((game) => !isDemoGame(game));
+    games.value = result.games;
     if (result.initializationError) {
       warningMessage.value = t("games.seedWarning", {
         message: extractErrorMessage(result.initializationError, t("games.seedFailed")),
@@ -109,8 +109,7 @@ async function loadCategories() {
 function openCategory(category) {
   selectedCategory.value = category;
   section.value = "home";
-  ordering.value = false;
-  orderDraft.value = [];
+  endDrag();
 }
 
 function beginAddCategory() {
@@ -222,33 +221,47 @@ async function saveGameInfo() {
   }
 }
 
-function beginOrdering() { orderDraft.value = createOrderDraft(games.value); ordering.value = true; }
-function cancelOrdering() { ordering.value = false; orderDraft.value = []; }
-function moveGame(index, delta) {
-  orderDraft.value = moveOrderItem(orderDraft.value, index, delta);
+function startDrag(event, id, kind) {
+  if (orderSaving.value) { event.preventDefault(); return; }
+  dragSource.value = id; dragKind.value = kind;
+  event.dataTransfer.effectAllowed = 'move';
+  event.dataTransfer.setData('text/plain', `${kind}:${id}`);
 }
-async function saveOrder() {
-  if (!api?.reorderGames || orderSaving.value) return;
-  orderSaving.value = true; errorMessage.value = "";
-  try { await api.reorderGames(orderedGameIds(orderDraft.value)); games.value = [...orderDraft.value]; cancelOrdering(); }
-  catch (error) { errorMessage.value = extractErrorMessage(error, t("management.orderSaveFailed")); }
-  finally { orderSaving.value = false; }
+function overDrag(id, kind) {
+  if (dragSource.value !== null && dragKind.value === kind && !orderSaving.value) dropTarget.value = id;
+}
+function endDrag() { dragSource.value = null; dragKind.value = ''; dropTarget.value = null; }
+async function dropCard(id, kind) {
+  if (orderSaving.value || dragSource.value === null || dragKind.value !== kind || dragSource.value === id) { endDrag(); return; }
+  const items = kind === 'category' ? categories : games;
+  const before = [...items.value];
+  const visibleIds = orderedGameIds(kind === 'category' ? categories.value : visibleGames.value);
+  const next = reorderVisibleSlots(before, visibleIds, dragSource.value, id);
+  endDrag();
+  orderSaving.value = true;
+  errorMessage.value = ''; categoryErrorMessage.value = '';
+  items.value = next;
+  try {
+    const save = kind === 'category' ? api?.reorderGameCategories : api?.reorderGames;
+    if (!save) throw new Error(t('management.orderSaveFailed'));
+    const response = await save(orderedGameIds(next));
+    if (response?.code && response.code !== 200) throw new Error(response.message);
+    items.value = kind === 'category'
+      ? normalizeGameCategoryList(response)
+      : next.map((item, index) => ({ ...item, displayOrder: index }));
+  } catch (error) {
+    items.value = before;
+    (kind === 'category' ? categoryErrorMessage : errorMessage).value = extractErrorMessage(error, t('management.orderSaveFailed'));
+  } finally { orderSaving.value = false; }
 }
 </script>
 
 <template>
-  <section class="workspace game-list-view">
+  <section class="workspace game-list-view" :class="{ 'catalog-sorting': dragSource !== null || orderSaving }" :aria-busy="orderSaving">
     <div class="page-heading">
       <div>
         <h1>{{ t("games.title") }}</h1>
         <p>{{ selectedCategory ? selectedCategory.name : t("games.subtitle") }}</p>
-      </div>
-      <div v-if="section === 'list'" class="game-order-actions">
-          <button v-if="!ordering" class="soft-button" type="button" @click="beginOrdering">{{ t('management.reorder') }}</button>
-          <template v-else>
-            <button class="soft-button" type="button" :disabled="orderSaving" @click="cancelOrdering">{{ t('common.cancel') }}</button>
-            <button class="action-button primary" type="button" :disabled="orderSaving" @click="saveOrder">{{ orderSaving ? t('common.loading') : t('common.save') }}</button>
-          </template>
       </div>
     </div>
 
@@ -282,6 +295,13 @@ async function saveOrder() {
           v-for="category in categories"
           :key="category.id"
           :category="category"
+          :order-blocked="orderSaving"
+          :dragging="dragSource === category.id && dragKind === 'category'"
+          :drop-target="dropTarget === category.id && dragKind === 'category'"
+          @reorder-start="(event, id) => startDrag(event, id, 'category')"
+          @reorder-over="overDrag($event, 'category')"
+          @reorder-drop="dropCard($event, 'category')"
+          @reorder-end="endDrag"
           @open="openCategory"
           @edit="editCategory"
         />
@@ -299,22 +319,20 @@ async function saveOrder() {
         <button class="soft-button" type="button" @click="loadGames">{{ t("games.reload") }}</button>
       </div>
       <div v-else class="game-card-grid">
-        <template v-if="!ordering">
           <SimpleGameCard
             v-for="game in displayGames"
             :key="game.id"
             :game="game"
+            :order-blocked="orderSaving"
+            :dragging="dragSource === game.id && dragKind === 'game'"
+            :drop-target="dropTarget === game.id && dragKind === 'game'"
+            @reorder-start="(event, id) => startDrag(event, id, 'game')"
+            @reorder-over="overDrag($event, 'game')"
+            @reorder-drop="dropCard($event, 'game')"
+            @reorder-end="endDrag"
             @open-game="openGame"
             @edit-game="editGame"
           />
-        </template>
-        <template v-else>
-          <div v-for="(game, index) in orderDraft" :key="`order-${game.id}`" class="game-order-control">
-            <strong>{{ game.displayName || game.name }}</strong>
-            <button type="button" :disabled="index === 0" @click="moveGame(index, -1)">{{ t('management.moveUp') }}</button>
-            <button type="button" :disabled="index === orderDraft.length - 1" @click="moveGame(index, 1)">{{ t('management.moveDown') }}</button>
-          </div>
-        </template>
       </div>
     </template>
 

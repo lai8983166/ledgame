@@ -1,5 +1,5 @@
 <script setup>
-import { ref } from "vue";
+import { ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { setApplicationLocale } from "../i18n/index.js";
 import { APPLICATION_LANGUAGE_OPTIONS } from "../lib/applicationLanguages.js";
@@ -16,15 +16,15 @@ defineProps({
   },
 });
 
-const emit = defineEmits(["selected"]);
+const emit = defineEmits(["selected", "busy"]);
 const { locale, t } = useI18n({ useScope: "global" });
 const errorMessage = ref("");
 const busy = ref(false);
+watch(busy, value => emit('busy', value), { flush: 'sync' });
 
 async function selectLanguage(value) {
-  if (busy.value || value === locale.value) {
-    return;
-  }
+  if (busy.value) return;
+  if (value === locale.value) { emit('selected', value); return; }
   busy.value = true;
   errorMessage.value = "";
   try {
@@ -56,7 +56,7 @@ async function selectLanguage(value) {
           :value="option.value"
           name="application-language"
           type="radio"
-          @change="selectLanguage(option.value)"
+          @click.prevent="selectLanguage(option.value)"
         />
         <img class="language-option-flag" :src="LOCALE_FLAG_URLS[option.flagCode]" alt="" />
         <span>{{ option.label }}</span>

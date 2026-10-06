@@ -64,6 +64,7 @@ const fullLedGameApi = {
   listGameCategories: () => ipcRenderer.invoke('game-categories:list'),
   createGameCategory: (payload) => ipcRenderer.invoke('game-categories:create', payload),
   updateGameCategory: (categoryId, payload) => ipcRenderer.invoke('game-categories:update', categoryId, payload),
+  reorderGameCategories: (categoryIds) => ipcRenderer.invoke('game-categories:reorder', categoryIds),
   touchGameState: () => ipcRenderer.invoke('game:state'),
   startSystemIdle: () => ipcRenderer.invoke('game:idle'),
   stopTouchGame: () => ipcRenderer.invoke('game:stop'),

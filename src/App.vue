@@ -9,12 +9,12 @@ import SimpleGameEditorView from "./views/SimpleGameEditorView.vue";
 import RankGameEditorView from "./views/RankGameEditorView.vue";
 import SpiritLibraryView from "./views/SpiritLibraryView.vue";
 import LedGameTouchView from "./views/LedGameTouchView.vue";
-import LanguageView from "./views/LanguageView.vue";
 import Elc408DebugAssistantView from "./views/Elc408DebugAssistantView.vue";
 import DatabaseRefreshView from "./views/DatabaseRefreshView.vue";
 import ApplicationSettingsView from "./views/ApplicationSettingsView.vue";
 import SecondaryDisplayView from "./views/SecondaryDisplayView.vue";
 import SecondaryDisplayPickerDialog from "./components/SecondaryDisplayPickerDialog.vue";
+import LanguageSelectionDialog from "./components/LanguageSelectionDialog.vue";
 
 const { t } = useI18n({ useScope: "global" });
 
@@ -32,6 +32,11 @@ const hoverCell = ref(null);
 const gameRuntimeState = ref(null);
 const activeView = ref("games");
 const gameSection = ref("home");
+const gameMenuOpen = ref(false);
+const gameButtonRef = ref(null);
+const gameMenuRef = ref(null);
+const languageDialogOpen = ref(false);
+const languageButtonRef = ref(null);
 const selectedEditorGame = ref(null);
 const helpMenuOpen = ref(false);
 const helpDocument = ref(null);
@@ -165,6 +170,9 @@ async function loadApplicationIcon() {
 
 function attachHelpMenuListeners() {
   function onDocumentClick(event) {
+    if (gameMenuOpen.value && !gameMenuRef.value?.contains(event.target) && !gameButtonRef.value?.contains(event.target)) {
+      gameMenuOpen.value = false;
+    }
     if (!helpMenuOpen.value && !secondaryMenuOpen.value) {
       return;
     }
@@ -193,6 +201,7 @@ function attachHelpMenuListeners() {
   }
   function onKeydown(event) {
     if (event.key === "Escape") {
+      if (gameMenuOpen.value) { gameMenuOpen.value = false; gameButtonRef.value?.focus(); }
       if (helpDocument.value) {
         closeHelpDocument();
         return;
@@ -220,6 +229,7 @@ function toggleHelpMenu() {
 }
 
 function openHelpMenu() {
+  gameMenuOpen.value = false;
   closeSecondaryMenu();
   helpMenuOpen.value = true;
 }
@@ -314,8 +324,20 @@ function openGameEditor(game) {
 }
 
 function selectGameSection(value) {
+  gameMenuOpen.value = false;
   gameSection.value = value === "list" ? "list" : "home";
   activeView.value = "games";
+}
+
+function toggleGameMenu() {
+  closeHelpMenu(); closeSecondaryMenu();
+  gameMenuOpen.value = !gameMenuOpen.value;
+}
+
+async function closeLanguageDialog() {
+  languageDialogOpen.value = false;
+  await nextTick();
+  languageButtonRef.value?.focus({ preventScroll: true });
 }
 
 async function openHelpDocument(key, title) {
@@ -341,6 +363,7 @@ function toggleSecondaryMenu() {
 }
 
 function openSecondaryMenu() {
+  gameMenuOpen.value = false;
   closeHelpMenu();
   secondaryMenuOpen.value = true;
 }
@@ -600,30 +623,17 @@ function formatRuntimeValue(value, fallback = "-") {
     <header class="app-nav" aria-label="Primary">
       <div class="brand-mark" aria-hidden="true"></div>
       <nav class="nav-tabs">
-        <button
-          class="nav-tab"
-          data-testid="game-enter-flow"
-          type="button"
-          :disabled="busyAction === 'game-flow'"
-          @click="enterGameFlow"
-        >
-          {{ busyAction === "game-flow" ? t("nav.entering") : t("nav.enterGame") }}
-        </button>
-        <div
-          class="nav-tab nav-game-tab-shell"
-          :class="{ active: ['games', 'simple-editor', 'rank-editor'].includes(activeView) }"
-        >
-          <span class="nav-game-tab-label">{{ t("nav.games") }}</span>
-          <select
-            v-model="gameSection"
-            class="nav-game-tab"
-            :aria-label="t('nav.games')"
-            @click.stop
-            @change="selectGameSection($event.target.value)"
-          >
-            <option value="home">{{ t("gameCategories.home") }}</option>
-            <option value="list">{{ t("gameCategories.gameList") }}</option>
-          </select>
+        <div class="nav-help-wrapper">
+          <button ref="gameButtonRef" class="nav-tab nav-help-button" data-testid="game-menu-button" type="button"
+            :class="{ active: ['games', 'simple-editor', 'rank-editor'].includes(activeView) }"
+            aria-haspopup="menu" :aria-expanded="gameMenuOpen" @click="toggleGameMenu"
+            @keydown.down.prevent="gameMenuOpen = true">
+            {{ t('nav.games') }}<span class="nav-help-chevron" aria-hidden="true">▾</span>
+          </button>
+          <div v-if="gameMenuOpen" ref="gameMenuRef" class="nav-help-menu" role="menu">
+            <button class="nav-help-item" role="menuitem" type="button" @click="selectGameSection('home')">{{ t('gameCategories.home') }}</button>
+            <button class="nav-help-item" role="menuitem" type="button" @click="selectGameSection('list')">{{ t('gameCategories.gameList') }}</button>
+          </div>
         </div>
         <button
           class="nav-tab"
@@ -642,10 +652,12 @@ function formatRuntimeValue(value, fallback = "-") {
           {{ t("nav.spirits") }}
         </button>
         <button
+          ref="languageButtonRef"
           class="nav-tab"
-          :class="{ active: activeView === 'language' }"
+          data-testid="language-menu-button"
+          :class="{ active: languageDialogOpen }"
           type="button"
-          @click="activeView = 'language'"
+          @click="languageDialogOpen = true"
         >
           {{ t("nav.language") }}
         </button>
@@ -694,6 +706,10 @@ function formatRuntimeValue(value, fallback = "-") {
             </button>
           </div>
         </div>
+        <button class="nav-tab" data-testid="game-enter-flow" type="button"
+          :disabled="busyAction === 'game-flow'" @click="enterGameFlow">
+          {{ busyAction === 'game-flow' ? t('nav.entering') : t('nav.enterGame') }}
+        </button>
         <button
           class="nav-tab"
           :class="{ active: activeView === 'application-settings' }"
@@ -807,7 +823,7 @@ function formatRuntimeValue(value, fallback = "-") {
 
     <ApplicationSettingsView v-else-if="activeView === 'application-settings'" />
 
-    <LanguageView v-else />
+    <LanguageSelectionDialog v-if="languageDialogOpen" @close="closeLanguageDialog" />
 
     <SecondaryDisplayPickerDialog
       :open="secondaryPickerOpen"

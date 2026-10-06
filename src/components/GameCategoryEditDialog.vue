@@ -69,7 +69,6 @@ onBeforeUnmount(() => window.removeEventListener("keydown", handleKeydown));
       <p class="game-category-edit-path">{{ cover || t("games.noCoverSelected") }}</p>
       <div class="game-category-edit-actions">
         <button class="soft-button" type="button" :disabled="saving" @click="pickerOpen = true">{{ t("gameCategories.chooseCover") }}</button>
-        <button class="soft-button" type="button" :disabled="saving || !cover" @click="emit('update:cover', '')">{{ t("games.clearCover") }}</button>
       </div>
       <p v-if="error" class="error-line" role="alert">{{ error }}</p>
       <footer class="game-category-edit-footer">

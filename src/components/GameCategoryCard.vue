@@ -5,8 +5,11 @@ import { buildMediaPreviewUrl } from "../lib/mediaPreview.js";
 
 const props = defineProps({
   category: { type: Object, required: true },
+  orderBlocked: { type: Boolean, default: false },
+  dragging: { type: Boolean, default: false },
+  dropTarget: { type: Boolean, default: false },
 });
-const emit = defineEmits(["open", "edit"]);
+const emit = defineEmits(["open", "edit", "reorder-start", "reorder-over", "reorder-drop", "reorder-end"]);
 const { t } = useI18n({ useScope: "global" });
 const coverFailed = ref(false);
 const coverUrl = computed(() => coverFailed.value ? "" : buildMediaPreviewUrl(props.category.cover));
@@ -15,8 +18,14 @@ watch(() => props.category.cover, () => { coverFailed.value = false; });
 </script>
 
 <template>
-  <article class="game-category-card">
-    <button class="game-category-card-main" type="button" @click="emit('open', category)">
+  <article class="game-category-card" :data-id="category.id" :class="{ 'catalog-dragging': dragging, 'catalog-drop-target': dropTarget }"
+    @dragover.prevent="emit('reorder-over', category.id)" @drop.prevent.stop="emit('reorder-drop', category.id)">
+    <button class="catalog-drag-handle" type="button" :draggable="!orderBlocked" :disabled="orderBlocked"
+      v-bind="{ title: t('management.reorder'), 'aria-label': t('management.reorder') }"
+      @click.stop.prevent @dragstart.stop="emit('reorder-start', $event, category.id)" @dragend.stop="emit('reorder-end')">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle v-for="n in 6" :key="n" :cx="n % 2 ? 8 : 16" :cy="4 + Math.floor((n - 1) / 2) * 8" r="2" fill="currentColor" /></svg>
+    </button>
+    <button class="game-category-card-main" type="button" :disabled="dragging || orderBlocked" @dragstart.prevent @click="emit('open', category)">
       <span class="game-category-card-cover">
         <img v-if="coverUrl" :src="coverUrl" :alt="category.name" @error="coverFailed = true" />
         <span v-else class="game-card-cover-placeholder">

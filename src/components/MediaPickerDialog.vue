@@ -2,6 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { createLatestAsyncValueLoader } from "../lib/latestAsyncTask.js";
+import { filterMediaTree, visibleMediaRows } from "../lib/mediaSelectionTree.js";
 
 const props = defineProps({
   accept: { type: String, default: "any" }, // 'image' | 'audio' | 'any'
@@ -16,6 +17,14 @@ const dialogRef = ref(null);
 const loading = ref(false);
 const loadError = ref("");
 const allFiles = ref([]);
+const expandedPaths = ref(new Set());
+const visibleRows = computed(() => visibleMediaRows(allFiles.value, expandedPaths.value));
+const selectableFiles = computed(() => visibleMediaRows(allFiles.value, new Set(collectDirectoryPaths(allFiles.value))).filter(node => node.kind === 'file'));
+const canConfirm = computed(() => selectableFiles.value.some(file => file.relativePath === selected.value));
+
+function collectDirectoryPaths(nodes) {
+  return nodes.flatMap(node => node.kind === 'directory' ? [node.relativePath, ...collectDirectoryPaths(node.children)] : []);
+}
 const selected = ref(props.currentValue || "");
 const preview = ref(null);
 let mounted = false;
@@ -43,23 +52,6 @@ const acceptLabel = computed(() => {
 });
 const dialogTitle = computed(() => props.title || t("mediaPicker.title"));
 
-function matchesAccept(mediaType) {
-  if (props.accept === "image") return mediaType === "image";
-  if (props.accept === "audio") return mediaType === "audio";
-  return mediaType === "image" || mediaType === "video" || mediaType === "audio";
-}
-
-function flatten(nodes, acc = []) {
-  for (const node of nodes || []) {
-    if (node.kind === "directory") {
-      flatten(node.children, acc);
-    } else if (node.kind === "file" && matchesAccept(node.mediaType)) {
-      acc.push(node);
-    }
-  }
-  return acc;
-}
-
 async function loadMedia() {
   if (!mediaApi?.list) {
     loadError.value = t("mediaPicker.unavailable");
@@ -69,7 +61,8 @@ async function loadMedia() {
   loadError.value = "";
   try {
     const result = await mediaApi.list();
-    allFiles.value = flatten(result?.items || []);
+    allFiles.value = filterMediaTree(result?.items || [], props.accept);
+    expandedPaths.value = new Set(collectDirectoryPaths(allFiles.value).filter(path => selected.value.startsWith(`${path}/`)));
   } catch (error) {
     loadError.value = error?.message || String(error);
   } finally {
@@ -88,11 +81,17 @@ async function loadPreview(relativePath) {
 }
 
 function selectFile(node) {
+  if (node.kind === 'directory') {
+    const next = new Set(expandedPaths.value);
+    next.has(node.relativePath) ? next.delete(node.relativePath) : next.add(node.relativePath);
+    expandedPaths.value = next;
+    return;
+  }
   selected.value = node.relativePath;
 }
 
 function confirm() {
-  if (selected.value) {
+  if (canConfirm.value) {
     emit("select", selected.value);
   }
 }
@@ -157,7 +156,7 @@ onBeforeUnmount(() => {
       <header class="media-picker-header">
         <div>
           <h2>{{ dialogTitle }}</h2>
-          <p>{{ t("mediaPicker.count", { type: acceptLabel, count: allFiles.length }) }}</p>
+          <p>{{ t("mediaPicker.count", { type: acceptLabel, count: selectableFiles.length }) }}</p>
         </div>
         <button class="inline-symbol-button" type="button" :title="t('common.close')" @click="emit('cancel')">×</button>
       </header>
@@ -168,16 +167,19 @@ onBeforeUnmount(() => {
           <p v-else-if="loadError" class="media-picker-hint error">{{ loadError }}</p>
           <p v-else-if="!allFiles.length" class="media-picker-hint">{{ t("mediaPicker.noMatches") }}</p>
           <button
-            v-for="file in allFiles"
+            v-for="file in visibleRows"
             :key="file.relativePath"
             type="button"
             class="media-picker-row"
             :class="{ selected: file.relativePath === selected }"
             :title="file.relativePath"
+            :data-path="file.relativePath"
+            :aria-expanded="file.kind === 'directory' ? expandedPaths.has(file.relativePath) : undefined"
+            :style="{ paddingLeft: `${10 + file.depth * 18}px` }"
             @click="selectFile(file)"
-            @dblclick="selectFile(file), confirm()"
+            @dblclick="file.kind === 'file' && (selectFile(file), confirm())"
           >
-            <span class="media-picker-row-name">{{ file.name }}</span>
+            <span class="media-picker-row-name"><template v-if="file.kind === 'directory'">{{ expandedPaths.has(file.relativePath) ? '▾' : '▸' }} 📁 </template>{{ file.name }}</span>
             <span class="media-picker-row-path">{{ file.relativePath }}</span>
           </button>
         </div>
@@ -203,7 +205,7 @@ onBeforeUnmount(() => {
 
       <footer class="media-picker-actions">
         <button class="soft-button" type="button" @click="emit('cancel')">{{ t("common.cancel") }}</button>
-        <button class="action-button primary" type="button" :disabled="!selected" @click="confirm">{{ t("common.confirm") }}</button>
+        <button class="action-button primary" type="button" :disabled="!canConfirm" @click="confirm">{{ t("common.confirm") }}</button>
       </footer>
     </section>
   </div>

@@ -52,9 +52,14 @@ export function createSpiritUpdatePayload(width, height, points) {
   };
 }
 
-export function createSpiritCreatePayload(name, width, height, points) {
+export function createSpiritCreatePayload(name, width, height, points, color = 0) {
   return {
     name: String(name || "").trim(),
+    color,
     ...createSpiritUpdatePayload(width, height, points),
   };
+}
+
+export function spiritColorCss(color) {
+  return ['#22c55e', '#3b82f6', '#ef4444', '#a855f7'][color] || '#3b82f6';
 }

@@ -18,7 +18,7 @@ const listSource = await readFile(
 const styleSource = await readFile(new URL("../src/style.css", import.meta.url), "utf8");
 
 test("game card keeps open and edit as independent accessible buttons", () => {
-  assert.match(cardSource, /<article class="game-card">/);
+  assert.match(cardSource, /<article class="game-card"\s/);
   assert.match(cardSource, /class="game-card-main"[\s\S]*emit\('open-game'/);
   assert.match(cardSource, /class="game-card-edit"[\s\S]*aria-label[\s\S]*emit\('edit-game'/);
   assert.doesNotMatch(cardSource, /<button class="game-card"[\s\S]*<button/);

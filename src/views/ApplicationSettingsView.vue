@@ -282,7 +282,6 @@ async function testMemberPlatform() {
           <div class="application-settings-actions application-settings-background-actions">
             <button class="application-settings-secondary" type="button" @click="chooseSecondaryBackground">{{ t('management.chooseSecondaryBackground') }}</button>
             <span>{{ secondaryBackgroundLabel }}</span>
-            <button v-if="draft.secondaryDisplayBackgroundPath" class="application-settings-secondary" type="button" @click="clearSecondaryBackground">{{ t('management.clearSecondaryBackground') }}</button>
           </div>
           <small>{{ t('management.secondaryBackgroundHint') }}</small>
         </fieldset>
@@ -359,9 +358,6 @@ async function testMemberPlatform() {
               {{ t("applicationSettings.chooseSecondaryIdleMedia") }}
             </button>
             <span>{{ secondaryIdleMediaLabel }}</span>
-            <button v-if="draft.secondaryIdleMediaPath" class="application-settings-secondary" type="button" @click="clearSecondaryIdleMedia">
-              {{ t("applicationSettings.clearSecondaryIdleMedia") }}
-            </button>
           </div>
           <small>{{ t("applicationSettings.secondaryIdleMediaHint") }}</small>
         </fieldset>

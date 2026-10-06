@@ -281,6 +281,7 @@ onBeforeUnmount(() => {
                   />
                   <button class="soft-button compact-button" type="button" :disabled="saving" @click="openPicker(field)">{{ t("globalConfig.choose") }}</button>
                   <button
+                    v-if="field.accept === 'audio'"
                     class="soft-button compact-button"
                     type="button"
                     :disabled="saving || !getPath(field.path)"

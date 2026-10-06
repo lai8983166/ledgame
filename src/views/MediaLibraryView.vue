@@ -263,7 +263,11 @@ onBeforeUnmount(() => {
             :style="{ paddingLeft: `${12 + depth * 18}px` }"
             @click="selectNode(node)"
           >
-            <span class="media-row-icon" :class="node.mediaType">{{ iconFor(node) }}</span>
+            <template v-if="node.kind === 'directory'">
+              <span class="media-folder-chevron" aria-hidden="true">{{ expandedPaths.has(node.relativePath) ? '▾' : '▸' }}</span>
+              <svg class="media-folder-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h6l2 2h10v11H3Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M3 6V4h6l2 2h8v2" fill="none" stroke="currentColor" stroke-width="1.7" /></svg>
+            </template>
+            <span v-else class="media-row-icon" :class="node.mediaType">{{ iconFor(node) }}</span>
             <span class="media-row-name">{{ node.name }}</span>
           </button>
         </div>

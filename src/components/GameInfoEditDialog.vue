@@ -158,14 +158,6 @@ onBeforeUnmount(() => {
           >
             {{ t("games.chooseCover") }}
           </button>
-          <button
-            class="soft-button"
-            type="button"
-            :disabled="busy || !cover"
-            @click="updateCover('')"
-          >
-            {{ t("games.clearCover") }}
-          </button>
         </div>
       </div>
 

@@ -8,6 +8,7 @@ import {
   createSpiritUpdatePayload,
   cropSpiritPoints,
   parseSpiritPoints,
+  spiritColorCss,
 } from "../lib/spiritPoints.js";
 
 const props = defineProps({
@@ -25,6 +26,7 @@ const stageRef = ref(null);
 const width = ref(1);
 const height = ref(1);
 const name = ref("");
+const color = ref(0);
 const pointKeys = ref(new Set());
 const stageSize = ref({ width: 0, height: 0 });
 let resizeObserver = null;
@@ -37,6 +39,7 @@ const canSave = computed(() => !props.saving && (!props.creating || name.value.t
 
 function resetDraft() {
   name.value = props.spirit?.name || "";
+  color.value = props.spirit?.color ?? 0;
   width.value = clampSpiritDimension(props.spirit?.width);
   height.value = clampSpiritDimension(props.spirit?.height);
   const points = cropSpiritPoints(parseSpiritPoints(props.spirit?.points), width.value, height.value);
@@ -84,7 +87,7 @@ function drawCanvas() {
   for (let y = 0; y < height.value; y += 1) {
     for (let x = 0; x < width.value; x += 1) {
       if (pointKeys.value.has(`${x}:${y}`)) {
-        context.fillStyle = "#4f8fce";
+        context.fillStyle = spiritColorCss(color.value);
         context.fillRect(x * metrics.cell, y * metrics.cell, metrics.cell, metrics.cell);
       }
       context.strokeStyle = "rgba(180, 204, 230, 0.34)";
@@ -163,7 +166,7 @@ function handleSave() {
   emit(
     "save",
     props.creating
-      ? createSpiritCreatePayload(name.value, width.value, height.value, points)
+      ? createSpiritCreatePayload(name.value, width.value, height.value, points, color.value)
       : createSpiritUpdatePayload(width.value, height.value, points),
   );
 }
@@ -195,6 +198,7 @@ function handleKeydown(event) {
 
 watch(() => props.spirit, resetDraft, { immediate: true });
 watch([width, height], applyDimensionChange);
+watch(color, drawCanvas);
 
 onMounted(() => {
   resizeObserver = new ResizeObserver(([entry]) => {
@@ -245,6 +249,13 @@ onBeforeUnmount(() => {
         <label>{{ t("spiritEditor.width") }} <input v-model.number="width" type="number" min="1" :max="MAX_SPIRIT_DIMENSION" :disabled="saving" /></label>
         <label>{{ t("spiritEditor.height") }} <input v-model.number="height" type="number" min="1" :max="MAX_SPIRIT_DIMENSION" :disabled="saving" /></label>
         <span>{{ width }} × {{ height }}</span>
+      </div>
+
+      <div v-if="creating" class="spirit-editor-colors" role="radiogroup" :aria-label="t('spirits.color')">
+        <label v-for="value in [0, 1, 2, 3]" :key="value" :class="{ selected: color === value }" :style="{ '--spirit-color': spiritColorCss(value) }">
+          <input v-model.number="color" name="new-spirit-color" type="radio" :value="value" :disabled="saving" />
+          <span class="spirit-color-swatch" aria-hidden="true"></span>{{ t(`globalConfig.colors.color${value}`) }}
+        </label>
       </div>
 
       <div ref="stageRef" class="spirit-editor-stage">

@@ -9,8 +9,11 @@ const props = defineProps({
     type: Object,
     required: true,
   },
+  orderBlocked: { type: Boolean, default: false },
+  dragging: { type: Boolean, default: false },
+  dropTarget: { type: Boolean, default: false },
 });
-const emit = defineEmits(["open-game", "edit-game"]);
+const emit = defineEmits(["open-game", "edit-game", "reorder-start", "reorder-over", "reorder-drop", "reorder-end"]);
 const coverFailed = ref(false);
 const coverUrl = computed(() =>
   coverFailed.value ? "" : buildMediaPreviewUrl(props.game.cover),
@@ -25,8 +28,14 @@ watch(
 </script>
 
 <template>
-  <article class="game-card">
-    <button class="game-card-main" type="button" @click="emit('open-game', props.game)">
+  <article class="game-card" :data-id="game.id" :class="{ 'catalog-dragging': dragging, 'catalog-drop-target': dropTarget }"
+    @dragover.prevent="emit('reorder-over', game.id)" @drop.prevent.stop="emit('reorder-drop', game.id)">
+    <button class="catalog-drag-handle" type="button" :draggable="!orderBlocked" :disabled="orderBlocked"
+      v-bind="{ title: t('management.reorder'), 'aria-label': t('management.reorder') }"
+      @click.stop.prevent @dragstart.stop="emit('reorder-start', $event, game.id)" @dragend.stop="emit('reorder-end')">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle v-for="n in 6" :key="n" :cx="n % 2 ? 8 : 16" :cy="4 + Math.floor((n - 1) / 2) * 8" r="2" fill="currentColor" /></svg>
+    </button>
+    <button class="game-card-main" type="button" :disabled="dragging || orderBlocked" @dragstart.prevent @click="emit('open-game', props.game)">
       <span class="game-card-cover">
         <img
           v-if="coverUrl"
