@@ -41,7 +41,7 @@ function createDefaultElc408Config() {
       broadcastAddress: DEFAULT_ELC408_BROADCAST_ADDRESS,
     },
     controllerModel: 'HC08',
-    rgbMode: 'RGB',
+    rgbMode: 'GRB',
   }
 }
 

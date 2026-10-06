@@ -1345,6 +1345,26 @@ mergedMessages["en-US"].applicationSettings = {
   },
 };
 
+const touchVisibilityCopy = {
+  "zh-CN": ["触屏显示", "立即保存；关闭后不在玩家选游戏及排队列表中显示"],
+  "en-US": ["Show on touch screen", "Saved immediately; disable to hide from player selection and queue lists"],
+  "es-ES": ["Mostrar en pantalla táctil", "Se guarda al instante; desactívalo para ocultarlo en la selección y la cola"],
+  "pt-PT": ["Mostrar no ecrã tátil", "Guardado imediatamente; desative para ocultar na seleção e na fila"],
+  "fr-FR": ["Afficher sur l’écran tactile", "Enregistré immédiatement ; désactivez pour masquer dans la sélection et la file"],
+  "de-DE": ["Auf dem Touchscreen anzeigen", "Sofort gespeichert; deaktivieren, um das Spiel in Auswahl und Warteschlange auszublenden"],
+  "pl-PL": ["Pokaż na ekranie dotykowym", "Zapis natychmiastowy; wyłącz, aby ukryć grę w wyborze i kolejce"],
+  "ru-RU": ["Показывать на сенсорном экране", "Сохраняется сразу; отключите для скрытия в выборе игр и очереди"],
+  "vi-VN": ["Hiển thị trên màn hình cảm ứng", "Lưu ngay; tắt để ẩn khỏi danh sách chọn trò chơi và hàng đợi"],
+  "it-IT": ["Mostra sullo schermo tattile", "Salvato subito; disattiva per nascondere dalla selezione e dalla coda"],
+  "cs-CZ": ["Zobrazit na dotykové obrazovce", "Uloženo okamžitě; vypnutím skryjete hru ve výběru a frontě"],
+  "ko-KR": ["터치 화면에 표시", "즉시 저장됩니다. 끄면 게임 선택 및 대기 목록에서 숨겨집니다"],
+  "ro-RO": ["Afișare pe ecranul tactil", "Salvat imediat; dezactivați pentru a ascunde din selecție și coadă"],
+  "ar-SA": ["العرض على شاشة اللمس", "يُحفظ فورًا؛ عطّله لإخفاء اللعبة من الاختيار وقائمة الانتظار"],
+};
+for (const [locale, [childModeVisible, childModeVisibleHint]] of Object.entries(touchVisibilityCopy)) {
+  mergedMessages[locale].management = { ...mergedMessages[locale].management, childModeVisible, childModeVisibleHint };
+}
+
 export const authoredMessages = Object.fromEntries(
   canonicalLocales.map((locale) => [locale, mergedMessages[locale] || {}]),
 );

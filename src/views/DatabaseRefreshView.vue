@@ -90,13 +90,11 @@ onUnmounted(() => {
     <div class="page-heading">
       <div>
         <h1>{{ t("databaseRefresh.title") }}</h1>
-        <p>{{ t("databaseRefresh.subtitle") }}</p>
       </div>
     </div>
 
     <section class="database-refresh-panel" aria-labelledby="database-refresh-heading">
       <div class="database-refresh-copy">
-        <span class="database-refresh-eyebrow">{{ t("databaseRefresh.eyebrow") }}</span>
         <h2 id="database-refresh-heading">{{ t("databaseRefresh.actionTitle") }}</h2>
         <p>{{ t("databaseRefresh.description") }}</p>
         <p class="database-refresh-warning">{{ t("databaseRefresh.warning") }}</p>

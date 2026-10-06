@@ -22,7 +22,7 @@ test('default ELC408 config expresses a portable link-local interface without bu
   const config = createDefaultElc408Config()
   assert.equal(config.tcpServerPort, 3003)
   assert.equal(config.controllerModel, 'HC08')
-  assert.equal(config.rgbMode, 'RGB')
+  assert.equal(config.rgbMode, 'GRB')
   assert.deepEqual(config.networkInterface, {
     localAddress: '169.254.1.10',
     prefixLength: 16,

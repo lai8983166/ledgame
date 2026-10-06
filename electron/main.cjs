@@ -2157,12 +2157,18 @@ ipcMain.handle('rank-game-editor:save', (_event, gameId, document) =>
     body: JSON.stringify(document),
   }),
 )
-ipcMain.handle('game:metadata-update', (_event, gameId, patch) =>
-  backendRequest(`/games/${gameId}/metadata`, {
+ipcMain.handle('game:metadata-update', async (_event, gameId, patch) => {
+  const result = await backendRequest(`/games/${gameId}/metadata`, {
     method: 'PATCH',
     body: JSON.stringify(patch || {}),
-  }),
-)
+  })
+  if (typeof patch?.childModeVisible === 'boolean') {
+    for (const window of BrowserWindow.getAllWindows()) {
+      if (!window.isDestroyed()) window.webContents.send('game-catalog-changed', { gameId })
+    }
+  }
+  return result
+})
 ipcMain.handle('secondary-display:open', () => openSecondaryDisplay())
 
 // ELC-408 SDK debug assistant IPC. The renderer can only call fixed actions;

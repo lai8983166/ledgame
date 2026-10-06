@@ -56,7 +56,6 @@ onBeforeUnmount(() => window.removeEventListener("keydown", handleKeydown));
       <header class="game-category-edit-header">
         <div>
           <h2>{{ category ? t("gameCategories.editTitle") : t("gameCategories.addTitle") }}</h2>
-          <p>{{ t("gameCategories.description") }}</p>
         </div>
         <button class="inline-symbol-button" type="button" v-bind="{ title: t('common.close') }" :disabled="saving" @click="close">×</button>
       </header>

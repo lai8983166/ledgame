@@ -80,6 +80,7 @@ const returnIdleBusy = ref(false);
 const returnIdleError = ref("");
 const loadingState = ref(true);
 const loadingGames = ref(false);
+const catalogRefreshError = ref(false);
 const gameInitializationWarning = ref("");
 const busyAction = ref("");
 const errorMessage = ref("");
@@ -104,6 +105,9 @@ let removeStateListener = null;
 let removePresentationListener = null;
 let removeSettingsListener = null;
 let removeWristbandListener = null;
+let removeCatalogListener = null;
+let gamesLoadPromise = null;
+let touchMounted = false;
 let wristbandAdvanceTimer = null;
 let playerAccessClockTimer = null;
 let idlePromptTimer = null;
@@ -243,6 +247,8 @@ const statusCanvasMode = computed(() => {
 });
 
 onMounted(async () => {
+  touchMounted = true;
+  removeCatalogListener = api?.onCatalogChanged?.(() => void refreshCatalog()) || null;
   playerAccessClockTimer = window.setInterval(() => {
     playerAccessClock.value = Date.now();
   }, 1000);
@@ -271,12 +277,14 @@ onMounted(async () => {
 });
 
 onUnmounted(() => {
+  touchMounted = false;
   document.removeEventListener("visibilitychange", resumeIdleVideoWhenVisible);
   window.removeEventListener("focus", resumeIdleVideoWhenVisible);
   removeStateListener?.();
   removePresentationListener?.();
   removeSettingsListener?.();
   removeWristbandListener?.();
+  removeCatalogListener?.();
   clearTimeout(wristbandAdvanceTimer);
   window.clearInterval(playerAccessClockTimer);
   stopIdlePromptAnimation();
@@ -299,17 +307,23 @@ watch(view, async (nextView) => {
   }
 });
 
-watch(
-  () => runtimeState.value.childMode,
-  async (nextValue, previousValue) => {
-    if (nextValue === previousValue || view.value !== "PREPARING") return;
-    const selectedBeforeRefresh = selectedGameId.value;
-    await loadGames();
-    if (selectedBeforeRefresh && !games.value.some((game) => game.id === selectedBeforeRefresh)) {
-      await cancelPreparation();
-    }
-  },
-);
+async function refreshCatalog() {
+  if (!touchMounted) return;
+  const sessionId = preparation.value?.sessionId;
+  const selectedBeforeRefresh = selectedGameId.value;
+  // Wait for an older read, then fetch a catalog newer than this notification.
+  if (gamesLoadPromise) await gamesLoadPromise;
+  const refreshed = await loadGames();
+  if (!refreshed || !touchMounted) return;
+  if (queueGameId.value && !games.value.some((game) => game.id === queueGameId.value)) {
+    queueGameId.value = null;
+  }
+  if (view.value === "PREPARING" && sessionId === preparation.value?.sessionId
+      && selectedBeforeRefresh === selectedGameId.value && selectedBeforeRefresh
+      && !games.value.some((game) => game.id === selectedBeforeRefresh)) {
+    await cancelPreparation();
+  }
+}
 
 watch(showIdleVideo, async (visible) => {
   if (!visible) return;
@@ -651,12 +665,14 @@ function handleWristbandScanned(payload) {
   void createWristbandPreparation(sessionId, wristbandId);
 }
 
-function openQueuePanel() {
+async function openQueuePanel() {
   if (!canCollectQueueEntry.value) return;
   queueUid.value = "";
-  queueGameId.value = runtimeState.value.gameId;
+  queueGameId.value = games.value.some((game) => game.id === runtimeState.value.gameId)
+    ? runtimeState.value.gameId : null;
   queuePanelOpen.value = true;
   errorMessage.value = "";
+  await refreshCatalog();
 }
 
 function closeQueuePanel() {
@@ -748,9 +764,16 @@ function formatAccessExpiry(value) {
   }).format(expiry);
 }
 
-async function loadGames() {
-  if (!api?.listGames || loadingGames.value) return;
+function loadGames() {
+  if (gamesLoadPromise) return gamesLoadPromise;
+  gamesLoadPromise = fetchGames().finally(() => { gamesLoadPromise = null; });
+  return gamesLoadPromise;
+}
+
+async function fetchGames() {
+  if (!api?.listGames) return false;
   loadingGames.value = true;
+  catalogRefreshError.value = false;
   errorMessage.value = "";
   gameInitializationWarning.value = "";
   try {
@@ -773,9 +796,11 @@ async function loadGames() {
       (game) => game.id === selectedGameId.value,
     );
     gameCarouselIndex.value = currentGameIndex >= 0 ? currentGameIndex : 0;
+    return true;
   } catch (error) {
-    games.value = [];
     errorMessage.value = extractErrorMessage(error, t("touch.gamesLoadFailed"));
+    catalogRefreshError.value = true;
+    return false;
   } finally {
     loadingGames.value = false;
   }
@@ -1941,6 +1966,9 @@ async function confirmReturnToIdle() {
 
     <div v-if="errorMessage" class="touch-error" data-testid="game-error" role="alert">
       <span>{{ errorMessage }}</span>
+      <button v-if="catalogRefreshError" type="button" :disabled="loadingGames" @click="refreshCatalog">
+        {{ t("touch.reload") }}
+      </button>
       <button type="button" @click="errorMessage = ''">
         {{ t("common.close") }}
       </button>
@@ -1954,6 +1982,7 @@ async function confirmReturnToIdle() {
         <p>{{ t("touch.queueScanHint") }}</p>
         <input v-model="queueUid" class="queue-uid-input" data-testid="game-queue-uid" inputmode="numeric" pattern="[0-9]*" :placeholder="t('touch.queueUidPlaceholder')" />
         <select v-model.number="queueGameId" class="queue-game-select" data-testid="game-queue-game">
+          <option :value="null" disabled>{{ t("touch.chooseGame") }}</option>
           <option v-for="game in games" :key="game.id" :value="game.id">{{ game.name }}</option>
         </select>
         <p v-if="queueSummary.waiting.length" class="queue-summary-line">{{ queueSummary.waiting.length }} player(s) waiting</p>

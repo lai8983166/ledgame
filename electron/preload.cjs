@@ -131,6 +131,11 @@ const fullLedGameApi = {
     ipcRenderer.on('database-refreshed', listener)
     return () => ipcRenderer.removeListener('database-refreshed', listener)
   },
+  onCatalogChanged: (callback) => {
+    const listener = (_event, payload) => callback(payload)
+    ipcRenderer.on('game-catalog-changed', listener)
+    return () => ipcRenderer.removeListener('game-catalog-changed', listener)
+  },
 }
 
 contextBridge.exposeInMainWorld(

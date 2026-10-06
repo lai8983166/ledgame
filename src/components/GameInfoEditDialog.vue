@@ -13,6 +13,7 @@ const props = defineProps({
   categories: { type: Array, default: () => [] },
   loading: { type: Boolean, default: false },
   saving: { type: Boolean, default: false },
+  visibilitySaving: { type: Boolean, default: false },
   error: { type: String, default: "" },
 });
 const emit = defineEmits([
@@ -28,7 +29,7 @@ const { t } = useI18n({ useScope: "global" });
 const dialogRef = ref(null);
 const pickerOpen = ref(false);
 const previewFailed = ref(false);
-const busy = computed(() => props.loading || props.saving);
+const busy = computed(() => props.loading || props.saving || props.visibilitySaving);
 const previewUrl = computed(() =>
   previewFailed.value ? "" : buildMediaPreviewUrl(props.cover),
 );
@@ -131,6 +132,7 @@ onBeforeUnmount(() => {
           <input
             :checked="childModeVisible"
             type="checkbox"
+            :disabled="busy"
             @change="emit('update:child-mode-visible', $event.target.checked)"
           />
           <span>

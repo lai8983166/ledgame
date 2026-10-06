@@ -208,7 +208,6 @@ onBeforeUnmount(() => {
       <header class="global-config-header">
         <div>
           <h2 id="global-config-title">{{ t("globalConfig.title") }}</h2>
-          <p>{{ t("globalConfig.subtitle") }}</p>
         </div>
         <button class="inline-symbol-button" type="button" :title="t('common.close')" :disabled="saving" @click="emit('cancel')">×</button>
       </header>

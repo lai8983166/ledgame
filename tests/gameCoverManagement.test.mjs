@@ -56,7 +56,7 @@ test("cover save uses metadata-only API and changes only the local cover summary
     listSource.indexOf("async function saveGameInfo()"),
     listSource.indexOf("</script>"),
   );
-  assert.match(saveFunction, /api\.updateGameMetadata\(game\.id, \{ cover, name, childModeVisible, firstCatalog \}\)/);
+  assert.match(saveFunction, /api\.updateGameMetadata\(game\.id, \{ cover, name, firstCatalog \}\)/);
   assert.doesNotMatch(saveFunction, /getGameEditor|saveGameEditor|saveRankGameEditor/);
   assert.match(saveFunction, /games\.value = games\.value\.map/);
   assert.match(saveFunction, /catch \(error\)[\s\S]*editError\.value/);

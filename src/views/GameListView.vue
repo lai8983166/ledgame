@@ -34,6 +34,7 @@ const editChildModeVisible = ref(true);
 const editFirstCatalog = ref("");
 const editLoading = ref(false);
 const editSaving = ref(false);
+const visibilitySaving = ref(false);
 const editError = ref("");
 const orderSaving = ref(false);
 const dragSource = ref(null);
@@ -181,7 +182,7 @@ function editGame(game) {
 }
 
 function closeGameInfo() {
-  if (editLoading.value || editSaving.value) {
+  if (editLoading.value || editSaving.value || visibilitySaving.value) {
     return;
   }
   editingGame.value = null;
@@ -192,9 +193,29 @@ function closeGameInfo() {
   editError.value = "";
 }
 
+async function saveTouchVisibility(value) {
+  const game = editingGame.value;
+  if (!game || editLoading.value || editSaving.value || visibilitySaving.value) return;
+  const previous = editChildModeVisible.value;
+  editChildModeVisible.value = value;
+  visibilitySaving.value = true;
+  editError.value = "";
+  try {
+    await api.updateGameMetadata(game.id, { childModeVisible: value });
+    games.value = games.value.map((item) => Number(item.id) === Number(game.id)
+      ? { ...item, childModeVisible: value } : item);
+    editingGame.value = { ...game, childModeVisible: value };
+  } catch (error) {
+    editChildModeVisible.value = previous;
+    editError.value = extractErrorMessage(error, t("games.saveGameInfoFailed"));
+  } finally {
+    visibilitySaving.value = false;
+  }
+}
+
 async function saveGameInfo() {
   const game = editingGame.value;
-  if (!game || editLoading.value || editSaving.value) {
+  if (!game || editLoading.value || editSaving.value || visibilitySaving.value) {
     return;
   }
   editSaving.value = true;
@@ -203,12 +224,11 @@ async function saveGameInfo() {
     const cover = editCover.value || "";
     const name = editName.value.trim();
     if (!name) throw new Error(t("management.nameRequired"));
-    const childModeVisible = editChildModeVisible.value !== false;
     const firstCatalog = editFirstCatalog.value || "";
-    await api.updateGameMetadata(game.id, { cover, name, childModeVisible, firstCatalog });
+    await api.updateGameMetadata(game.id, { cover, name, firstCatalog });
     games.value = games.value.map((item) =>
       Number(item.id) === Number(game.id)
-        ? { ...item, cover, name, displayName: name, childModeVisible, firstCatalog }
+        ? { ...item, cover, name, displayName: name, firstCatalog }
         : item,
     );
     editingGame.value = null;
@@ -261,7 +281,7 @@ async function dropCard(id, kind) {
     <div class="page-heading">
       <div>
         <h1>{{ t("games.title") }}</h1>
-        <p>{{ selectedCategory ? selectedCategory.name : t("games.subtitle") }}</p>
+        <p v-if="selectedCategory">{{ selectedCategory.name }}</p>
       </div>
     </div>
 
@@ -277,7 +297,6 @@ async function dropCard(id, kind) {
       <div class="game-category-heading">
         <div>
           <h2>{{ t("gameCategories.homeTitle") }}</h2>
-          <p>{{ t("gameCategories.homeDescription") }}</p>
         </div>
         <button class="action-button primary" type="button" @click="beginAddCategory">{{ t("gameCategories.add") }}</button>
       </div>
@@ -346,10 +365,11 @@ async function dropCard(id, kind) {
       :categories="categories"
       :loading="editLoading"
       :saving="editSaving"
+      :visibility-saving="visibilitySaving"
       :error="editError"
       @update:cover="editCover = $event"
       @update:name="editName = $event"
-      @update:child-mode-visible="editChildModeVisible = $event"
+      @update:child-mode-visible="saveTouchVisibility"
       @update:first-catalog="editFirstCatalog = $event"
       @cancel="closeGameInfo"
       @save="saveGameInfo"

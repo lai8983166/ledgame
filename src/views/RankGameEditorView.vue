@@ -314,7 +314,7 @@ function goBack() {
     <header class="rank-toolbar">
       <div class="rank-title">
         <button class="icon-action" type="button" v-bind="{ title: t('rank.back') }" @click="goBack">←</button>
-        <div><span>{{ t("rank.typeLabel") }}</span><h1>{{ document?.displayName || gameName }}</h1></div>
+        <div><h1>{{ document?.displayName || gameName }}</h1></div>
       </div>
       <div class="rank-actions">
         <button class="soft-button" type="button" :disabled="!document || Boolean(busy)" @click="importJson">{{ t("rank.import") }}</button>

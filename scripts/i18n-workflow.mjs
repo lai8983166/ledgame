@@ -66,7 +66,7 @@ async function unmarkedCopy() {
     const relative = path.relative(repositoryRoot, file).replaceAll("\\", "/");
     const literals = [
       ...[...template.matchAll(/>\s*([^<>{}\n][^<>{}]*)\s*</g)].map((match) => match[1]),
-      ...[...template.matchAll(/\b(?:placeholder|title|aria-label)=["']([^"']+)["']/g)].map((match) => match[1]),
+      ...[...template.matchAll(/(?<![:\w-])(?:placeholder|title|aria-label)=["']([^"']+)["']/g)].map((match) => match[1]),
     ];
     for (const literal of literals.map(normalizeLiteral)) {
       if (!literal || !/[\p{L}\p{Script=Han}]/u.test(literal)) continue;

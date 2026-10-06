@@ -12,11 +12,11 @@ export const DEFAULT_CONFIG_DRAFT = Object.freeze({
   debounceMillis: 50,
   networkInterfaceId: "",
   controllerModel: "HC08",
-  rgbMode: "RGB",
+  rgbMode: "GRB",
 });
 
 export const DEFAULT_DEBUG_DRAFT = Object.freeze({
-  rgbMode: "RGB",
+  rgbMode: "GRB",
   networkInterfaceId: "",
   controllerModel: "HC08",
   controllerCount: 1,
@@ -31,7 +31,8 @@ export function normalizeRgbMode(value) {
   if (typeof value === "string" && RGB_MODES.includes(value.toUpperCase())) {
     return value.toUpperCase();
   }
-  return "RGB";
+  if (value == null || value === "") return "GRB";
+  throw new Error("Invalid rgbMode");
 }
 
 export function normalizeControllerModel(value) {

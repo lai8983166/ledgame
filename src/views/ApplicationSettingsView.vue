@@ -261,13 +261,11 @@ async function testMemberPlatform() {
   <section class="workspace application-settings-view">
     <header class="page-heading">
       <div>
-        <span>{{ t("applicationSettings.subtitle") }}</span>
         <h1>{{ t("applicationSettings.title") }}</h1>
       </div>
     </header>
 
     <div class="application-settings-panel" :aria-busy="loading || saving">
-      <p>{{ t("applicationSettings.description") }}</p>
 
       <div v-if="loading" class="application-settings-status">
         {{ t("common.loading") }}
@@ -378,10 +376,6 @@ async function testMemberPlatform() {
             <span>{{ t("applicationSettings.memberPlatform.host") }}</span>
             <input v-model.trim="draft.memberPlatformHost" type="text" autocomplete="off" />
           </label>
-          <label class="application-settings-field">
-            <span>{{ t("applicationSettings.memberPlatform.port") }}</span>
-            <input v-model.number="draft.memberPlatformPort" type="number" min="1" max="65535" step="1" inputmode="numeric" />
-          </label>
           <div class="application-settings-actions">
             <button class="application-settings-secondary" type="button" :disabled="connectionTestStatus === 'testing'" @click="testMemberPlatform">
               {{ connectionTestStatus === 'testing' ? t("applicationSettings.memberPlatform.testing") : t("applicationSettings.memberPlatform.test") }}
@@ -416,7 +410,9 @@ async function testMemberPlatform() {
 
 <style scoped>
 .application-settings-view {
-  max-width: 900px;
+  width: 100%;
+  max-width: none;
+  margin-inline: auto;
 }
 
 .application-settings-panel {
@@ -436,11 +432,13 @@ async function testMemberPlatform() {
 
 .application-settings-field {
   display: grid;
-  gap: 8px;
-  max-width: 620px;
+  grid-template-columns: minmax(150px, 220px) minmax(0, 1fr);
+  align-items: center;
+  gap: 8px 20px;
+  min-width: 0;
 }
 
-.application-settings-field > span {
+.application-settings-field > span:first-child {
   color: var(--ui-text-secondary);
   font-weight: 720;
 }
@@ -488,14 +486,15 @@ async function testMemberPlatform() {
   white-space: nowrap;
 }
 
-.application-settings-field small {
+.application-settings-field > small {
+  grid-column: 2;
   color: var(--ui-muted);
 }
 
 .application-settings-connection {
   display: grid;
   gap: 14px;
-  max-width: 620px;
+  min-width: 0;
   padding: 18px;
   border: 1px solid var(--ui-border);
   border-radius: 6px;
@@ -516,6 +515,7 @@ async function testMemberPlatform() {
   display: flex;
   align-items: center;
   gap: 14px;
+  flex-wrap: wrap;
 }
 
 .application-settings-background-actions {
@@ -571,4 +571,11 @@ async function testMemberPlatform() {
 .application-settings-error {
   color: var(--ui-error) !important;
 }
+@media (max-width: 720px) {
+  .application-settings-panel { padding: 18px; }
+  .application-settings-field { grid-template-columns: minmax(0, 1fr); }
+  .application-settings-field > small { grid-column: 1; }
+}
+.application-settings-field > input, .application-settings-field > select { min-width: 0; width: 100%; }
+.application-settings-actions > span { overflow-wrap: anywhere; min-width: 0; }
 </style>

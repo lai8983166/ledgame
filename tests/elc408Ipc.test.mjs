@@ -17,7 +17,7 @@ test("normalizeConfigDraft applies canonical defaults", () => {
   assert.equal(result.allowRepeatActiveOnDown, false);
   assert.equal(result.debounceMillis, 50);
   assert.equal(result.controllerModel, "HC08");
-  assert.equal(result.rgbMode, "RGB");
+  assert.equal(result.rgbMode, "GRB");
 });
 
 test("normalizeConfigDraft clamps port and debounce", () => {
@@ -39,12 +39,7 @@ test("normalizeConfigDraft normalizes enum case", () => {
 });
 
 test("normalizeConfigDraft rejects unknown enum values", () => {
-  const result = normalizeConfigDraft({
-    controllerModel: "HC99",
-    rgbMode: "XYZ",
-  });
-  assert.equal(result.controllerModel, "HC08");
-  assert.equal(result.rgbMode, "RGB");
+  assert.throws(() => normalizeConfigDraft({controllerModel: "HC99", rgbMode: "XYZ"}), /rgbMode/);
 });
 
 test("normalizeWiringDraft strips mode and activeChannelIndex", () => {
@@ -101,7 +96,7 @@ test("normalizeSearchRequest preserves HC04 model", () => {
 
 test("normalizeDebugStartRequest applies canonical defaults", () => {
   const result = normalizeDebugStartRequest({});
-  assert.equal(result.rgbMode, "RGB");
+  assert.equal(result.rgbMode, "GRB");
   assert.equal(result.controllerModel, "HC08");
   assert.equal(result.controllerCount, 1);
   assert.equal(result.maxPointsPerChannel, 64);

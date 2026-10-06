@@ -10,7 +10,6 @@ const { t } = useI18n();
     <div class="page-heading">
       <div>
         <h1>{{ t("language.title") }}</h1>
-        <p>{{ t("language.subtitle") }}</p>
       </div>
     </div>
 

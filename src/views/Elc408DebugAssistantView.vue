@@ -1,14 +1,12 @@
 <script setup>
 import { ref } from "vue";
 import { useI18n } from "vue-i18n";
-import Elc408ConfigurationPanel from "../components/elc408/Elc408ConfigurationPanel.vue";
 import Elc408WiringPanel from "../components/elc408/Elc408WiringPanel.vue";
 import Elc408DebugToolsPanel from "../components/elc408/Elc408DebugToolsPanel.vue";
 
 const { t } = useI18n({ useScope: "global" });
-const activePanel = ref("configuration");
+const activePanel = ref("wiringTools");
 const panels = [
-  { id: "configuration", label: "elc408.tabs.configuration" },
   { id: "wiringTools", label: "elc408.tabs.wiringTools" },
   { id: "debugTools", label: "elc408.tabs.debugTools" },
 ];
@@ -19,7 +17,6 @@ const panels = [
     <header class="elc408-assistant-header">
       <div class="elc408-heading-copy">
         <h1>{{ t("elc408.title") }}</h1>
-        <p class="elc408-subtitle">{{ t("elc408.subtitle") }}</p>
       </div>
       <nav class="elc408-segmented" role="tablist">
         <button
@@ -36,7 +33,6 @@ const panels = [
       </nav>
     </header>
     <div class="elc408-panels">
-      <Elc408ConfigurationPanel v-show="activePanel === 'configuration'" />
       <Elc408WiringPanel v-show="activePanel === 'wiringTools'" />
       <Elc408DebugToolsPanel
         v-show="activePanel === 'debugTools'"
@@ -139,7 +135,7 @@ const panels = [
   }
   .elc408-segmented {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     width: 100%;
   }
   .elc408-segment {

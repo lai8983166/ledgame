@@ -321,7 +321,6 @@ onBeforeUnmount(() => {
     <div class="page-heading spirit-heading">
       <div>
         <h1>{{ t("spirits.title") }}</h1>
-        <p>Spirit Library</p>
       </div>
       <div class="spirit-heading-actions">
         <button class="icon-add-button" type="button" :title="t('spirits.add')" @click="openSpiritCreator">+</button>

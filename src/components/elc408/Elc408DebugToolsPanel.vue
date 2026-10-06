@@ -432,9 +432,9 @@ function logHexPreview(entry) {
 <template>
   <div class="elc408-debug-panel">
     <aside class="elc408-debug-controls">
-      <fieldset>
-        <legend>{{ t("elc408.debug.networkInterface") }}</legend>
-        <select v-model="draft.networkInterfaceId" :disabled="loadingInterfaces">
+      <div class="elc408-control-field">
+        <span class="elc408-control-label">{{ t("elc408.debug.networkInterface") }}</span>
+        <select :aria-label="t('elc408.debug.networkInterface')" v-model="draft.networkInterfaceId" :disabled="loadingInterfaces">
           <option value="">{{ t("elc408.configuration.networkInterfacePlaceholder") }}</option>
           <option v-for="entry in networkInterfaces" :key="entry.id" :value="entry.id">
             {{ networkInterfaceLabel(entry) }}
@@ -442,19 +442,19 @@ function logHexPreview(entry) {
         </select>
         <small v-if="loadingInterfaces">{{ t("elc408.configuration.networkInterfaceLoading") }}</small>
         <small v-else-if="interfacesError" class="elc408-error">{{ interfacesError }}</small>
-      </fieldset>
-      <fieldset>
-        <legend>{{ t("elc408.debug.controllerModel") }}</legend>
-        <select v-model="draft.controllerModel">
+      </div>
+      <div class="elc408-control-field">
+        <span class="elc408-control-label">{{ t("elc408.debug.controllerModel") }}</span>
+        <select :aria-label="t('elc408.debug.controllerModel')" v-model="draft.controllerModel">
           <option v-for="model in CONTROLLER_MODELS" :key="model" :value="model">{{ model }}</option>
         </select>
-      </fieldset>
-      <fieldset>
-        <legend>{{ t("elc408.debug.rgbMode") }}</legend>
-        <select v-model="draft.rgbMode">
+      </div>
+      <div class="elc408-control-field">
+        <span class="elc408-control-label">{{ t("elc408.debug.rgbMode") }}</span>
+        <select :aria-label="t('elc408.debug.rgbMode')" v-model="draft.rgbMode">
           <option v-for="mode in RGB_MODES" :key="mode" :value="mode">{{ mode }}</option>
         </select>
-      </fieldset>
+      </div>
       <div class="elc408-debug-actions">
         <button
           type="button"
@@ -464,8 +464,8 @@ function logHexPreview(entry) {
           {{ searchBusy ? t("elc408.debug.searching") : t("elc408.debug.search") }}
         </button>
       </div>
-      <fieldset>
-        <legend>{{ t("elc408.debug.controllers") }}</legend>
+      <div class="elc408-control-field">
+        <span class="elc408-control-label">{{ t("elc408.debug.controllers") }}</span>
         <ul v-if="controllers.length > 0" class="elc408-controller-list">
           <li v-for="(controller, idx) in controllers" :key="controller.mac || idx">
             <span class="elc408-mac">{{ controller.mac || "—" }}</span>
@@ -473,25 +473,25 @@ function logHexPreview(entry) {
           </li>
         </ul>
         <p v-else class="elc408-empty">{{ t("elc408.wiring.empty") }}</p>
-      </fieldset>
-      <fieldset>
-        <legend>{{ t("elc408.debug.controllerCount") }}</legend>
-        <input v-model.number="draft.controllerCount" type="number" min="1" max="32" />
-      </fieldset>
-      <fieldset>
-        <legend>{{ t("elc408.debug.maxPointsPerChannel") }}</legend>
-        <input v-model.number="draft.maxPointsPerChannel" type="number" min="1" max="170" />
-      </fieldset>
-      <fieldset>
-        <legend>{{ t("elc408.debug.displayColor") }}</legend>
-        <select v-model="draft.displayColor">
+      </div>
+      <div class="elc408-control-field">
+        <span class="elc408-control-label">{{ t("elc408.debug.controllerCount") }}</span>
+        <input :aria-label="t('elc408.debug.controllerCount')" v-model.number="draft.controllerCount" type="number" min="1" max="32" />
+      </div>
+      <div class="elc408-control-field">
+        <span class="elc408-control-label">{{ t("elc408.debug.maxPointsPerChannel") }}</span>
+        <input :aria-label="t('elc408.debug.maxPointsPerChannel')" v-model.number="draft.maxPointsPerChannel" type="number" min="1" max="170" />
+      </div>
+      <div class="elc408-control-field">
+        <span class="elc408-control-label">{{ t("elc408.debug.displayColor") }}</span>
+        <select :aria-label="t('elc408.debug.displayColor')" v-model="draft.displayColor">
           <option v-for="color in DISPLAY_COLORS" :key="color" :value="color">
             {{ t(`elc408.debug.colors.${color}`) }}
           </option>
         </select>
-      </fieldset>
-      <fieldset>
-        <legend>{{ t("elc408.debug.pointCoordinate") }}</legend>
+      </div>
+      <div class="elc408-control-field">
+        <span class="elc408-control-label">{{ t("elc408.debug.pointCoordinate") }}</span>
         <div class="elc408-coordinate-grid">
           <label>
             <span>X</span>
@@ -502,7 +502,7 @@ function logHexPreview(entry) {
             <input v-model.number="draft.pointY" type="number" min="0" step="1" />
           </label>
         </div>
-      </fieldset>
+      </div>
       <div class="elc408-debug-actions">
         <button
           type="button"
@@ -512,10 +512,10 @@ function logHexPreview(entry) {
           {{ pointBusy ? t("elc408.debug.testingPoint") : t("elc408.debug.testPoint") }}
         </button>
       </div>
-      <fieldset>
-        <legend>{{ t("elc408.debug.frameIntervalMs") }}</legend>
-        <input v-model.number="draft.frameIntervalMs" type="number" min="1" max="60000" />
-      </fieldset>
+      <div class="elc408-control-field">
+        <span class="elc408-control-label">{{ t("elc408.debug.frameIntervalMs") }}</span>
+        <input :aria-label="t('elc408.debug.frameIntervalMs')" v-model.number="draft.frameIntervalMs" type="number" min="1" max="60000" />
+      </div>
       <div class="elc408-debug-actions">
         <button
           type="button"
@@ -616,7 +616,8 @@ function logHexPreview(entry) {
   min-height: 0;
 }
 .elc408-debug-controls {
-  width: 312px;
+  width: 48%;
+  min-width: 400px;
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
@@ -625,14 +626,19 @@ function logHexPreview(entry) {
   padding: 2px 8px 2px 2px;
   scrollbar-gutter: stable;
 }
-.elc408-debug-controls fieldset {
+.elc408-control-field {
+  display: grid;
+  grid-template-columns: minmax(110px, 160px) minmax(0, 1fr);
+  align-items: center;
+  gap: 8px 12px;
+  min-width: 0;
   margin: 0;
   padding: 8px 10px 10px;
   border: 1px solid var(--ui-border);
   border-radius: 6px;
   background: var(--ui-surface);
 }
-.elc408-debug-controls legend {
+.elc408-control-label {
   padding: 0 5px;
   color: var(--ui-text-secondary);
   font-size: 0.76rem;
@@ -640,6 +646,7 @@ function logHexPreview(entry) {
 }
 .elc408-debug-controls select,
 .elc408-debug-controls input {
+  min-width: 0;
   width: 100%;
   min-height: 34px;
   padding: 0 9px;
@@ -656,6 +663,7 @@ function logHexPreview(entry) {
   box-shadow: var(--ui-selected-shadow);
 }
 .elc408-debug-controls small {
+  grid-column: 2;
   display: block;
   margin-top: 5px;
   color: var(--ui-muted);
@@ -812,6 +820,7 @@ function logHexPreview(entry) {
 }
 .elc408-debug-log table {
   width: 100%;
+  table-layout: fixed;
   border-collapse: collapse;
   color: var(--ui-text-secondary);
   font-size: 0.77rem;
@@ -910,6 +919,7 @@ function logHexPreview(entry) {
     height: auto;
   }
   .elc408-debug-controls {
+    min-width: 0;
     width: 100%;
     flex: none;
     overflow: visible;
@@ -919,4 +929,9 @@ function logHexPreview(entry) {
     height: 520px;
   }
 }
+.elc408-debug-log td { overflow-wrap: anywhere; }
+.elc408-debug-log th:nth-child(1) { width: 80px; }
+.elc408-debug-log th:nth-child(2) { width: 50px; }
+.elc408-debug-log th:nth-child(3) { width: 110px; }
+@media (max-width: 480px) { .elc408-control-field { grid-template-columns: minmax(0, 1fr); } .elc408-debug-controls small { grid-column: 1; } }
 </style>

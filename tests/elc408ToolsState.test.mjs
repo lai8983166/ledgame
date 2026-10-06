@@ -27,7 +27,7 @@ test("DEFAULT_CONFIG_DRAFT has canonical values", () => {
   assert.equal(DEFAULT_CONFIG_DRAFT.allowRepeatActiveOnDown, false);
   assert.equal(DEFAULT_CONFIG_DRAFT.debounceMillis, 50);
   assert.equal(DEFAULT_CONFIG_DRAFT.controllerModel, "HC08");
-  assert.equal(DEFAULT_CONFIG_DRAFT.rgbMode, "RGB");
+  assert.equal(DEFAULT_CONFIG_DRAFT.rgbMode, "GRB");
 });
 
 test("DEFAULT_DEBUG_DRAFT has canonical values", () => {
@@ -55,11 +55,11 @@ test("DISPLAY_COLORS exposes five options", () => {
   assert.ok(DISPLAY_COLORS.includes("WHITE"));
 });
 
-test("normalizeRgbMode falls back to RGB on unknown value", () => {
+test("normalizeRgbMode defaults to GRB but rejects unknown value", () => {
   assert.equal(normalizeRgbMode("RGB"), "RGB");
   assert.equal(normalizeRgbMode("rbg"), "RBG");
-  assert.equal(normalizeRgbMode("XYZ"), "RGB");
-  assert.equal(normalizeRgbMode(null), "RGB");
+  assert.throws(() => normalizeRgbMode("XYZ"), /rgbMode/);
+  assert.equal(normalizeRgbMode(null), "GRB");
 });
 
 test("normalizeControllerModel falls back to HC08 on unknown value", () => {

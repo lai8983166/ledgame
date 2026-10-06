@@ -275,7 +275,6 @@ onBeforeUnmount(() => {
       <header class="game-effect-header">
         <div>
           <h2 id="game-effect-title">{{ t("effect.title") }}</h2>
-          <p>{{ t("effect.subtitle") }}</p>
           <p class="game-effect-target">{{ t("effect.targetFrame", { level: levelIndex + 1, frame: frameIndex + 1 }) }}</p>
         </div>
         <button class="inline-symbol-button" type="button" :title="t('common.close')" :disabled="saving" @click="emit('cancel')">×</button>

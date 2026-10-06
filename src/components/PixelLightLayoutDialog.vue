@@ -195,7 +195,6 @@ onBeforeUnmount(() => {
       <header class="pixel-layout-header">
         <div>
           <h2 id="pixel-layout-title">{{ t("pixelLight.title") }}</h2>
-          <p>{{ t("pixelLight.subtitle") }}</p>
         </div>
         <button class="inline-symbol-button" type="button" v-bind="{ title: t('common.close') }" :disabled="saving" @click="emit('cancel')">×</button>
       </header>

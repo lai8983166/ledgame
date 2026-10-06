@@ -18,6 +18,13 @@ function clampFiniteInt(value, fallback, min, max) {
   return Math.floor(n)
 }
 
+function normalizeRgbMode(value) {
+  if (value == null || value === '') return 'GRB'
+  const mode = String(value).toUpperCase()
+  if (!ELC408_RGB_MODES.has(mode)) throw new Error('Invalid rgbMode')
+  return mode
+}
+
 function normalizeConfigDraft(draft) {
   const source = draft && typeof draft === 'object' ? draft : {}
   const networkInterfaceId = typeof source.networkInterfaceId === 'string'
@@ -26,9 +33,7 @@ function normalizeConfigDraft(draft) {
   const controllerModel = ELC408_CONTROLLER_MODELS.has(String(source.controllerModel).toUpperCase())
     ? String(source.controllerModel).toUpperCase()
     : 'HC08'
-  const rgbMode = ELC408_RGB_MODES.has(String(source.rgbMode).toUpperCase())
-    ? String(source.rgbMode).toUpperCase()
-    : 'RGB'
+  const rgbMode = normalizeRgbMode(source.rgbMode)
   return {
     tcpServerPort: clampFiniteInt(source.tcpServerPort, 3002, 1, 65535),
     allowRepeatActiveOnDown: Boolean(source.allowRepeatActiveOnDown),
@@ -86,9 +91,7 @@ function normalizeSearchRequest(request) {
 
 function normalizeDebugStartRequest(request) {
   const source = request && typeof request === 'object' ? request : {}
-  const rgbMode = ELC408_RGB_MODES.has(String(source.rgbMode).toUpperCase())
-    ? String(source.rgbMode).toUpperCase()
-    : 'RGB'
+  const rgbMode = normalizeRgbMode(source.rgbMode)
   const controllerModel = ELC408_CONTROLLER_MODELS.has(String(source.controllerModel).toUpperCase())
     ? String(source.controllerModel).toUpperCase()
     : 'HC08'

@@ -217,7 +217,6 @@ onBeforeUnmount(() => {
     <div class="page-heading media-heading">
       <div>
         <h1>{{ t("media.title") }}</h1>
-        <p>{{ t("media.subtitle") }}</p>
       </div>
       <div class="media-heading-actions">
         <button class="soft-button media-open-folder-button" type="button" :disabled="isOpeningFolder" @click="openMediaFolder">
