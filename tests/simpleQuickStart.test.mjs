@@ -2,18 +2,17 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
-test("Simple editor quick start opens the shared Touch and DebugPanel flow", async () => {
+test("Simple editor quick start enters setup without immediately starting or opening other windows", async () => {
   const source = await readFile(new URL("../src/views/SimpleGameEditorView.vue", import.meta.url), "utf8");
   const startFunction = source.slice(
     source.indexOf("async function startGame()"),
-    source.indexOf("async function stopGame()"),
+    source.indexOf("function openPreview()"),
   );
 
-  assert.match(startFunction, /api\.startGame\(/);
-  assert.match(startFunction, /launchMethod:\s*["']debug["']/);
-  assert.match(startFunction, /runtimeMode:\s*["']SIMULATION["']/);
-  assert.match(startFunction, /startLevelIndex:\s*activeLevelIndex\.value/);
-  assert.match(startFunction, /enterGameFlow\?\.\(\{ mode: ["']debug["'] \}\)/);
+  assert.match(startFunction, /debugEntryOpen\.value = true/);
+  assert.match(startFunction, /enterDebug\('saved'\)/);
+  assert.match(source, /:start-level-index="activeLevelIndex"/);
+  assert.doesNotMatch(startFunction, /api\.startGame|enterGameFlow/);
   assert.doesNotMatch(startFunction, /saveGameEditor/);
   assert.doesNotMatch(startFunction, /createPreparation/);
 });

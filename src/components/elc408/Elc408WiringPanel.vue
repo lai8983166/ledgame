@@ -20,11 +20,15 @@ import {
   extractBackendError,
 } from "../../lib/elc408/elc408ToolsState.js";
 import Elc408WiringCanvas from "./Elc408WiringCanvas.vue";
+import { serializeGameWiring } from "../../lib/gameWiring.js";
+
+const props = defineProps({ initialDocument: {type:Object, default:null}, gameScoped:Boolean, saving:Boolean });
+const emit = defineEmits(["save"]);
 
 const { t } = useI18n({ useScope: "global" });
 const api = window.elc408Tools;
 
-const document = reactive(createWiringDocument());
+const document = reactive(props.initialDocument ? JSON.parse(JSON.stringify(props.initialDocument)) : createWiringDocument());
 const errorMessage = ref("");
 const successMessage = ref("");
 const infoMessage = ref(t("elc408.wiring.clickHint"));
@@ -118,6 +122,10 @@ async function download() {
   errorMessage.value = "";
   successMessage.value = "";
   try {
+    if (props.gameScoped) {
+      emit("save", serializeGameWiring(document));
+      return;
+    }
     const payload = toDownloadPayload(document);
     const generated = await api.generateWiring(payload);
     if (generated?.code && generated.code !== 200) {
@@ -143,7 +151,8 @@ async function download() {
   } catch (error) {
     const extracted = extractBackendError(error);
     const kind = classifyBackendErrorCode(extracted.code);
-    errorMessage.value = t(`elc408.errors.${kind}`, { message: extracted.message });
+    errorMessage.value = error.message?.startsWith("gameWiring.") ? t(error.message)
+      : t(`elc408.errors.${kind}`, { message: extracted.message });
   } finally {
     downloading.value = false;
   }
@@ -159,6 +168,7 @@ async function download() {
           <span>{{ t("elc408.wiring.frameWidth") }}</span>
           <input
             :value="document.width"
+            :disabled="gameScoped"
             type="number"
             min="1"
             @change="onWidthChange"
@@ -168,6 +178,7 @@ async function download() {
           <span>{{ t("elc408.wiring.frameHeight") }}</span>
           <input
             :value="document.height"
+            :disabled="gameScoped"
             type="number"
             min="1"
             @change="onHeightChange"
@@ -216,15 +227,19 @@ async function download() {
             </span>
           </li>
         </ul>
+        <div v-if="gameScoped" class="elc408-actions">
+          <button type="button" @click="document.lines.push([])">{{ t('gameWiring.addChannel') }}</button>
+          <button type="button" :disabled="document.lines.length <= 1 || document.lines.at(-1).length > 0" @click="document.lines.pop(); document.activeChannelIndex = Math.min(document.activeChannelIndex, document.lines.length - 1)">{{ t('gameWiring.removeChannel') }}</button>
+        </div>
       </fieldset>
       <div class="elc408-actions">
         <button
           type="button"
           class="primary"
-          :disabled="downloading"
+          :disabled="downloading || saving"
           @click="download"
         >
-          {{ downloading ? t("elc408.wiring.downloading") : t("elc408.wiring.download") }}
+          {{ gameScoped ? t(saving ? 'gameWiring.saving' : 'gameWiring.save') : downloading ? t("elc408.wiring.downloading") : t("elc408.wiring.download") }}
         </button>
       </div>
       <p v-if="successMessage" class="elc408-success">{{ successMessage }}</p>

@@ -506,7 +506,7 @@ test("full game entry keeps the Touch idle video active across auxiliary windows
   assert.match(touchSource, /resumeIdleVideoWhenVisible/);
 });
 
-test("editor game start forces the shared game entry into Touch plus DebugPanel mode", async () => {
+test("editor debug is a main-window workspace while customer/soak window IPC stays available", async () => {
   const mainSource = await readFile(new URL("../electron/main.cjs", import.meta.url), "utf8");
   const preloadSource = await readFile(new URL("../electron/preload.cjs", import.meta.url), "utf8");
   const simpleSource = await readFile(new URL("../src/views/SimpleGameEditorView.vue", import.meta.url), "utf8");
@@ -515,8 +515,12 @@ test("editor game start forces the shared game entry into Touch plus DebugPanel 
   assert.match(preloadSource, /enterGameFlow:\s*\(options\)\s*=>\s*ipcRenderer\.invoke\('game-flow:enter', options\)/);
   assert.match(mainSource, /options\?\.mode === 'debug' \? 'debug' : settings\.mode/);
   assert.match(mainSource, /ipcMain\.handle\('game-flow:enter', \(_event, options\) => enterGameFlow\(options\)\)/);
-  assert.match(simpleSource, /enterGameFlow\?\.\(\{ mode: "debug" \}\)/);
-  assert.match(rankSource, /enterGameFlow\?\.\(\{ mode: "debug" \}\)/);
+  assert.match(preloadSource, /createEditorPreparation/);
+  assert.match(mainSource, /editor-debug:prepare/);
+  for (const source of [simpleSource,rankSource]) {
+    assert.match(source, /<EditorDebugWorkspace/);
+    assert.doesNotMatch(source, /enterGameFlow/);
+  }
 });
 
 test("Debug LED preview uses one canvas instead of repainting a button per pixel", async () => {

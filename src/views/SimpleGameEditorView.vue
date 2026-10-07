@@ -9,6 +9,11 @@ import SimpleLevelPreviewDialog from "../components/SimpleLevelPreviewDialog.vue
 import GameGlobalConfigDialog from "../components/GameGlobalConfigDialog.vue";
 import PixelLightLayoutDialog from "../components/PixelLightLayoutDialog.vue";
 import GameEffectDialog from "../components/GameEffectDialog.vue";
+import GameWiringDialog from "../components/GameWiringDialog.vue";
+import EditorDebugWorkspace from './EditorDebugWorkspace.vue';
+import EditorDebugEntryDialog from '../components/EditorDebugEntryDialog.vue';
+import { isDebugRuntimeAvailable } from '../lib/editorDebugSession.js';
+import { saveGameWiring } from "../lib/gameWiring.js";
 import { encodeSimpleGifInWorker } from "../lib/encodeSimpleGif.js";
 import { prepareSimpleLevelGif, selectSimpleTopItem } from "../lib/simpleLevelGif.js";
 import { resolveLiveOccupancyCell } from "../lib/simpleOccupancy.js";
@@ -51,13 +56,49 @@ const props = defineProps({
     default: "",
   },
 });
-defineEmits(["back"]);
+const emit = defineEmits(["back", "debug-active"]);
+const debugGame = ref(null);
+const debugEntryOpen = ref(false);
+const savedFingerprint = ref('');
+function exitDebug() { debugGame.value = null; emit('debug-active',false); nextTick(scheduleEditorFitMeasurement); }
+async function enterDebug(choice) {
+  if (choice === 'cancel') { debugEntryOpen.value = false; return; }
+  if (busyAction.value) return;
+  busyAction.value = 'start'; errorMessage.value = '';
+  try {
+    if (!isDebugRuntimeAvailable((await api.gameState())?.data)) throw new Error(t('editorDebug.busy'));
+    if (choice === 'save') {
+      const payload = createEditorPayload();
+      const result = await api.saveGameEditor(currentGameId.value,payload);
+      if (result?.data?.saved !== true) throw new Error(result?.message || t('gameWiring.saveFailed'));
+      savedFingerprint.value = JSON.stringify(payload);
+    }
+    debugGame.value = (await api.getGameEditor(currentGameId.value))?.data;
+    if (!debugGame.value) throw new Error(t('gameWiring.missing'));
+    debugEntryOpen.value = false;
+    emit('debug-active',true);
+  } catch(error) { errorMessage.value = error.message; }
+  finally { busyAction.value = ''; }
+}
 
 const api = window.ledGame;
 const busyAction = ref("");
 const errorMessage = ref("");
 const statusMessage = ref("");
 const globalConfigOpen = ref(false);
+const gameWiringOpen = ref(false);
+const gameWiringSaving = ref(false);
+const gameWiringError = ref("");
+async function saveWiring(wiring) {
+  gameWiringSaving.value = true;
+  gameWiringError.value = "";
+  try {
+    await saveGameWiring(api, props.gameId, false, wiring, document.value);
+    gameWiringOpen.value = false;
+  } catch (error) {
+    gameWiringError.value = error.message?.startsWith('gameWiring.') ? t(error.message) : error.message;
+  } finally { gameWiringSaving.value = false; }
+}
 const globalConfigDraft = ref({});
 const gameCategories = ref([]);
 const pixelLightLayoutOpen = ref(false);
@@ -533,6 +574,7 @@ async function loadEditor() {
       throw new Error(t("simple.editorGameMismatch", { game: currentGameName.value }));
     }
     document.value = ensureEditableShape({ ...loaded, id: gameId });
+    savedFingerprint.value = JSON.stringify(createEditorPayload());
     resetMatrixFrameCache();
     activeLevelIndex.value = 0;
     activeFrameIndex.value = 0;
@@ -900,6 +942,7 @@ async function saveEditor() {
   await runEditorAction("save", async () => {
     const payload = createEditorPayload();
     const result = await api.saveGameEditor(currentGameId.value, payload);
+    if (result?.data?.saved === true) savedFingerprint.value = JSON.stringify(payload);
     statusMessage.value = result?.data?.saved ? t("simple.saveSuccess") : t("simple.saveComplete");
     validationErrors.value = [];
   });
@@ -1081,63 +1124,9 @@ async function exportCurrentLevelGif() {
 }
 
 async function startGame() {
-  const gameId = currentGameId.value;
-  if (!gameId || busyAction.value === "start") {
-    return;
-  }
-  busyAction.value = "start";
-  runtimeStatusMessage.value = t("simple.starting");
-  runtimeErrorMessage.value = "";
-  runtimeResult.value = null;
-  try {
-    if (!api) {
-      throw new Error("Electron API is unavailable");
-    }
-    const result = await api.startGame({
-      id: gameId,
-      startLevelIndex: activeLevelIndex.value,
-      launchMethod: "debug",
-      runtimeMode: "SIMULATION",
-    });
-    runtimeResult.value = result?.data || result;
-    runtimeStatusMessage.value = t("simple.startSuccess");
-    previewStatusMessage.value = t("simple.previewAvailable");
-    // 启动成功后自动弹出/切换到 debug 面板；打开失败不影响已成功的启动。
-    try {
-      await api?.enterGameFlow?.({ mode: "debug" });
-      previewStatusMessage.value = t("simple.previewOpened");
-    } catch (openError) {
-      previewStatusMessage.value = t("simple.previewAutoFailed");
-    }
-  } catch (error) {
-    runtimeStatusMessage.value = "";
-    runtimeErrorMessage.value = error.message || String(error);
-  } finally {
-    busyAction.value = "";
-  }
-}
-
-async function stopGame() {
-  if (busyAction.value === "stop") {
-    return;
-  }
-  busyAction.value = "stop";
-  runtimeStatusMessage.value = t("simple.stopping");
-  runtimeErrorMessage.value = "";
-  try {
-    if (!api?.stopGame) {
-      throw new Error("Electron stop API is unavailable");
-    }
-    const result = await api.stopGame();
-    runtimeResult.value = result?.data || result;
-    runtimeStatusMessage.value = t("simple.stopped");
-    previewStatusMessage.value = t("simple.editAfterStop");
-  } catch (error) {
-    runtimeStatusMessage.value = "";
-    runtimeErrorMessage.value = error.message || String(error);
-  } finally {
-    busyAction.value = "";
-  }
+  if (!document.value || busyAction.value) return;
+  if (JSON.stringify(createEditorPayload()) !== savedFingerprint.value) debugEntryOpen.value = true;
+  else await enterDebug('saved');
 }
 
 function openPreview() {
@@ -2902,6 +2891,7 @@ function canTriggerGlobalShortcut(event) {
 }
 
 function handleGlobalKeydown(event) {
+  if (debugGame.value || debugEntryOpen.value) return;
   const tagName = event.target?.tagName?.toLowerCase();
   if (["input", "textarea", "select"].includes(tagName) || event.target?.isContentEditable) {
     return;
@@ -3012,7 +3002,9 @@ function formatRuntimeSummary(value) {
 </script>
 
 <template>
-  <div ref="fitViewportRef" class="simple-editor-fit-viewport">
+  <EditorDebugWorkspace v-if="debugGame" :game="debugGame" :start-level-index="activeLevelIndex" @exit="exitDebug" />
+  <EditorDebugEntryDialog v-if="debugEntryOpen" :saving="Boolean(busyAction)" :error="errorMessage" @choose="enterDebug" />
+  <div v-show="!debugGame" ref="fitViewportRef" class="simple-editor-fit-viewport">
     <div class="simple-editor-fit-shell" :class="{ ready: editorFitReady }" :style="editorFitShellStyle">
       <section
         ref="fitContentRef"
@@ -3236,6 +3228,7 @@ function formatRuntimeSummary(value) {
         <div class="editor-config-actions">
           <button class="soft-button" type="button" :disabled="Boolean(busyAction)" @click="openGlobalConfig">{{ t("simple.globalConfig") }}</button>
           <button class="soft-button" type="button" :disabled="Boolean(busyAction)" @click="openPixelLightLayout">{{ t("pixelLight.open") }}</button>
+          <button class="soft-button" type="button" :disabled="Boolean(busyAction)" @click="gameWiringError = ''; gameWiringOpen = true">{{ t('gameWiring.title') }}</button>
           <button class="soft-button" type="button" :disabled="Boolean(busyAction) || !activeFrame" @click="openEffectDialog">{{ t("effect.open") }}</button>
         </div>
       </aside>
@@ -3752,14 +3745,6 @@ function formatRuntimeSummary(value) {
               </button>
               <button
                 class="soft-button runtime-start-button"
-                :disabled="Boolean(busyAction)"
-                type="button"
-                @click="stopGame"
-              >
-                {{ t(busyAction === "stop" ? "simple.stopping" : "simple.stopGame") }}
-              </button>
-              <button
-                class="soft-button runtime-start-button"
                 :disabled="Boolean(busyAction) || !activeLevel"
                 type="button"
                 @click="openPreview"
@@ -3821,6 +3806,8 @@ function formatRuntimeSummary(value) {
       @cancel="pixelLightLayoutOpen = false"
       @save="savePixelLightLayout"
     />
+    <GameWiringDialog v-if="gameWiringOpen" :wiring="document?.wiringData" :width="matrixWidth" :height="matrixHeight"
+      :saving="gameWiringSaving" :error="gameWiringError" @cancel="gameWiringOpen = false" @save="saveWiring" />
     <GameEffectDialog
       v-if="effectDialogOpen"
       :effect="effectDialogDraft"

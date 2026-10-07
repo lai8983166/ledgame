@@ -7,15 +7,49 @@ import { confirmWithRendererFocus } from "../lib/rendererFocus.js";
 import { normalizeGameCategoryList } from "../lib/gameCategories.js";
 import { buildMediaPreviewUrl } from "../lib/mediaPreview.js";
 import MediaPickerDialog from "../components/MediaPickerDialog.vue";
+import GameWiringDialog from "../components/GameWiringDialog.vue";
+import EditorDebugWorkspace from './EditorDebugWorkspace.vue';
+import EditorDebugEntryDialog from '../components/EditorDebugEntryDialog.vue';
+import { isDebugRuntimeAvailable } from '../lib/editorDebugSession.js';
+import { saveGameWiring } from "../lib/gameWiring.js";
 
 const props = defineProps({
   gameId: { type: [Number, String], required: true },
   gameName: { type: String, default: "" },
 });
-const emit = defineEmits(["back"]);
+const emit = defineEmits(["back", "debug-active"]);
+const debugGame = ref(null);
+const debugEntryOpen = ref(false);
+function exitDebug() { debugGame.value = null; emit('debug-active',false); }
+async function enterDebug(choice) {
+  if (choice === 'cancel') { debugEntryOpen.value = false; return; }
+  if (busy.value) return;
+  busy.value = 'start'; errorMessage.value = '';
+  try {
+    if (!isDebugRuntimeAvailable((await api.gameState())?.data)) throw new Error(t('editorDebug.busy'));
+    if (choice === 'save') await saveBeforeStart();
+    debugGame.value = (await api.getRankGameEditor(props.gameId))?.data;
+    if (!debugGame.value) throw new Error(t('gameWiring.missing'));
+    debugEntryOpen.value = false; emit('debug-active',true);
+  } catch(error) { errorMessage.value = error.message; }
+  finally { busy.value = null; }
+}
 const { t } = useI18n({ useScope: "global" });
 const api = window.ledGame;
 const document = ref(null);
+const gameWiringOpen = ref(false);
+const gameWiringSaving = ref(false);
+const gameWiringError = ref("");
+async function saveWiring(wiring) {
+  gameWiringSaving.value = true;
+  gameWiringError.value = "";
+  try {
+    await saveGameWiring(api, props.gameId, true, wiring, document.value);
+    gameWiringOpen.value = false;
+  } catch (error) {
+    gameWiringError.value = error.message?.startsWith('gameWiring.') ? t(error.message) : error.message;
+  } finally { gameWiringSaving.value = false; }
+}
 const loading = ref(true);
 const busy = ref(null);
 const errorMessage = ref("");
@@ -23,8 +57,6 @@ const statusMessage = ref("");
 const validationErrors = ref([]);
 const dirty = ref(false);
 const gameCategories = ref([]);
-const testDialogOpen = ref(false);
-const testOptions = ref({ userCount: 2, stageFailurePolicy: "END_GAME" });
 const mediaPicker = ref(null);
 const audioPreview = ref(null);
 let hydrating = false;
@@ -35,12 +67,6 @@ const invalidConfiguration = computed(() => {
   return !Array.isArray(levels) || levels.length !== 1 || Number(levels[0]?.type) !== 1;
 });
 const canSave = computed(() => Boolean(document.value) && !Boolean(busy.value) && !invalidConfiguration.value);
-const validTestPlayerCount = computed(() => {
-  const count = Number(testOptions.value.userCount);
-  return Number.isInteger(count)
-    && count >= Number(document.value?.minPlayers)
-    && count <= Number(document.value?.maxPlayers);
-});
 const saveLabel = computed(() => t(busy.value === "save" ? "rank.saving" : "rank.save"));
 const rankMediaFields = computed(() => [
   { path: "audio.globalBackgroundSound", label: t("globalConfig.idleBgm"), accept: "audio" },
@@ -83,7 +109,6 @@ async function load() {
     const result = await api.getRankGameEditor(props.gameId);
     hydrating = true;
     document.value = normalizeDocument(result?.data ?? result);
-    testOptions.value.userCount = Math.min(2, document.value.maxPlayers || 1);
     dirty.value = false;
   } catch (error) {
     errorMessage.value = extractErrorMessage(error, t("rank.loadFailed"));
@@ -230,7 +255,8 @@ async function saveBeforeStart() {
     throw new Error(first ? `${first.path}: ${first.message}` : t("rank.validationFailed"));
   }
   validationErrors.value = [];
-  await api.saveRankGameEditor(props.gameId, payload);
+  const saved = await api.saveRankGameEditor(props.gameId, payload);
+  if (saved?.data?.saved !== true) throw new Error(saved?.message || t('rank.saveFailed'));
   dirty.value = false;
 }
 
@@ -281,26 +307,8 @@ async function importJson() {
 
 async function startTest() {
   if (!document.value || busy.value) return;
-  busy.value = "start";
-  errorMessage.value = "";
-  try {
-    if (dirty.value) await saveBeforeStart();
-    await api.startGame({
-      id: Number(props.gameId),
-      userCount: Number(testOptions.value.userCount),
-      startLevelIndex: 0,
-      stageFailurePolicy: testOptions.value.stageFailurePolicy,
-      launchMethod: "debug",
-      runtimeMode: "SIMULATION",
-    });
-    await api.enterGameFlow?.({ mode: "debug" });
-    testDialogOpen.value = false;
-    statusMessage.value = t("rank.started");
-  } catch (error) {
-    errorMessage.value = extractErrorMessage(error, t("rank.startFailed"));
-  } finally {
-    busy.value = null;
-  }
+  if (dirty.value) debugEntryOpen.value = true;
+  else await enterDebug('saved');
 }
 
 function goBack() {
@@ -310,16 +318,19 @@ function goBack() {
 </script>
 
 <template>
-  <section class="rank-editor workspace">
+  <EditorDebugWorkspace v-if="debugGame" :game="debugGame" @exit="exitDebug" />
+  <EditorDebugEntryDialog v-if="debugEntryOpen" :saving="Boolean(busy)" :error="errorMessage" @choose="enterDebug" />
+  <section v-show="!debugGame" class="rank-editor workspace">
     <header class="rank-toolbar">
       <div class="rank-title">
         <button class="icon-action" type="button" v-bind="{ title: t('rank.back') }" @click="goBack">←</button>
         <div><h1>{{ document?.displayName || gameName }}</h1></div>
       </div>
       <div class="rank-actions">
+        <button class="soft-button" type="button" :disabled="!document || Boolean(busy)" @click="gameWiringError = ''; gameWiringOpen = true">{{ t('gameWiring.title') }}</button>
         <button class="soft-button" type="button" :disabled="!document || Boolean(busy)" @click="importJson">{{ t("rank.import") }}</button>
         <button class="soft-button" type="button" :disabled="!document || Boolean(busy)" @click="exportJson">{{ t("rank.export") }}</button>
-        <button class="soft-button" type="button" :disabled="!document || Boolean(busy) || invalidConfiguration" @click="testDialogOpen = true">{{ t("rank.startTest") }}</button>
+        <button class="soft-button" type="button" :disabled="!document || Boolean(busy) || invalidConfiguration" @click="startTest">{{ t("rank.startTest") }}</button>
         <button class="action-button primary" type="button" :disabled="!canSave" @click="save">{{ saveLabel }}</button>
       </div>
     </header>
@@ -442,15 +453,8 @@ function goBack() {
       </main>
     </div>
 
-    <div v-if="testDialogOpen" class="rank-dialog-backdrop" @mousedown.self="testDialogOpen = false">
-      <section class="rank-dialog" role="dialog" aria-modal="true">
-        <h2>{{ t("rank.startTest") }}</h2>
-        <label><span>{{ t("rank.playerCount") }}</span><input v-model.number="testOptions.userCount" type="number" :min="document.minPlayers" :max="document.maxPlayers" /></label>
-        <label><span>{{ t("rank.failurePolicy") }}</span><select v-model="testOptions.stageFailurePolicy"><option value="END_GAME">{{ t("rank.endGame") }}</option><option value="RETRY">{{ t("rank.retry") }}</option></select></label>
-        <footer><button class="soft-button" type="button" @click="testDialogOpen = false">{{ t("common.cancel") }}</button><button class="action-button primary" type="button" :disabled="Boolean(busy) || !validTestPlayerCount" @click="startTest">{{ t("rank.start") }}</button></footer>
-      </section>
-    </div>
-
+    <GameWiringDialog v-if="gameWiringOpen" :wiring="document?.wiringData" :width="document.siteSizeWidth" :height="document.siteSizeHeight"
+      :saving="gameWiringSaving" :error="gameWiringError" @cancel="gameWiringOpen = false" @save="saveWiring" />
     <MediaPickerDialog
       v-if="mediaPicker"
       :accept="mediaPicker.accept"

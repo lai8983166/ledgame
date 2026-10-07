@@ -38,6 +38,7 @@ const gameMenuRef = ref(null);
 const languageDialogOpen = ref(false);
 const languageButtonRef = ref(null);
 const selectedEditorGame = ref(null);
+const editorDebugActive = ref(false);
 const helpMenuOpen = ref(false);
 const helpDocument = ref(null);
 const helpDocumentLoading = ref(false);
@@ -620,7 +621,7 @@ function formatRuntimeValue(value, fallback = "-") {
         <button type="button" class="window-titlebar-control window-titlebar-control--close" :aria-label="t('windowControls.close')" @click="api.closeWindow?.()">×</button>
       </span>
     </div>
-    <header class="app-nav" aria-label="Primary">
+    <header class="app-nav" aria-label="Primary" :inert="editorDebugActive">
       <div class="brand-mark" aria-hidden="true"></div>
       <nav class="nav-tabs">
         <div class="nav-help-wrapper">
@@ -803,6 +804,7 @@ function formatRuntimeValue(value, fallback = "-") {
       v-else-if="activeView === 'simple-editor'"
       :game-id="selectedEditorGame?.id"
       :game-name="selectedEditorGame?.name"
+      @debug-active="editorDebugActive = $event"
       @back="backToGameList"
     />
 
@@ -810,6 +812,7 @@ function formatRuntimeValue(value, fallback = "-") {
       v-else-if="activeView === 'rank-editor'"
       :game-id="selectedEditorGame?.id"
       :game-name="selectedEditorGame?.displayName || selectedEditorGame?.name"
+      @debug-active="editorDebugActive = $event"
       @back="backToGameList"
     />
 

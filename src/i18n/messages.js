@@ -1365,6 +1365,34 @@ for (const [locale, [childModeVisible, childModeVisibleHint]] of Object.entries(
   mergedMessages[locale].management = { ...mergedMessages[locale].management, childModeVisible, childModeVisibleHint };
 }
 
+mergedMessages['zh-CN'].gameWiring = {
+  title:'地砖布线',save:'保存此游戏布线',saving:'正在保存',newDraft:'全局布线与场地尺寸不匹配，已创建空白草稿。',
+  invalid:'布线无效：请检查尺寸、重复点位、坐标范围和通道容量。',missing:'无法读取已保存的游戏。',
+  saveSizeFirst:'请先保存游戏的场地尺寸，再保存布线。',saveFailed:'布线保存失败。',addChannel:'增加通道',removeChannel:'删除末尾空通道',
+};
+mergedMessages['en-US'].gameWiring = {
+  title:'Floor wiring',save:'Save game wiring',saving:'Saving',newDraft:'Global wiring does not match the field size. A blank draft was created.',
+  invalid:'Invalid wiring: check dimensions, duplicate points, coordinates and channel capacity.',missing:'Saved game could not be loaded.',
+  saveSizeFirst:'Save the game field dimensions before saving wiring.',saveFailed:'Wiring save failed.',addChannel:'Add channel',removeChannel:'Remove last empty channel',
+};
+
+mergedMessages['zh-CN'].editorDebug = {
+  title:'游戏调试',exit:'退出调试，返回编辑',method:'启动方式',direct:'直接启动',wristband:'手环启动',players:'游戏人数',level:'起始关卡',
+  failurePolicy:'关卡失败后',start:'启动游戏',pause:'暂停',resume:'继续',restart:'重新开始',scan:'请刷手环',scanHint:'将手环放到读卡器上，收到编号和回车后完成读取。',
+  state:'运行状态',score:'游戏得分',life:'生命值',points:'累计奖励积分',time:'游戏剩余秒数',currentLevel:'当前关卡',unlimited:'无限',finished:'本局已结束',
+  balance:'手环剩余',balanceHint:'使用真实会员和手环。暂停只冻结游戏进度，不改变平台手环余额规则。',
+  invalidOptions:'请检查人数和起始关卡范围。',busy:'已有游戏、准备或排队会话，请先结束后再进入调试。',prepareFailed:'创建调试准备失败。',sessionLost:'当前会话已改变，不能操作其他游戏。',cleanupFailed:'会话尚未清理完成，请重试退出。',
+  unsaved:'当前游戏有未保存修改',unsavedHint:'调试使用数据库中已保存的游戏；使用已保存版本不会丢弃当前编辑草稿。',saveEnter:'保存并进入调试',useSaved:'使用已保存版本',
+};
+mergedMessages['en-US'].editorDebug = {
+  title:'Game debug',exit:'Exit debug and return to editor',method:'Launch method',direct:'Direct',wristband:'Wristband',players:'Players',level:'Starting level',
+  failurePolicy:'On level failure',start:'Start game',pause:'Pause',resume:'Resume',restart:'Restart',scan:'Scan wristband',scanHint:'Scan a wristband; its UID and Enter complete the reading.',
+  state:'Runtime state',score:'Game score',life:'Lives',points:'Awarded member points',time:'Game seconds remaining',currentLevel:'Current level',unlimited:'Unlimited',finished:'Game ended',
+  balance:'Wristband remaining',balanceHint:'Uses real members and wristbands. Pause freezes gameplay, not platform wristband charging.',
+  invalidOptions:'Check the player count and starting level.',busy:'A game, preparation or queue is active. Finish it before debugging.',prepareFailed:'Debug preparation failed.',sessionLost:'Session changed; another game cannot be controlled.',cleanupFailed:'Session cleanup is incomplete. Retry exiting.',
+  unsaved:'Unsaved game changes',unsavedHint:'Debug uses the saved game. Using the saved version preserves your editor draft.',saveEnter:'Save and enter debug',useSaved:'Use saved version',
+};
+
 export const authoredMessages = Object.fromEntries(
   canonicalLocales.map((locale) => [locale, mergedMessages[locale] || {}]),
 );

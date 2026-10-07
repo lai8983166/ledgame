@@ -10,6 +10,10 @@ import GameListView from '../../src/views/GameListView.vue';
 import LedGameTouchView from '../../src/views/LedGameTouchView.vue';
 import MediaLibraryView from '../../src/views/MediaLibraryView.vue';
 import SpiritLibraryView from '../../src/views/SpiritLibraryView.vue';
+import GameWiringDialog from '../../src/components/GameWiringDialog.vue';
+import SimpleGameEditorView from '../../src/views/SimpleGameEditorView.vue';
+import RankGameEditorView from '../../src/views/RankGameEditorView.vue';
+import EditorDebugWorkspace from '../../src/views/EditorDebugWorkspace.vue';
 import '../../src/style.css';
 let app;
 await initializeApplicationLocale();
@@ -18,10 +22,13 @@ window.mountComponent = (component, props) => {
   app?.unmount();
   window.componentEvents = [];
   app = createApp({ render: () => h({ MediaPickerDialog, GameGlobalConfigDialog, ApplicationSettingsView,
-    Elc408DebugAssistantView, GameListView, LedGameTouchView, MediaLibraryView, SpiritLibraryView }[component], {
+    Elc408DebugAssistantView, GameListView, LedGameTouchView, MediaLibraryView, SpiritLibraryView,
+    GameWiringDialog, SimpleGameEditorView, RankGameEditorView, EditorDebugWorkspace }[component], {
     ...props,
     onSelect: path => window.componentEvents.push(['select', path]),
     onCancel: () => window.componentEvents.push(['cancel']),
+    onSave: value => window.componentEvents.push(['save', value]),
+    onExit: () => window.componentEvents.push(['exit']),
   }) });
   app.use(i18n).mount('#app');
 };

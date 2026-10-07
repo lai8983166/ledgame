@@ -870,6 +870,7 @@ function publishFrame(payload) {
     receivedAt: Date.now(),
   }
 
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('led-frame', latestFrame)
   if (debugWindow && !debugWindow.isDestroyed()) {
     debugWindow.webContents.send('led-frame', latestFrame)
   }
@@ -1949,6 +1950,14 @@ ipcMain.handle('game:queue:cancel', async (_event, itemId) => {
   await backendRequest(request.pathname, request.options)
   return requestCurrentGameState()
 })
+ipcMain.handle('editor-debug:prepare', async (event, payload) => {
+  if (!mainWindow || event.sender !== mainWindow.webContents) throw new Error('EDITOR_DEBUG_MAIN_WINDOW_REQUIRED')
+  const current = (await requestCurrentGameState())?.data
+  if (current?.queueSummary?.waiting?.length) throw new Error('EDITOR_DEBUG_RUNTIME_BUSY')
+  return engineStateRequest('/game/preparations', {
+    method: 'POST', body: JSON.stringify({ ...normalizeGameStartRequest(payload), gameId: Number(payload?.gameId), runtimeMode: 'SIMULATION' }),
+  })
+})
 ipcMain.handle('engine:debug-command', async (_event, command) => {
   const result = await backendRequest('/engine/game/debug/command', {
     method: 'POST',
@@ -2182,6 +2191,9 @@ ipcMain.handle('elc408:generate-config', (_event, draft) =>
     body: JSON.stringify(normalizeConfigDraft(draft)),
   }),
 )
+ipcMain.handle('elc408:read-wiring', async () => {
+  return JSON.parse(await fs.readFile(path.join(getElc408ConfigDirectory(), 'wiring.json'), 'utf8'))
+})
 ipcMain.handle('elc408:generate-wiring', (_event, document) =>
   backendRequest('/hardware/elc408/files/wiring', {
     method: 'POST',
