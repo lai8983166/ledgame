@@ -44,6 +44,13 @@ try {
     await page.getByRole('menuitem',{name:'游戏列表',exact:true}).click();
     await page.locator('.game-card[data-id="'+id+'"] .game-card-main').click();
     await page.locator('.editor-toolbar').waitFor();
+    const stageMedia=[doc.commonConfig?.levelPassAudio || '',doc.commonConfig?.levelRestartAudio || '',doc.gif?.levelSettlement || '',doc.gif?.levelFailure || ''];
+    assert.deepEqual(await page.locator('.editor-level-media-field input').evaluateAll(els=>els.map(el=>el.value)),stageMedia);
+    await page.getByRole('button',{name:'全局配置',exact:true}).click();
+    for(const label of ['关卡通过语音','关卡重启语音','关卡结算动画','关卡失败动画'])assert.equal(await page.locator('.global-config-dialog').getByText(label,{exact:true}).count(),0);
+    await page.locator('.global-config-dialog').getByRole('button',{name:'取消',exact:true}).click();
+    assert.equal(await page.getByRole('button',{name:'左转90',exact:true}).count(),0);
+    assert.equal(await page.getByRole('button',{name:'右转90',exact:true}).count(),1);
     await page.waitForFunction(()=>document.querySelector('.simple-editor-fit-shell')?.classList.contains('ready'));
     assert.equal(await page.locator('.editor-side-rail').count(),0);
     assert.equal(await page.locator('.object-panel .object-actions').count(),0);
@@ -63,6 +70,7 @@ try {
     await page.getByRole('button',{name:'保存',exact:true}).click();
     await expect.poll(async()=> (await api('getGameEditor',id)).data.levels[0].frameList[0].matrix.length).toBe(3);
     const saved=(await api('getGameEditor',id)).data;
+    assert.deepEqual([saved.commonConfig?.levelPassAudio || '',saved.commonConfig?.levelRestartAudio || '',saved.gif?.levelSettlement || '',saved.gif?.levelFailure || ''],stageMedia);
     const matrix=saved.levels[0].frameList[0].matrix;
     const centered=matrix.find(o=>o.id==='center-test');
     assert.deepEqual([centered.x,centered.y],[6,6]);assert.deepEqual(centered.points,[[-1,-1],[1,1]]);
@@ -73,6 +81,7 @@ try {
     await page.locator('.editor-toolbar').waitFor();
     await page.getByRole('button',{name:'启动游戏',exact:true}).click();
     await page.locator('.editor-debug-workspace').waitFor();
+    assert.ok((await page.locator('.debug-workspace-controls').boundingBox()).width>=420);
     assert.equal(app.electron.windows().filter(p=>/window=(debug|touch)/.test(p.url())).length,0);
     await page.getByRole('button',{name:'退出调试，返回编辑',exact:true}).click();
     await page.locator('.editor-toolbar').waitFor();

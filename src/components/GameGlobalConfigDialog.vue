@@ -51,8 +51,6 @@ const sections = computed(() => [
       { label: t("globalConfig.gameStartVoice"), path: "commonConfig.gameStartAudio", kind: "media", accept: "audio" },
       { label: t("globalConfig.gameSuccessVoice"), path: "commonConfig.gameEndSuccessAudio", kind: "media", accept: "audio" },
       { label: t("globalConfig.gameFailureVoice"), path: "commonConfig.gameEndFailAudio", kind: "media", accept: "audio" },
-      { label: t("globalConfig.levelPassVoice"), path: "commonConfig.levelPassAudio", kind: "media", accept: "audio" },
-      { label: t("globalConfig.levelRestartVoice"), path: "commonConfig.levelRestartAudio", kind: "media", accept: "audio" },
     ],
   },
   {
@@ -60,8 +58,6 @@ const sections = computed(() => [
     columns: 3,
     fields: [
       { label: t("globalConfig.idleAnimation"), path: "gif.standby", kind: "media", accept: "image" },
-      { label: t("globalConfig.levelSettlementAnimation"), path: "gif.levelSettlement", kind: "media", accept: "image" },
-      { label: t("globalConfig.levelFailureAnimation"), path: "gif.levelFailure", kind: "media", accept: "image" },
       { label: t("globalConfig.gameFailureAnimation"), path: "gif.gameFailure", kind: "media", accept: "image" },
       { label: t("globalConfig.gameCompleteAnimation"), path: "gif.gameOver", kind: "media", accept: "image" },
     ],
@@ -102,6 +98,11 @@ function resetDraft() {
     gif: { ...(source.gif || {}) },
     commonConfig: { ...(source.commonConfig || {}) },
   };
+  // Shared stage resources are edited in basic information, not by this dialog.
+  delete draft.value.commonConfig.levelPassAudio;
+  delete draft.value.commonConfig.levelRestartAudio;
+  delete draft.value.gif.levelSettlement;
+  delete draft.value.gif.levelFailure;
 }
 
 function openPicker(field) {

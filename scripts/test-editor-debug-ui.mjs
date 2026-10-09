@@ -64,7 +64,21 @@ try{
       await page.setViewportSize({width,height});await page.waitForTimeout(100);
       const canvas=await page.locator('canvas').boundingBox();assert.ok(canvas.y+canvas.height<=height,JSON.stringify(canvas));
       const cell=(canvas.height-24-3*35)/36;assert.ok(cell>0);
+      const controls=await page.locator('.debug-workspace-controls').boundingBox();
+      assert.ok(controls.width>=420,JSON.stringify({width,controls}));
+      for(const input of await page.locator('.debug-workspace-controls label input, .debug-workspace-controls label select').all()){
+        const bounds=await input.boundingBox();
+        assert.ok(bounds.width>=180 && bounds.x>=controls.x && bounds.x+bounds.width<=controls.x+controls.width,JSON.stringify(bounds));
+      }
       await page.screenshot({path:path.join(output,`debug-${width}.png`)});
+    }
+    for(const width of [960,720]){
+      await page.setViewportSize({width,height:768});await page.waitForTimeout(100);
+      const controls=await page.locator('.debug-workspace-controls').boundingBox();
+      assert.ok(controls.width>=240 && controls.width<width/2);
+      assert.equal(await page.locator('.debug-workspace-controls').evaluate(el=>el.scrollWidth<=el.clientWidth),true);
+      const canvas=await page.locator('canvas').boundingBox();
+      assert.ok(canvas.x+canvas.width<=width && canvas.y+canvas.height<=768);
     }
     await page.setViewportSize({width:1366,height:768});await page.waitForTimeout(100);await page.locator('canvas').click({position:{x:20,y:20}});
     assert.ok((await page.evaluate(()=>window.fixture.requests)).some(r=>r[0]==='command'&&r[1].command==='tileinput'));

@@ -7,6 +7,7 @@ import { filterEditorSprites } from '../lib/simpleEditorSprites.js';
 import SimpleMatrixCanvas from "../components/SimpleMatrixCanvas.vue";
 import SimpleLevelPreviewDialog from "../components/SimpleLevelPreviewDialog.vue";
 import GameGlobalConfigDialog from "../components/GameGlobalConfigDialog.vue";
+import MediaPickerDialog from "../components/MediaPickerDialog.vue";
 import PixelLightLayoutDialog from "../components/PixelLightLayoutDialog.vue";
 import GameEffectDialog from "../components/GameEffectDialog.vue";
 import GameWiringDialog from "../components/GameWiringDialog.vue";
@@ -87,6 +88,26 @@ const busyAction = ref("");
 const errorMessage = ref("");
 const statusMessage = ref("");
 const globalConfigOpen = ref(false);
+const levelMediaPicker = ref(null);
+const levelMediaFields = [
+  { key: 'levelPassAudio', group: 'commonConfig', label: 'globalConfig.levelPassVoice', accept: 'audio' },
+  { key: 'levelRestartAudio', group: 'commonConfig', label: 'globalConfig.levelRestartVoice', accept: 'audio' },
+  { key: 'levelSettlement', group: 'gif', label: 'globalConfig.levelSettlementAnimation', accept: 'image' },
+  { key: 'levelFailure', group: 'gif', label: 'globalConfig.levelFailureAnimation', accept: 'image' },
+];
+function levelMediaValue(field) { return document.value?.[field.group]?.[field.key] || ''; }
+function setLevelMedia(field, value) {
+  if (!document.value || busyAction.value) return;
+  document.value[field.group] ||= {};
+  document.value[field.group][field.key] = value;
+}
+function selectLevelMedia(value) {
+  if (levelMediaPicker.value) setLevelMedia(levelMediaPicker.value, value);
+  levelMediaPicker.value = null;
+}
+function levelMediaUrl(field) {
+  return 'led-media://preview/' + levelMediaValue(field).split('/').map(encodeURIComponent).join('/');
+}
 const gameWiringOpen = ref(false);
 const gameWiringSaving = ref(false);
 const gameWiringError = ref("");
@@ -2874,9 +2895,9 @@ function canTriggerGlobalShortcut(event) {
 }
 
 function handleGlobalKeydown(event) {
-  if (debugGame.value || debugEntryOpen.value) return;
+  if (debugGame.value || debugEntryOpen.value || levelMediaPicker.value) return;
   const tagName = event.target?.tagName?.toLowerCase();
-  if (["input", "textarea", "select"].includes(tagName) || event.target?.isContentEditable) {
+  if (["input", "textarea", "select", "audio"].includes(tagName) || event.target?.isContentEditable) {
     return;
   }
   const lowerKey = event.key.toLowerCase();
@@ -3132,7 +3153,7 @@ function formatRuntimeSummary(value) {
                 </button>
               </template>
               <template v-else>
-                <button
+                <button v-if="false"
                   class="soft-button compact-button object-icon-button"
                   :disabled="!selectedObject"
                   type="button"
@@ -3401,6 +3422,19 @@ function formatRuntimeSummary(value) {
           <button class="soft-button" type="button" :disabled="Boolean(busyAction)" @click="gameWiringError = ''; gameWiringOpen = true">{{ t('gameWiring.title') }}</button>
           <button class="soft-button" type="button" :disabled="Boolean(busyAction) || !activeFrame" @click="openEffectDialog">{{ t("effect.open") }}</button>
         </div>
+        <section class="editor-level-media">
+          <h3>{{ t('globalConfig.levelMedia') }}</h3>
+          <div v-for="field in levelMediaFields" :key="field.key" class="editor-level-media-field">
+            <label :for="'level-media-' + field.key">{{ t(field.label) }}</label>
+            <div class="editor-level-media-row">
+              <input :id="'level-media-' + field.key" :value="levelMediaValue(field)" :title="levelMediaValue(field)" :placeholder="t('globalConfig.notSelected')" readonly />
+              <button class="soft-button compact-button" type="button" :disabled="Boolean(busyAction)" :aria-label="t('globalConfig.choose') + ' ' + t(field.label)" @click="levelMediaPicker = field">{{ t('globalConfig.choose') }}</button>
+              <button v-if="field.accept === 'audio'" class="soft-button compact-button" type="button" :disabled="Boolean(busyAction) || !levelMediaValue(field)" :aria-label="t('globalConfig.clear') + ' ' + t(field.label)" @click="setLevelMedia(field, '')">{{ t('globalConfig.clear') }}</button>
+            </div>
+            <audio v-if="field.accept === 'audio' && levelMediaValue(field)" :key="levelMediaValue(field)" :src="levelMediaUrl(field)" :aria-label="t(field.label)" preload="none" controls />
+            <img v-if="field.accept === 'image' && levelMediaValue(field)" :src="levelMediaUrl(field)" :alt="t(field.label)" />
+          </div>
+        </section>
       </aside>
 
       <main class="editor-panel editor-center">
@@ -3715,6 +3749,7 @@ function formatRuntimeSummary(value) {
       @cancel="globalConfigOpen = false"
       @save="saveGlobalConfig"
     />
+    <MediaPickerDialog v-if="levelMediaPicker" :accept="levelMediaPicker.accept" :current-value="levelMediaValue(levelMediaPicker)" :title="t(levelMediaPicker.label)" @cancel="levelMediaPicker = null" @select="selectLevelMedia" />
     <PixelLightLayoutDialog
       v-if="pixelLightLayoutOpen"
       :layout="pixelLightLayoutDraft"
@@ -3750,3 +3785,14 @@ function formatRuntimeSummary(value) {
     />
   </div>
 </template>
+
+<style scoped>
+.editor-level-media{display:grid;gap:14px;min-width:0}
+.editor-level-media h3{margin:0;font-size:14px}
+.editor-level-media-field{display:grid;gap:6px;min-width:0}
+.editor-level-media-row{display:flex;align-items:center;gap:6px;min-width:0}
+.editor-level-media-row input{flex:1;min-width:0;text-overflow:ellipsis}
+.editor-level-media-row button{flex-shrink:0}
+.editor-level-media-field audio{width:100%;height:32px}
+.editor-level-media-field img{width:100%;height:110px;object-fit:contain;image-rendering:pixelated;background:var(--ui-input);border-radius:8px}
+</style>

@@ -18,7 +18,7 @@ const page = await browser.newPage({ viewport:{width:1366,height:768} });
 await page.addInitScript(commonNames => {
   window.appLanguage = { get:async()=>'zh-CN',set:async v=>v,onChanged:()=>()=>{} };
   const p=(id,x,y,color=2)=>({id,x,y,color,points:[[0,0]]});
-  const game={id:1,name:'Simple测试',type:'default',mode:'[1]',siteSizeWidth:16,siteSizeHeight:36,
+  const game={id:1,name:'Simple测试',type:'default',mode:'[1]',siteSizeWidth:16,siteSizeHeight:36,commonConfig:{},gif:{},
     levels:[{label:'第一关',frameList:[{repeatTimes:2,matrix:[p('red',1,1)]},{repeatTimes:4,matrix:[]}]}]};
   window.fixture={game,confirms:[],failSave:false,importContent:'',saves:0,exportContent:'',
     reset(){game.levels[0].frameList=[{repeatTimes:2,matrix:[p('red',1,1)]},{repeatTimes:4,matrix:[]}];}};
@@ -34,7 +34,8 @@ await page.addInitScript(commonNames => {
     width:name==='Double'?2:name==='20'?40:3,height:name==='Double'?3:2,
     points:name==='Double'?[[0,0],[1,2]]:name==='20'?[[0,0],[39,1]]:[[0,0],[2,1]]})),
     {id:10,name:'测试精灵',color:2,width:3,height:3,points:[[0,0],[2,2]]}]})};
-  window.mediaLibrary={list:async()=>({items:[]})};
+  window.mediaLibrary={list:async()=>({items:['pass.mp3','retry.mp3','pass.gif','fail.gif'].map(name=>({name,relativePath:name,kind:'file',mediaType:name.endsWith('.mp3')?'audio':'image'}))}),
+    getPreviewUrl:async name=>({mediaType:name.endsWith('.mp3')?'audio':'image',url:name.endsWith('.mp3')?'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=':'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="16" height="36"/%3E'})};
 },Object.values(EFFECT_SPRITE_NAMES).flat());
 const errors=[],passed=[];
 page.on('pageerror',error=>errors.push(error.message));
@@ -59,11 +60,45 @@ try {
     assert.equal(await page.locator('.object-sprite-button').count(),0);
     assert.equal(await page.locator('.object-panel .object-action-palette button').count(),4);
   });
+  await check('关卡资源仅在基础信息，全局配置不覆盖草稿、保存重开与取消选择',async()=>{
+    const fields=page.locator('.editor-level-media-field');
+    assert.equal(await fields.count(),4);
+    await fields.first().getByRole('button',{name:'选择 关卡通过语音',exact:true}).click();
+    await page.locator('.media-picker-dialog').waitFor();await button('取消').click();
+    assert.equal(await fields.first().locator('input').inputValue(),'');
+    for(const [index,name] of ['pass.mp3','retry.mp3','pass.gif','fail.gif'].entries()){
+      await fields.nth(index).getByRole('button',{name:/^选择 /}).click();
+      await page.locator('.media-picker-row[data-path="'+name+'"]').click();
+      await button('确认').click();await page.locator('.media-picker-dialog').waitFor({state:'hidden'});
+    }
+    assert.equal(await fields.locator('audio').count(),2);assert.equal(await fields.locator('img').count(),2);
+    await button('全局配置').click();await page.locator('.global-config-dialog').waitFor();
+    for(const label of ['关卡通过语音','关卡重启语音','关卡结算动画','关卡失败动画'])assert.equal(await page.locator('.global-config-dialog').getByText(label,{exact:true}).count(),0);
+    await page.evaluate(()=>window.fixture.failSave=true);
+    await page.locator('.global-config-dialog').getByRole('button',{name:'保存',exact:true}).click();
+    await page.getByText('保存失败',{exact:true}).first().waitFor();
+    assert.equal(await fields.first().locator('input').inputValue(),'pass.mp3');
+    await page.evaluate(()=>window.fixture.failSave=false);
+    await page.locator('.global-config-dialog').getByRole('button',{name:'保存',exact:true}).click();
+    await page.locator('.global-config-dialog').waitFor({state:'hidden'});
+    assert.equal(await fields.first().locator('input').inputValue(),'pass.mp3');
+    assert.equal(await page.evaluate(()=>window.fixture.game.commonConfig?.levelPassAudio || ''),'');
+    await button('保存').click();await mount();
+    assert.deepEqual(await fields.locator('input').evaluateAll(els=>els.map(el=>el.value)),['pass.mp3','retry.mp3','pass.gif','fail.gif']);
+    await fields.first().getByRole('button',{name:'选择 关卡通过语音',exact:true}).click();await button('取消').click();
+    assert.equal(await fields.first().locator('input').inputValue(),'pass.mp3');
+    const matrixBefore=await page.locator('.matrix-overlay-canvas').boundingBox();
+    await fields.last().scrollIntoViewIfNeeded();
+    assert.deepEqual(await page.locator('.matrix-overlay-canvas').boundingBox(),matrixBefore);
+    assert.equal(await page.locator('.editor-left').evaluate(el=>el.scrollWidth<=el.clientWidth),true);
+    await page.screenshot({path:path.join(output,'level-media-1366.png')});
+  });
   await check('帧下统一行、隐藏入口、实心四宫格和文字重复次数',async()=>{
     assert.equal(await page.locator('.editor-side-rail').count(),0);
     assert.equal(await page.locator('.object-panel .object-actions').count(),0);
     assert.equal(await page.locator('.editor-toolbar button[aria-label="启动游戏"]').count(),1);
-    for(const action of ['复制当前帧到前一帧','添加帧','修改基准点','改色']) assert.equal(await button(action).count(),0);
+    for(const action of ['复制当前帧到前一帧','添加帧','修改基准点','改色','左转90']) assert.equal(await button(action).count(),0);
+    assert.equal(await button('右转90').count(),1);
     assert.equal(await page.locator('.repeat-times-control button').innerText(),'复制重复次数');
     assert.equal(await page.locator('.color-copy-button rect[fill="currentColor"]').count(),16);
   });
@@ -96,11 +131,12 @@ try {
     assert.deepEqual([sprite.x,sprite.y],[6,6]);assert.deepEqual(sprite.points,[[-1,-1],[1,1]]);
     await page.evaluate(()=>window.getComponentSetup().handleCellClick(5,5));
     assert.deepEqual((await read()).matrix.at(-1),sprite);
-    await page.evaluate(()=>{const s=window.getComponentSetup();s.selectObject(s.activeFrame.matrix.at(-1).id);s.rotateSelectedObjectClockwise();});
+    await page.evaluate(()=>{const s=window.getComponentSetup();s.selectObject(s.activeFrame.matrix.at(-1).id);});
+    await button('右转90').click();
     assert.deepEqual((await read()).matrix.at(-1).points,[[1,-1],[-1,1]]);
     await page.evaluate(()=>{const s=window.getComponentSetup();s.activeFrame.matrix.push({id:'block-rotation',x:7,y:7,color:2,points:[[0,0]]});});
     const rotateBefore=await read();
-    await page.evaluate(()=>window.getComponentSetup().rotateSelectedObjectClockwise());
+    await button('右转90').click();
     assert.deepEqual(await read(),rotateBefore);
     await page.evaluate(()=>{const s=window.getComponentSetup();s.activeFrame.matrix.pop();s.invalidateMatrixFrame();});
   });

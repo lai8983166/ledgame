@@ -102,5 +102,30 @@ onBeforeUnmount(()=>{alive=false;clearInterval(balanceTimer);removeState?.();rem
   </section>
 </template>
 <style scoped>
-.editor-debug-workspace{height:calc(100dvh - 118px);min-height:0;display:flex;flex-direction:column;padding:16px 24px;gap:14px}header{display:flex;align-items:center;gap:16px;flex-shrink:0}h1{font-size:24px;margin:0}.debug-workspace-columns{flex:1;min-height:0;display:grid;grid-template-columns:340px minmax(0,1fr);gap:22px}.debug-workspace-controls{overflow:auto;min-height:0;padding:16px;background:var(--ui-panel);border:1px solid var(--ui-border);border-radius:12px}.debug-workspace-controls label{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px}.debug-workspace-controls input,.debug-workspace-controls select{max-width:160px;min-width:80px}.debug-workspace-actions{display:flex;gap:8px;flex-wrap:wrap}dl{display:grid;grid-template-columns:1fr 1fr;gap:12px}dd{margin:0;text-align:right}.debug-workspace-rgb{min-height:0;overflow:hidden;display:flex}.debug-workspace-rgb :deep(.debug-led-canvas-host){height:100%;width:100%}.debug-player{display:flex;gap:8px;margin:12px 0}.debug-player i{width:18px;height:18px;border-radius:50%}.debug-scan-backdrop{position:fixed;inset:0;z-index:1000;display:grid;place-items:center;background:var(--ui-overlay)}.debug-scan-backdrop section{padding:32px;max-width:500px;background:var(--ui-base);border-radius:12px;outline:none}@media(max-width:750px){.debug-workspace-columns{grid-template-columns:240px minmax(0,1fr)}.editor-debug-workspace{padding:8px}}
+.editor-debug-workspace{height:calc(100dvh - 118px);min-height:0;display:flex;flex-direction:column;padding:16px 24px;gap:14px}
+header{display:flex;align-items:center;gap:16px;flex-shrink:0}
+h1{font-size:24px;margin:0}
+.debug-workspace-columns{flex:1;min-height:0;display:grid;grid-template-columns:clamp(420px,32vw,560px) minmax(0,1fr);gap:22px}
+.debug-workspace-controls{overflow:auto;min-width:0;min-height:0;padding:20px;background:var(--ui-panel);border:1px solid var(--ui-border);border-radius:12px}
+.debug-workspace-controls label{display:grid;grid-template-columns:minmax(0,1fr) minmax(180px,52%);align-items:center;gap:16px;margin-bottom:14px}
+.debug-workspace-controls label span{min-width:0;overflow-wrap:anywhere}
+.debug-workspace-controls input,.debug-workspace-controls select{width:100%;max-width:none;min-width:0;box-sizing:border-box}
+.debug-workspace-actions{display:flex;gap:8px;flex-wrap:wrap}
+dl{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px}
+dd{margin:0;text-align:right;overflow-wrap:anywhere}
+.debug-workspace-rgb{min-width:0;min-height:0;overflow:hidden;display:flex}
+.debug-workspace-rgb :deep(.debug-led-canvas-host){height:100%;width:100%}
+.debug-player{display:flex;gap:8px;margin:12px 0}
+.debug-player i{width:18px;height:18px;border-radius:50%;flex-shrink:0}
+.debug-scan-backdrop{position:fixed;inset:0;z-index:1000;display:grid;place-items:center;background:var(--ui-overlay)}
+.debug-scan-backdrop section{padding:32px;max-width:500px;background:var(--ui-base);border-radius:12px;outline:none}
+@media(max-width:1000px){
+  .debug-workspace-columns{grid-template-columns:minmax(300px,40%) minmax(0,1fr);gap:14px}
+  .debug-workspace-controls{padding:16px}
+  .debug-workspace-controls label{grid-template-columns:minmax(0,1fr) minmax(0,52%);gap:10px}
+}
+@media(max-width:750px){
+  .debug-workspace-columns{grid-template-columns:minmax(240px,44%) minmax(0,1fr);gap:10px}
+  .editor-debug-workspace{padding:8px}
+}
 </style>
