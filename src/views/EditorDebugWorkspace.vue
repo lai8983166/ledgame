@@ -1,7 +1,7 @@
 <script setup>
 import {computed,ref,reactive,onMounted,onBeforeUnmount,nextTick} from 'vue';
 import {useI18n} from 'vue-i18n';
-import DebugLedCanvas from '../components/DebugLedCanvas.vue';
+import DebugLightBoard from '../components/DebugLightBoard.vue';
 import {isDebugRuntimeAvailable,debugLaunchPayload,appendDebugWristband,pixelsFromDebugFrame} from '../lib/editorDebugSession.js';
 import {wristbandErrorMessageKey,playerAccessRemainingSeconds} from '../lib/playerAccess.js';
 const props=defineProps({game:{type:Object,required:true},startLevelIndex:{type:Number,default:0}});
@@ -71,6 +71,7 @@ async function exit(){await action(async()=>{await cleanup();emit('exit');});}
 async function command(name){await action(async()=>{apply(await api.sendDebugCommand({command:name,sessionId:sessionId.value}));});}
 function hoverCell(x,y){hover.value={x,y};}
 async function clickCell(x,y){if(!active.value||state.value.engineState!=='RUNNING')return;await action(async()=>{apply(await api.sendDebugCommand({command:'tileinput',sessionId:sessionId.value,x,y}));});}
+async function clickCircle(circleIndex){if(!active.value||state.value.engineState!=='RUNNING')return;await action(async()=>{apply(await api.sendDebugCommand({command:'circleinput',sessionId:sessionId.value,circleIndex}));});}
 onMounted(async()=>{
   balanceTimer=setInterval(()=>balanceNow.value=Date.now(),1000);
   removeState=api.onEngineState?.(apply);
@@ -96,7 +97,7 @@ onBeforeUnmount(()=>{alive=false;clearInterval(balanceTimer);removeState?.();rem
         <article v-for="player in gameplay.players || []" :key="player.playerNumber" class="debug-player"><i :style="{background:player.color || '#888'}"></i><span>{{player.playerNumber}} · {{player.totalScore ?? player.score}} / {{t('editorDebug.points')}} {{player.memberPoints ?? 0}}</span></article>
         <p v-if="state.terminationReason">{{t('editorDebug.finished')}} · {{state.terminationReason}}</p>
       </aside>
-      <div class="debug-workspace-rgb"><DebugLedCanvas :pixels="pixels" :hover-cell="hover" :disabled="busy || state.engineState!=='RUNNING'" @hover-cell="hoverCell" @clear-hover="hover=null" @cell-click="clickCell" /></div>
+      <div class="debug-workspace-rgb"><DebugLightBoard :pixels="pixels" :layout="game.commonConfig?.pixelLightWiring" :runtime="state.sessionId===sessionId ? state.peripheralLights : undefined" :hover-cell="hover" :disabled="busy || state.engineState!=='RUNNING'" @hover-cell="hoverCell" @clear-hover="hover=null" @cell-click="clickCell" @circle-click="clickCircle" /></div>
     </div>
     <div v-if="scanOpen" class="debug-scan-backdrop"><section ref="scanPrompt" tabindex="-1" role="dialog" aria-modal="true" :aria-label="t('editorDebug.scan')"><h2>{{t('editorDebug.scan')}}</h2><p>{{t('editorDebug.scanHint')}}</p><p v-if="error" class="error-line">{{error}}</p><button class="soft-button" :disabled="busy" @click="scanOpen=false;scanBuffer=''">{{t('common.cancel')}}</button></section></div>
   </section>

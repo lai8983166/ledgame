@@ -88,6 +88,24 @@ defineProps({
       <rect x="3" y="4" width="18" height="16" rx="2" />
       <path d="m5 16 4-4 3 3M12 19l5-6 4 4M16 3v6m-3-3 3 3 3-3" />
     </template>
+    <template v-else-if="name === 'settings'">
+      <path d="m9 3-.6 3-2 .9-2.6-1.1-2 3.4L4 11v2l-2.2 1.8 2 3.4 2.6-1.1 2 .9.6 3h4l.6-3 2-.9 2.6 1.1 2-3.4L18 13v-2l2.2-1.8-2-3.4-2.6 1.1-2-.9L13 3H9Z" />
+      <circle cx="11" cy="12" r="3" />
+    </template>
+    <template v-else-if="name === 'pixel-light'">
+      <rect x="7" y="7" width="10" height="10" rx="1" />
+      <circle cx="12" cy="3" r="1.5" /><circle cx="21" cy="12" r="1.5" />
+      <circle cx="12" cy="21" r="1.5" /><circle cx="3" cy="12" r="1.5" />
+      <path d="M12 5v2m7 5h-2M12 17v2m-7-7h2" />
+    </template>
+    <template v-else-if="name === 'wiring'">
+      <rect x="3" y="3" width="18" height="18" rx="2" />
+      <path d="M9 3v18M15 3v18M3 9h18M3 15h18" opacity=".35" />
+      <path d="M6 6h12v6H6v6h12" /><circle cx="6" cy="6" r="1" fill="currentColor" />
+    </template>
+    <template v-else-if="name === 'effect'">
+      <path d="m4 19 11-11 3 3L7 22l-3-3Zm9-9 3 3M5 3v4M3 5h4M19 2v4M17 4h4M21 15v4M19 17h4" />
+    </template>
     <template v-else-if="name === 'trash'">
       <path d="M5 7h14M10 4h4l1 3H9l1-3ZM7 7l.8 13h8.4L17 7M10 10v7M14 10v7" />
     </template>

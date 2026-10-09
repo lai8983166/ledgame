@@ -272,8 +272,7 @@ async function testMemberPlatform() {
       </div>
 
       <template v-else>
-        <fieldset class="application-settings-connection">
-          <legend>{{ t('management.appearanceSecurity') }}</legend>
+        <section class="application-settings-connection">
           <label class="application-settings-field"><span>{{ t('management.appTitle') }}</span><input v-model.trim="draft.applicationTitle" type="text" maxlength="64" /></label>
           <label class="application-settings-field"><span>{{ t('management.exitPassword') }}</span><input v-model="draft.touchExitPassword" v-bind="{ placeholder: t('management.passwordPlaceholder') }" type="password" inputmode="numeric" maxlength="12" /><small>{{ t('management.passwordHint') }}</small></label>
           <div class="application-settings-actions"><button class="application-settings-secondary" type="button" @click="chooseApplicationIcon">{{ t('management.chooseIcon') }}</button><span>{{ applicationIconLabel }}</span></div>
@@ -282,7 +281,7 @@ async function testMemberPlatform() {
             <span>{{ secondaryBackgroundLabel }}</span>
           </div>
           <small>{{ t('management.secondaryBackgroundHint') }}</small>
-        </fieldset>
+        </section>
         <label class="application-settings-field">
           <span>{{ t("applicationSettings.entryMethod") }}</span>
           <select v-model="draft.entryMethod">
@@ -322,8 +321,7 @@ async function testMemberPlatform() {
           <small>{{ t("applicationSettings.idlePromptFontSizeHint") }}</small>
         </label>
 
-        <fieldset class="application-settings-connection">
-          <legend>{{ t("applicationSettings.secondaryIdleTitle") }}</legend>
+        <section class="application-settings-connection">
           <label class="application-settings-field">
             <span>{{ t("applicationSettings.secondaryIdlePromptText") }}</span>
             <input
@@ -358,7 +356,7 @@ async function testMemberPlatform() {
             <span>{{ secondaryIdleMediaLabel }}</span>
           </div>
           <small>{{ t("applicationSettings.secondaryIdleMediaHint") }}</small>
-        </fieldset>
+        </section>
 
         <label class="application-settings-field">
           <span>{{ t("applicationSettings.mode") }}</span>
@@ -369,8 +367,7 @@ async function testMemberPlatform() {
           <small>{{ t(`applicationSettings.modeHints.${draft.mode}`) }}</small>
         </label>
 
-        <fieldset class="application-settings-connection">
-          <legend>{{ t("applicationSettings.memberPlatform.title") }}</legend>
+        <section class="application-settings-connection">
           <p>{{ t("applicationSettings.memberPlatform.description") }}</p>
           <label class="application-settings-field">
             <span>{{ t("applicationSettings.memberPlatform.host") }}</span>
@@ -384,7 +381,7 @@ async function testMemberPlatform() {
             <span v-else-if="connectionTestStatus === 'failed'" class="application-settings-error">{{ t("applicationSettings.memberPlatform.testFailed") }}</span>
             <span v-else-if="connectionTestStatus === 'invalid'" class="application-settings-error">{{ t("applicationSettings.memberPlatform.invalid") }}</span>
           </div>
-        </fieldset>
+        </section>
 
         <div class="application-settings-actions">
           <button
@@ -410,8 +407,8 @@ async function testMemberPlatform() {
 
 <style scoped>
 .application-settings-view {
-  width: 100%;
-  max-width: none;
+  width: 92%;
+  max-width: 1600px;
   margin-inline: auto;
 }
 
@@ -495,15 +492,8 @@ async function testMemberPlatform() {
   display: grid;
   gap: 14px;
   min-width: 0;
-  padding: 18px;
-  border: 1px solid var(--ui-border);
-  border-radius: 6px;
-}
-
-.application-settings-connection legend {
-  padding: 0 6px;
-  color: var(--ui-text-secondary);
-  font-weight: 720;
+  padding: 0;
+  border: 0;
 }
 
 .application-settings-connection > p {
@@ -572,6 +562,7 @@ async function testMemberPlatform() {
   color: var(--ui-error) !important;
 }
 @media (max-width: 720px) {
+  .application-settings-view { width: 96%; }
   .application-settings-panel { padding: 18px; }
   .application-settings-field { grid-template-columns: minmax(0, 1fr); }
   .application-settings-field > small { grid-column: 1; }

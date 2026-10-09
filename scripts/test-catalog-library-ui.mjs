@@ -24,7 +24,7 @@ await context.addInitScript(() => {
   window.uiTest = {failOrder:false,failLanguage:false,orderDelay:0,orders:[],created:[],entered:0};
   window.dragEvents = [];
   for (const name of ['dragstart','dragover','drop','dragend']) document.addEventListener(name, event => { window.dragEvents.push([name,event.target.className]); if(window.dragEvents.length>30)window.dragEvents.shift(); },true);
-  let categories = persist('ui.categories', [1,2,3,4].map((id,index)=>({id,name:`Category ${id}`,cover:'',displayOrder:index})));
+  let categories = persist('ui.categories', [1,2,3,4].map((id,index)=>({id,name:id===4?'适合多人合作挑战的长名称游戏分类展示测试':`Category ${id}`,cover:'',displayOrder:index})));
   let games = persist('ui.games', [1,9,2,8,5,6].map((id,index)=>({id,name:id===9?'simple-demo':`Game ${id}`,type:id===8?'rank':'default',firstCatalog:id===1||id===2?'1':'2',displayOrder:index,childModeVisible:true})));
   let spirits = persist('ui.spirits',[0,1,2,3,99].map(color=>({id:`s${color}`,name:`Color ${color}`,color,width:2,height:2,points:'[[0,0]]',basic:color===0})));
   const idleState = {data:{engineState:'STOPPED',runtimeMode:'SIMULATION',running:false}};
@@ -75,6 +75,22 @@ try {
   for(const [width,height] of [[1366,768],[1920,1080],[2560,1440]]) await check(`布局 ${width}x${height}`,async()=>{
     await page.setViewportSize({width,height});await gameSection('首页');
     const box=await page.locator('.game-category-card').first().boundingBox(); assert.ok(Math.abs(box.width/box.height-2)<0.04);
+    const cover=await page.locator('.game-category-card-cover').first().boundingBox();
+    const name=await page.locator('.game-category-card-copy').first().boundingBox();
+    assert.ok(cover.height>0 && name.y>=cover.y+cover.height-1,'category name must be below its cover');
+    assert.ok(Math.abs(cover.width-name.width)<1,'cover and name span the same card width');
+    assert.equal(await page.locator('.game-category-card-copy small').count(),0);
+    const edit=await page.locator('.game-category-card-edit').first().boundingBox();
+    const title=await page.locator('.game-category-card-copy h2').first().boundingBox();
+    assert.ok(title.x+title.width<=edit.x,'title reserves room for edit button');
+    const titlesFit=await page.locator('.game-category-card').evaluateAll(cards=>cards.every(card=>{
+      const title=card.querySelector('h2').getBoundingClientRect();
+      const copy=card.querySelector('.game-category-card-copy').getBoundingClientRect();
+      const cover=card.querySelector('.game-category-card-cover').getBoundingClientRect();
+      const edit=card.querySelector('.game-category-card-edit').getBoundingClientRect();
+      return cover.height>0 && title.bottom<=copy.bottom && title.right<=edit.left;
+    }));
+    assert.ok(titlesFit,'long category names fit without overlapping the cover or edit button');
     assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
     await page.screenshot({path:path.join(output,`home-${width}.png`)});
     await gameSection('游戏列表'); const grid=await page.locator('.game-card-grid').boundingBox(); assert.ok(grid.width>width*0.85);

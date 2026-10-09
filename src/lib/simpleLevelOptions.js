@@ -46,6 +46,13 @@ export function normalizeLevelOption(option = {}) {
 export function validateLevelOption(option) {
   const normalized = normalizeLevelOption(option);
   const errors = [];
+  if (String(option?.pixelLightType) === '1') {
+    const min = Number(option.countdownMin), max = Number(option.countdownMax);
+    if (!Number.isInteger(min) || !Number.isInteger(max) || min < 1 || max < min || max > 99) {
+      errors.push({field:'countdownMin',messageKey:'circleLights.invalid'});
+      errors.push({field:'countdownMax',messageKey:'circleLights.invalid'});
+    }
+  }
   if (normalized.timeLimitMode !== "UNLIMITED" && normalized.timeLimitValue <= 0) {
     errors.push({ field: "timeLimitValue", messageKey: "simple.levelLimitPositive" });
   }

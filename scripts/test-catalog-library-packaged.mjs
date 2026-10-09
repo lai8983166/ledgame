@@ -53,6 +53,18 @@ try {
     return {a:a.id,b:b.id,games:usable.slice(0,2).map(item=>item.id),rank:games.find(game=>game.type==='rank')?.id};
   });
   await reloadCatalog();
+  for(const [width,height] of [[1366,768],[1920,1080],[2560,1440]]){
+    await page.setViewportSize({width,height});
+    const card=page.locator(`.game-category-card[data-id="${seeded.a}"]`);
+    const cover=await card.locator('.game-category-card-cover').boundingBox();
+    const name=await card.locator('.game-category-card-copy').boundingBox();
+    assert.ok(cover.height>0 && name.y>=cover.y+cover.height-1);
+    assert.ok(Math.abs(cover.width-name.width)<1);
+    assert.equal(await card.locator('.game-category-card-copy small').count(),0);
+    await page.screenshot({path:path.join(data,`home-${width}.png`)});
+  }
+  passed.push('首页分类卡片上封面下名称，三种窗口尺寸正常');
+  await page.setViewportSize({width:1366,height:768});
   await drag(page.locator(`.game-category-card[data-id="${seeded.b}"] .catalog-drag-handle`),page.locator(`.game-category-card[data-id="${seeded.a}"]`));
   assert.deepEqual((await page.evaluate(async()=> (await window.ledGame.listGameCategories()).data.map(item=>item.id))).slice(0,2),[seeded.b,seeded.a]);
   passed.push('打包版分类实际拖动写入数据库');

@@ -73,6 +73,11 @@ try {
   await check('配置隐藏端口，修改 IP、标题、取消文件选择后可继续输入', async () => {
     await mount('ApplicationSettingsView'); await page.locator('.application-settings-field input').first().waitFor();
     assert.equal(await page.locator('input[max="65535"]').count(), 0);
+    assert.equal(await page.locator('.application-settings-panel legend').count(),0);
+    for(const name of ['应用外观与安全','副屏待机标题','会员管理端连接'])assert.equal(await page.getByText(name,{exact:true}).count(),0);
+    for(const section of await page.locator('.application-settings-connection').all()){
+      assert.equal(await section.evaluate(el=>getComputedStyle(el).borderTopWidth),'0px');
+    }
     const host = page.locator('.application-settings-connection input[type=text]').last();
     await host.fill('192.168.50.10');
     await page.getByRole('button', { name: '测试连接', exact: true }).click();
@@ -84,6 +89,8 @@ try {
     for (const [width, height] of [[1366,768],[1920,1080],[2560,1440],[600,800]]) {
       await page.setViewportSize({ width, height }); await noOverflow();
       if (width > 720) {
+        const panel=await page.locator('.application-settings-view').boundingBox();
+        assert.ok(panel.x>=40 && width-panel.x-panel.width>=40 && panel.width<=1600);
         const boxes = await page.locator('.application-settings-field').first().evaluate(node => [node.firstElementChild.getBoundingClientRect().y, node.querySelector('input').getBoundingClientRect().y]);
         assert.ok(Math.abs(boxes[0] - boxes[1]) < 20);
       }

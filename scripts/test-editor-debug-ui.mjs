@@ -94,6 +94,42 @@ try{
     await button('请刷手环').click();await page.keyboard.type('2283055619');await page.keyboard.press('Enter');await page.locator('[role=dialog]').waitFor({state:'hidden'});await button('启动游戏').click();await button('退出调试，返回编辑').click();
     await mount('EditorDebugWorkspace',{game});await page.locator('input[type=number]').first().fill('3');assert.equal(await page.locator('input[type=number]').first().inputValue(),'3');await button('退出调试，返回编辑').click();
   });
+  await check('外围灯按保存布局显示黑灯、运行冻结多墙序号、点击不串地砖、暂停禁用及三种尺寸',async()=>{
+    const game=await page.evaluate(()=>structuredClone(window.fixture.simple));
+    game.commonConfig={pixelLightWiring:{selectedRow:'2|0',form:{open:1,order:0,topWallPixelLightNum:1,rightWallPixelLightNum:1,bottomWallPixelLightNum:1,leftWallPixelLightNum:1}}};
+    await mount('EditorDebugWorkspace',{game});
+    assert.equal(await page.locator('.debug-circle-light').count(),4);
+    assert.equal(await page.locator('.debug-circle-light[data-phase=OFF]').count(),4);
+    await button('启动游戏').click();
+    await page.evaluate(async()=>window.fixture.update({...(await window.ledGame.gameState()).data,peripheralLights:{enabled:true,order:0,selectedRow:'2|0',lights:[
+      {wall:0,index:0,sequenceIndex:2,phase:'BLUE',remaining:5},
+      {wall:1,index:0,sequenceIndex:1,phase:'GREEN',remaining:6},
+      {wall:2,index:0,sequenceIndex:0,phase:'YELLOW',remaining:0},
+      {wall:3,index:0,sequenceIndex:3,phase:'BLUE',remaining:4},
+    ]}}));
+    assert.equal(await page.locator('.debug-symbol-light').first().innerText(),'5');
+    const before=await page.evaluate(()=>window.fixture.requests.length);
+    await page.locator('.debug-circle-light[data-wall="0"]').click();
+    const request=(await page.evaluate(()=>window.fixture.requests)).at(-1);
+    assert.equal(request[1].command,'circleinput');assert.equal(request[1].circleIndex,2);
+    assert.equal((await page.evaluate(()=>window.fixture.requests)).length,before+1);
+    for(const [width,height] of [[1366,768],[1920,1080],[2560,1440]]){
+      await page.setViewportSize({width,height});await page.waitForTimeout(100);
+      const bounds=await page.locator('.debug-light-scene').boundingBox();
+      assert.ok(bounds.x>=0&&bounds.y>=0&&bounds.x+bounds.width<=width&&bounds.y+bounds.height<=height);
+      assert.equal(await page.locator('.debug-light-board').evaluate(el=>el.scrollHeight<=el.clientHeight&&el.scrollWidth<=el.clientWidth),true);
+      const square=await page.locator('.debug-circle-light').first().boundingBox();assert.ok(Math.abs(square.width-square.height)<0.1);
+      const canvas=await page.locator('canvas').boundingBox();const floor=await page.locator('.debug-light-floor').boundingBox();
+      assert.ok(canvas.x+canvas.width<=floor.x+floor.width+1&&canvas.y+canvas.height<=floor.y+floor.height+1);
+      await page.screenshot({path:path.join(output,`circle-${width}.png`)});
+    }
+    await page.setViewportSize({width:1366,height:768});await page.waitForTimeout(100);
+    await page.locator('canvas').click({position:{x:20,y:20}});
+    assert.equal((await page.evaluate(()=>window.fixture.requests)).at(-1)[1].command,'tileinput');
+    await button('暂停').click();assert.equal(await page.locator('.debug-circle-light').first().isDisabled(),true);
+    await button('继续').click();await button('退出调试，返回编辑').click();
+    assert.equal(await page.locator('.debug-circle-light[data-phase=OFF]').count(),4);
+  });
   for(const [name,id] of [['SimpleGameEditorView',1],['RankGameEditorView',4]])await check(name+' 编辑入口和保存草稿保留，无旧窗口',async()=>{
     await mount(name,{gameId:id});await button('启动游戏').waitFor();
     await button('启动游戏').click();

@@ -31,6 +31,7 @@ function mergeCatalog(base, addition) {
 
 const baseMessages = {
   "zh-CN": {
+    circleLights: {enabled:"圆灯倒计时",min:"最小秒数",max:"最大秒数",invalid:"请输入整数：1 ≤ 最小秒数 ≤ 最大秒数 ≤ 99",layoutRequired:"需启用并保存符号灯布局才会生效",light:"{wall}圆灯 {index}",top:"上墙",right:"右墙",bottom:"下墙",left:"左墙"},
     management: {
       reading: "正在读取…", changelog: "版本变更记录", about: "软件介绍", gameName: "游戏名称",
       appearanceSecurity: "应用外观与安全", appTitle: "应用标题", exitPassword: "Touch 界面退出密码",
@@ -578,6 +579,7 @@ const baseMessages = {
       chooseAnchor: "点击对象内部格子作为新基准",
       level: "关卡",
       levelLimits: "关卡限制",
+      levelBackgroundMusic: "关卡背景音乐",
       levelTimeLimit: "关卡时间限制",
       levelTimeUnlimited: "无限制",
       levelTimeCycleCount: "循环 n 次",
@@ -656,6 +658,7 @@ const baseMessages = {
     },
   },
   "en-US": {
+    circleLights: {enabled:"Circle light countdown",min:"Minimum seconds",max:"Maximum seconds",invalid:"Enter integers: 1 ≤ minimum ≤ maximum ≤ 99",layoutRequired:"Enable and save a peripheral light layout first",light:"{wall} circle light {index}",top:"Top",right:"Right",bottom:"Bottom",left:"Left"},
     management: {
       reading: "Loading…", changelog: "Version history", about: "About", gameName: "Game name",
       appearanceSecurity: "Appearance and security", appTitle: "Application title", exitPassword: "Touch exit password",
@@ -1203,6 +1206,7 @@ const baseMessages = {
       chooseAnchor: "Click a cell inside the object to set its new anchor",
       level: "Level",
       levelLimits: "Level Limits",
+      levelBackgroundMusic: "Stage background music",
       levelTimeLimit: "Level time limit",
       levelTimeUnlimited: "Unlimited",
       levelTimeCycleCount: "Cycle n times",

@@ -35,7 +35,6 @@ watch(() => props.category.cover, () => { coverFailed.value = false; });
       </span>
       <span class="game-category-card-copy">
         <h2>{{ category.name }}</h2>
-        <small>{{ t("gameCategories.openHint") }}</small>
       </span>
     </button>
     <button

@@ -60,20 +60,29 @@ try {
     assert.equal(await page.locator('.object-sprite-button').count(),0);
     assert.equal(await page.locator('.object-panel .object-action-palette button').count(),4);
   });
-  await check('关卡资源仅在基础信息，全局配置不覆盖草稿、保存重开与取消选择',async()=>{
+  await check('共用资源在全局配置，背景音乐逐关独立，保存不提前提交关卡草稿',async()=>{
     const fields=page.locator('.editor-level-media-field');
-    assert.equal(await fields.count(),4);
-    await fields.first().getByRole('button',{name:'选择 关卡通过语音',exact:true}).click();
+    assert.equal(await fields.count(),1);
+    await fields.first().getByRole('button',{name:'选择 关卡背景音乐',exact:true}).click();
     await page.locator('.media-picker-dialog').waitFor();await button('取消').click();
     assert.equal(await fields.first().locator('input').inputValue(),'');
-    for(const [index,name] of ['pass.mp3','retry.mp3','pass.gif','fail.gif'].entries()){
-      await fields.nth(index).getByRole('button',{name:/^选择 /}).click();
-      await page.locator('.media-picker-row[data-path="'+name+'"]').click();
-      await button('确认').click();await page.locator('.media-picker-dialog').waitFor({state:'hidden'});
-    }
-    assert.equal(await fields.locator('audio').count(),2);assert.equal(await fields.locator('img').count(),2);
+    await fields.first().getByRole('button',{name:'选择 关卡背景音乐',exact:true}).click();
+    assert.equal(await page.locator('.media-picker-row[data-path="pass.gif"]').count(),0);
+    await page.locator('.media-picker-row[data-path="pass.mp3"]').click();await button('确认').click();
+    await page.locator('.media-picker-dialog').waitFor({state:'hidden'});
+    await page.evaluate(()=>{const s=window.getComponentSetup();s.document.levels.push({...structuredClone(window.fixture.game.levels[0]),option:{bgVoice:'retry.mp3'}});s.activeLevelIndex=1;});
+    assert.equal(await fields.first().locator('input').inputValue(),'retry.mp3');
+    await page.evaluate(()=>window.getComponentSetup().activeLevelIndex=0);
+    assert.equal(await fields.first().locator('input').inputValue(),'pass.mp3');
+    assert.equal(await fields.locator('audio').count(),1);assert.equal(await fields.locator('img').count(),0);
     await button('全局配置').click();await page.locator('.global-config-dialog').waitFor();
-    for(const label of ['关卡通过语音','关卡重启语音','关卡结算动画','关卡失败动画'])assert.equal(await page.locator('.global-config-dialog').getByText(label,{exact:true}).count(),0);
+    for(const [label,name] of [['关卡通过语音','pass.mp3'],['关卡重启语音','retry.mp3'],['关卡结算动画','pass.gif'],['关卡失败动画','fail.gif']]){
+      const field=page.locator('.global-config-field').filter({has:page.locator('.global-config-label').getByText(label,{exact:true})});
+      assert.equal(await field.count(),1);
+      await field.getByRole('button',{name:'选择',exact:true}).click();
+      await page.locator('.media-picker-row[data-path="'+name+'"]').click();await button('确认').click();
+      await page.locator('.media-picker-dialog').waitFor({state:'hidden'});
+    }
     await page.evaluate(()=>window.fixture.failSave=true);
     await page.locator('.global-config-dialog').getByRole('button',{name:'保存',exact:true}).click();
     await page.getByText('保存失败',{exact:true}).first().waitFor();
@@ -82,16 +91,45 @@ try {
     await page.locator('.global-config-dialog').getByRole('button',{name:'保存',exact:true}).click();
     await page.locator('.global-config-dialog').waitFor({state:'hidden'});
     assert.equal(await fields.first().locator('input').inputValue(),'pass.mp3');
-    assert.equal(await page.evaluate(()=>window.fixture.game.commonConfig?.levelPassAudio || ''),'');
+    assert.equal(await page.evaluate(()=>window.fixture.game.commonConfig?.levelPassAudio),'pass.mp3');
+    assert.equal(await page.evaluate(()=>window.fixture.game.levels[0].option?.bgVoice || ''),'');
     await button('保存').click();await mount();
-    assert.deepEqual(await fields.locator('input').evaluateAll(els=>els.map(el=>el.value)),['pass.mp3','retry.mp3','pass.gif','fail.gif']);
-    await fields.first().getByRole('button',{name:'选择 关卡通过语音',exact:true}).click();await button('取消').click();
+    assert.deepEqual(await page.evaluate(()=>window.fixture.game.levels.map(level=>level.option.bgVoice)),['pass.mp3','retry.mp3']);
+    await fields.first().getByRole('button',{name:'选择 关卡背景音乐',exact:true}).click();await button('取消').click();
     assert.equal(await fields.first().locator('input').inputValue(),'pass.mp3');
     const matrixBefore=await page.locator('.matrix-overlay-canvas').boundingBox();
     await fields.last().scrollIntoViewIfNeeded();
     assert.deepEqual(await page.locator('.matrix-overlay-canvas').boundingBox(),matrixBefore);
     assert.equal(await page.locator('.editor-left').evaluate(el=>el.scrollWidth<=el.clientWidth),true);
     await page.screenshot({path:path.join(output,'level-media-1366.png')});
+    await page.evaluate(()=>window.fixture.game.levels.pop());await mount();
+  });
+  await check('圆灯每关开关/整数校验、取消、保存失败、切关独立与保存重开',async()=>{
+    const section=page.locator('.editor-circle-countdown');
+    assert.equal(await section.locator('input[type=checkbox]').isChecked(),false);
+    await section.locator('input[type=checkbox]').check();
+    const numbers=section.locator('input[type=number]');
+    assert.deepEqual(await numbers.evaluateAll(items=>items.map(item=>item.value)),['5','10']);
+    await numbers.first().fill('0');assert.equal(await section.locator('.field-error').count(),1);
+    const saves=await page.evaluate(()=>window.fixture.saves);await button('保存').click();
+    assert.equal(await page.evaluate(()=>window.fixture.saves),saves);
+    await numbers.first().fill('2');await numbers.last().fill('4');
+    await button('启动游戏').click();await button('取消').click();
+    assert.equal(await numbers.first().inputValue(),'2');
+    assert.notEqual(await page.evaluate(()=>window.fixture.game.levels[0].option.pixelLightType),'1');
+    await page.evaluate(()=>{const s=window.getComponentSetup();s.document.levels.push({...structuredClone(window.fixture.game.levels[0]),option:{pixelLightType:'1',countdownMin:7,countdownMax:9}});s.activeLevelIndex=1;});
+    assert.equal(await numbers.first().inputValue(),'7');
+    await page.evaluate(()=>window.getComponentSetup().activeLevelIndex=0);
+    assert.equal(await numbers.first().inputValue(),'2');
+    await page.evaluate(()=>window.fixture.failSave=true);await button('保存').click();
+    assert.notEqual(await page.evaluate(()=>window.fixture.game.levels[0].option.pixelLightType),'1');
+    assert.equal(await numbers.first().inputValue(),'2');
+    await page.evaluate(()=>window.fixture.failSave=false);await button('保存').click();await mount();
+    assert.deepEqual(await page.evaluate(()=>window.fixture.game.levels.map(level=>[level.option.countdownMin,level.option.countdownMax])),[[2,4],[7,9]]);
+    assert.equal(await section.locator('input[type=checkbox]').isChecked(),true);
+    assert.equal(await section.getByText('需启用并保存符号灯布局才会生效',{exact:true}).count(),1);
+    await section.locator('input[type=checkbox]').uncheck();await button('保存').click();
+    await page.evaluate(()=>window.fixture.game.levels.pop());await mount();
   });
   await check('帧下统一行、隐藏入口、实心四宫格和文字重复次数',async()=>{
     assert.equal(await page.locator('.editor-side-rail').count(),0);
@@ -99,6 +137,14 @@ try {
     assert.equal(await page.locator('.editor-toolbar button[aria-label="启动游戏"]').count(),1);
     for(const action of ['复制当前帧到前一帧','添加帧','修改基准点','改色','左转90']) assert.equal(await button(action).count(),0);
     assert.equal(await button('右转90').count(),1);
+    assert.equal(await page.locator('.editor-config-actions').count(),0);
+    const firstButton=await page.locator('.editor-toolbar button').first().boundingBox();
+    for(const action of ['全局配置','符号灯布局','地砖布线','特效']){
+      const entry=page.locator('.editor-toolbar').getByRole('button',{name:action,exact:true});
+      assert.equal(await entry.count(),1);assert.equal(await entry.innerText(),'');
+      assert.equal(await entry.locator('svg').count(),1);assert.equal(await entry.getAttribute('title'),action);
+      assert.equal((await entry.boundingBox()).y,firstButton.y);
+    }
     assert.equal(await page.locator('.repeat-times-control button').innerText(),'复制重复次数');
     assert.equal(await page.locator('.color-copy-button rect[fill="currentColor"]').count(),16);
   });

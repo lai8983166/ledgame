@@ -25,6 +25,12 @@ try {
   await page.locator('.app-nav').waitFor();
   assert.ok(page.url().startsWith('file:'));
   const games=(await api('listManageableGames')).data;
+  const audioPaths = await page.evaluate(async () => {
+    const collect = nodes => nodes.flatMap(node => node.kind === 'directory'
+      ? collect(node.children || []) : node.mediaType === 'audio' ? [node.relativePath] : []);
+    return collect((await window.mediaLibrary.list()).items || []);
+  });
+  assert.ok(audioPaths.length, 'packaged media library must provide a real stage audio resource');
   const shared=games.filter(game=>game.type!=='rank'&&game.name!=='simple-demo').slice(0,3);
   assert.equal(shared.length,3,'seed must include three shared-editor games');
   await page.getByTestId('game-menu-button').click();
@@ -38,6 +44,7 @@ try {
       {repeatTimes:1,matrix:[{id:'center-test',x:5,y:5,color:2,points:[[0,0],[2,2]]}]},
       {repeatTimes:1,matrix:[]},
     ]}];
+    doc.levels[0].option={...doc.levels[0].option,bgVoice:audioPaths[0]};
     assert.equal((await api('saveGameEditor',id,doc)).data.saved,true);
     await page.reload();await page.locator('.app-nav').waitFor();
     await page.getByTestId('game-menu-button').click();
@@ -45,12 +52,13 @@ try {
     await page.locator('.game-card[data-id="'+id+'"] .game-card-main').click();
     await page.locator('.editor-toolbar').waitFor();
     const stageMedia=[doc.commonConfig?.levelPassAudio || '',doc.commonConfig?.levelRestartAudio || '',doc.gif?.levelSettlement || '',doc.gif?.levelFailure || ''];
-    assert.deepEqual(await page.locator('.editor-level-media-field input').evaluateAll(els=>els.map(el=>el.value)),stageMedia);
+    assert.equal(await page.locator('.editor-level-media-field input').inputValue(),doc.levels[0].option?.bgVoice || '');
     await page.getByRole('button',{name:'全局配置',exact:true}).click();
-    for(const label of ['关卡通过语音','关卡重启语音','关卡结算动画','关卡失败动画'])assert.equal(await page.locator('.global-config-dialog').getByText(label,{exact:true}).count(),0);
+    for(const label of ['关卡通过语音','关卡重启语音','关卡结算动画','关卡失败动画'])assert.equal(await page.locator('.global-config-dialog .global-config-label').getByText(label,{exact:true}).count(),1);
     await page.locator('.global-config-dialog').getByRole('button',{name:'取消',exact:true}).click();
     assert.equal(await page.getByRole('button',{name:'左转90',exact:true}).count(),0);
     assert.equal(await page.getByRole('button',{name:'右转90',exact:true}).count(),1);
+    for(const name of ['全局配置','符号灯布局','地砖布线','特效'])assert.equal(await page.locator('.editor-toolbar').getByRole('button',{name,exact:true}).innerText(),'');
     await page.waitForFunction(()=>document.querySelector('.simple-editor-fit-shell')?.classList.contains('ready'));
     assert.equal(await page.locator('.editor-side-rail').count(),0);
     assert.equal(await page.locator('.object-panel .object-actions').count(),0);
@@ -70,6 +78,7 @@ try {
     await page.getByRole('button',{name:'保存',exact:true}).click();
     await expect.poll(async()=> (await api('getGameEditor',id)).data.levels[0].frameList[0].matrix.length).toBe(3);
     const saved=(await api('getGameEditor',id)).data;
+    assert.equal(saved.levels[0].option?.bgVoice || '',doc.levels[0].option?.bgVoice || '');
     assert.deepEqual([saved.commonConfig?.levelPassAudio || '',saved.commonConfig?.levelRestartAudio || '',saved.gif?.levelSettlement || '',saved.gif?.levelFailure || ''],stageMedia);
     const matrix=saved.levels[0].frameList[0].matrix;
     const centered=matrix.find(o=>o.id==='center-test');

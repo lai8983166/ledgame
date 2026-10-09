@@ -33,7 +33,18 @@ test("effect frames use the existing game save payload and leave global wiring i
 });
 
 test("effect button sits beside existing global and pixel-light configuration", () => {
-  assert.match(source, /t\("simple\.globalConfig"\)/);
-  assert.match(source, /t\("pixelLight\.open"\)/);
-  assert.match(source, /t\("effect\.open"\)/);
+  const start = source.indexOf('<div v-if="document" class="editor-toolbar">');
+  const end = source.indexOf('<div class="editor-feedback"', start);
+  assert.ok(start >= 0 && end > start);
+  const toolbar = source.slice(start, end);
+  for (const [key, icon, handler] of [
+    ["simple.globalConfig", "settings", "openGlobalConfig"],
+    ["pixelLight.open", "pixel-light", "openPixelLightLayout"],
+    ["effect.open", "effect", "openEffectDialog"],
+  ]) {
+    const button = toolbar.match(new RegExp('<button[^>]*:aria-label="t\\([\x27\"]' + key.replaceAll('.', '\\.') + '[\x27\"]\\)"[^>]*>[\\s\\S]*?</button>'))?.[0];
+    assert.ok(button, `${key} must be an accessible toolbar button`);
+    assert.ok(button.includes(`@click="${handler}"`));
+    assert.ok(button.includes(`<EditorActionIcon name="${icon}" />`));
+  }
 });
