@@ -21,6 +21,19 @@ export function getAbsoluteObjectCells(object) {
   }));
 }
 
+// Rebase only: even bounds use the upper/left integer center, including negatives.
+export function centerObjectAnchor(object) {
+  if (Array.isArray(object?.points) && !object.points.length) return { ...object, points: [] };
+  const cells = getAbsoluteObjectCells(object);
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const { x, y } of cells) {
+    minX = Math.min(minX, x); minY = Math.min(minY, y);
+    maxX = Math.max(maxX, x); maxY = Math.max(maxY, y);
+  }
+  const x = Math.floor((minX + maxX) / 2), y = Math.floor((minY + maxY) / 2);
+  return { ...object, x, y, points: cells.map(cell => [cell.x - x, cell.y - y]) };
+}
+
 export function canSelectObjectForMerge(matrix, selectedIds, candidateId) {
   const objects = Array.isArray(matrix) ? matrix : [];
   const candidate = objects.find((object) => object?.id === candidateId);

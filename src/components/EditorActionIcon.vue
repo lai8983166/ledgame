@@ -69,10 +69,24 @@ defineProps({
       <path d="M11 8h5M11 12h5" />
     </template>
     <template v-else-if="name === 'copy-color'">
-      <rect x="4" y="4" width="6" height="6" rx=".7" />
-      <rect x="14" y="4" width="6" height="6" rx=".7" />
-      <rect x="4" y="14" width="6" height="6" rx=".7" />
-      <rect x="14" y="14" width="6" height="6" rx=".7" />
+      <rect x="4" y="4" width="6" height="6" rx=".7" fill="currentColor" />
+      <rect x="14" y="4" width="6" height="6" rx=".7" fill="currentColor" />
+      <rect x="4" y="14" width="6" height="6" rx=".7" fill="currentColor" />
+      <rect x="14" y="14" width="6" height="6" rx=".7" fill="currentColor" />
+    </template>
+    <template v-else-if="name === 'save'">
+      <path d="M5 3h12l4 4v14H3V3h2ZM7 3v6h10V3M7 21v-8h10v8M14 5v2" />
+    </template>
+    <template v-else-if="name === 'play'">
+      <path d="m7 4 13 8-13 8V4Z" />
+    </template>
+    <template v-else-if="name === 'preview'">
+      <path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12Z" />
+      <circle cx="12" cy="12" r="3" />
+    </template>
+    <template v-else-if="name === 'export'">
+      <rect x="3" y="4" width="18" height="16" rx="2" />
+      <path d="m5 16 4-4 3 3M12 19l5-6 4 4M16 3v6m-3-3 3 3 3-3" />
     </template>
     <template v-else-if="name === 'trash'">
       <path d="M5 7h14M10 4h4l1 3H9l1-3ZM7 7l.8 13h8.4L17 7M10 10v7M14 10v7" />

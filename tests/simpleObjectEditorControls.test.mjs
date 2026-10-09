@@ -30,15 +30,15 @@ test("object list is collapsed by default and can be toggled", () => {
   assert.match(editorSource, /simple\.showSpritePreview/);
 });
 
-test("brush mode and color controls are hosted by the object editor", () => {
-  const objectPanel = editorSource.match(/<div class="object-panel">([\s\S]*?)<\/div>\s*<div class="editor-side-rail">/);
-  assert.ok(objectPanel, "object panel block");
-  assert.match(objectPanel[1], /<EditorInteractionModeSwitch/);
-  assert.match(objectPanel[1], /class="object-action-palette"/);
-  assert.doesNotMatch(
-    editorSource.slice(editorSource.indexOf('<div class="editor-side-rail">')),
-    /<EditorInteractionModeSwitch|class="palette-options"/,
-  );
+test("mode toggles are removed and single-color controls live in the object panel", () => {
+  const toolbar = editorSource.slice(editorSource.indexOf('<div v-if="document" class="editor-toolbar">'),
+    editorSource.indexOf('<div class="editor-feedback"'));
+  assert.doesNotMatch(editorSource, /EditorInteractionModeSwitch|setInteractionMode|interactionMode/);
+  assert.doesNotMatch(toolbar, /class="object-action-palette"/);
+  const objectPanel = editorSource.slice(editorSource.indexOf('<div class="object-panel">'));
+  assert.match(objectPanel, /class="object-action-palette"/);
+  assert.doesNotMatch(objectPanel, /class="object-actions"/);
+  assert.doesNotMatch(editorSource, /<div class="editor-side-rail">/);
 });
 
 test("sprite brush filters the library and creates a sprite object", () => {
@@ -48,8 +48,8 @@ test("sprite brush filters the library and creates a sprite object", () => {
   assert.match(editorSource, /const filteredEditorSprites = computed\(\(\) =>/);
   assert.match(editorSource, /function createSpriteMatrixObject\(x, y, sprite, frame\)/);
   assert.match(editorSource, /runRgbEdit\(currentFrameRgbHistoryTargets\(\), "create-sprite-object"/);
-  assert.match(editorSource, /class="[^\"]*object-sprite-button[^\"]*"/);
-  assert.match(editorSource, /<EditorActionIcon name="sprite" \/>/);
+  assert.doesNotMatch(editorSource, /object-sprite-button/);
+  assert.match(editorSource, /function selectEditorSprite[\s\S]*spriteBrushActive\.value = true/);
   assert.match(editorSource, /<div v-else-if="!anchorEditMode" class="sprite-preview-panel">/);
   assert.match(editorSource, /v-model="spriteSearchText"/);
   assert.match(editorSource, /v-for="sprite in filteredEditorSprites"/);

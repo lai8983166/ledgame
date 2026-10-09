@@ -1,9 +1,9 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, toRaw, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import EditorInteractionModeSwitch from "../components/EditorInteractionModeSwitch.vue";
 import EditorActionIcon from "../components/EditorActionIcon.vue";
 import EditorSpritePreview from "../components/EditorSpritePreview.vue";
+import { filterEditorSprites } from '../lib/simpleEditorSprites.js';
 import SimpleMatrixCanvas from "../components/SimpleMatrixCanvas.vue";
 import SimpleLevelPreviewDialog from "../components/SimpleLevelPreviewDialog.vue";
 import GameGlobalConfigDialog from "../components/GameGlobalConfigDialog.vue";
@@ -16,7 +16,7 @@ import { isDebugRuntimeAvailable } from '../lib/editorDebugSession.js';
 import { saveGameWiring } from "../lib/gameWiring.js";
 import { encodeSimpleGifInWorker } from "../lib/encodeSimpleGif.js";
 import { prepareSimpleLevelGif, selectSimpleTopItem } from "../lib/simpleLevelGif.js";
-import { resolveLiveOccupancyCell } from "../lib/simpleOccupancy.js";
+import { resolveLiveOccupancyCell, canApplyColorOccupancy, filterUnoccupiedColorCells } from "../lib/simpleOccupancy.js";
 import { createLevelPreviewSnapshot } from "../lib/simpleLevelPreview.js";
 import { createWholeFrameCopyPlan } from "../lib/simpleFrameCopyPlan.js";
 import { insertFrameAfter } from "../lib/simpleFrameSequence.js";
@@ -39,6 +39,7 @@ import {
 } from "../lib/guardedAsyncFlow.js";
 import {
   canSelectObjectForMerge,
+  centerObjectAnchor,
   MERGE_ERROR,
   mergeSameColorObjects,
 } from "../lib/simpleObjectMerge.js";
@@ -120,7 +121,6 @@ const document = ref(null);
 const activeLevelIndex = ref(0);
 const activeFrameIndex = ref(0);
 const selectedColor = ref(0);
-const interactionMode = ref("select-move");
 const spriteBrushActive = ref(false);
 const spriteSearchText = ref("");
 const selectedSpriteId = ref("");
@@ -272,12 +272,8 @@ const colorOptions = computed(() => [
   { index: 3, label: "Color 3", value: normalizeColor(document.value?.color3, "#ffffff") },
 ]);
 const colorSelectionDisabled = computed(
-  () => interactionMode.value !== "add" || selectionMode.value || anchorEditMode.value,
+  () => Boolean(busyAction.value) || selectionMode.value || anchorEditMode.value,
 );
-const interactionModeOptions = computed(() => [
-  { value: "add", label: t("simple.modeAdd"), icon: "+", title: t("simple.modeAddTitle") },
-  { value: "select-move", label: t("simple.modeSelectMove"), icon: "↖", title: t("simple.modeSelectTitle") },
-]);
 const normalizedEditorSprites = computed(() =>
   effectSpirits.value
     .map((sprite) => normalizeEffectSprite(sprite))
@@ -295,18 +291,16 @@ const spriteDimensionFilter = computed(() => {
   }
   return { width, height };
 });
-const filteredEditorSprites = computed(() => {
-  const dimensions = spriteDimensionFilter.value;
-  if (!dimensions) {
-    return [];
-  }
-  return normalizedEditorSprites.value.filter(
-    (sprite) => sprite.width === dimensions.width && sprite.height === dimensions.height,
-  );
-});
+const filteredEditorSprites = computed(() => filterEditorSprites(normalizedEditorSprites.value, spriteSearchText.value));
 const selectedEditorSprite = computed(() =>
   filteredEditorSprites.value.find((sprite) => sprite.id === selectedSpriteId.value) || null,
 );
+watch(selectedEditorSprite, sprite => {
+  if (!sprite && spriteBrushActive.value) {
+    spriteBrushActive.value = false;
+    selectedSpriteId.value = '';
+  }
+});
 const matrixCells = computed(() => {
   matrixCacheRevision.value;
   const frame = previewFrame.value;
@@ -319,7 +313,7 @@ const matrixOverlayHighlights = computed(() => {
   }
   const highlights = [];
   const hovered = (frame.matrix || []).find((object) => object.id === hoveredObjectId.value);
-  if (hovered && interactionMode.value === "select-move") {
+  if (hovered) {
     for (const cell of getObjectCells(hovered)) {
       if (!isCellInMatrixRange(cell.x, cell.y)) {
         continue;
@@ -579,7 +573,6 @@ async function loadEditor() {
     activeLevelIndex.value = 0;
     activeFrameIndex.value = 0;
     selectedColor.value = 0;
-    interactionMode.value = "select-move";
     spriteBrushActive.value = false;
     spriteSearchText.value = "";
     selectedSpriteId.value = "";
@@ -1050,6 +1043,14 @@ function applyEffectResult(result) {
     generatedFrames,
     result.config?.mode,
   );
+  const startIndex = Math.min(level.frameList.length, Math.max(0, activeFrameIndex.value));
+  if (!generatedFrames.every((_frame, offset) => canApplyColorOccupancy(
+    result.config?.mode === 'merge' ? level.frameList[startIndex + offset]?.matrix : [],
+    applied.frameList[startIndex + offset]?.matrix,
+  ))) return;
+  applied.frameList.forEach((frame, index) => {
+    frame.matrix = (frame.matrix || []).map(object => normalizeMatrixObject(object, frame, index));
+  });
   level.frameList = applied.frameList;
   activeFrameIndex.value = applied.selectedFrameIndex;
   resetMatrixFrameCache();
@@ -1192,6 +1193,7 @@ async function importFrame() {
     const normalized = matrixSource
       .map((entry) => normalizeMatrixObject(entry, frame, frameIndex))
       .filter((object) => isObjectInsideRealMatrix(object));
+    if (!canApplyColorOccupancy([], normalized)) return;
     const dropped = matrixSource.length - normalized.length;
     frame.matrix = normalized.map((object) => ({
       x: toInteger(object.x, 0),
@@ -1570,6 +1572,7 @@ function captureRgbHistorySnapshot(targets) {
 
 function cloneRgbMatrix(matrix) {
   return (matrix || []).map((object) => ({
+    ...JSON.parse(JSON.stringify(toRaw(object))),
     id: object.id,
     x: toInteger(object.x, 0),
     y: toInteger(object.y, 0),
@@ -1580,12 +1583,29 @@ function cloneRgbMatrix(matrix) {
 
 function runRgbEdit(targets, action, mutation) {
   const before = captureRgbHistorySnapshot(targets);
+  const selection = { mode: selectionMode.value, ids: [...mergeSelectionIds.value] };
   const result = mutation();
+  for (const target of targets) {
+    const frame = document.value?.levels?.[target.levelIndex]?.frameList?.[target.frameIndex];
+    if (frame) frame.matrix = frame.matrix.map(centerObjectAnchor);
+  }
   const after = captureRgbHistorySnapshot(targets);
+  if (!after.matrices.every((item, index) =>
+    canApplyColorOccupancy(before.matrices[index]?.matrix, item.matrix))) {
+    // Synchronous mutations are rolled back before Vue paints or history is committed.
+    restoreRgbHistorySnapshot(before);
+    selectionMode.value = selection.mode;
+    mergeSelectionIds.value = selection.ids;
+    return false;
+  }
+  // Rebasing changed object references; discard only affected derived caches.
+  for (const target of targets) {
+    invalidateMatrixFrame(document.value?.levels?.[target.levelIndex]?.frameList?.[target.frameIndex]);
+  }
   if (rgbEditHistory.commit(before, after, { action })) {
     rgbHistoryRevision.value += 1;
   }
-  return result;
+  return result === false ? false : true;
 }
 
 function clearRgbEditHistory() {
@@ -1835,46 +1855,18 @@ function selectColor(index) {
     return;
   }
   spriteBrushActive.value = false;
+  selectedSpriteId.value = '';
   selectedColor.value = index;
 }
 
-function toggleSpriteBrush() {
-  if (selectionMode.value || anchorEditMode.value) {
-    return;
-  }
-  spriteBrushActive.value = !spriteBrushActive.value;
-  interactionMode.value = "add";
-  objectDragState = null;
-  objectDragPreview.value = null;
-  hoveredObjectId.value = "";
-  stopSelectionMode();
-  stopAnchorEdit();
-  statusMessage.value = t(
-    spriteBrushActive.value ? "simple.spriteBrushEnabled" : "simple.addModeStatus",
-  );
-}
-
 function selectEditorSprite(sprite) {
-  selectedSpriteId.value = sprite?.id || "";
-}
-
-function setInteractionMode(mode) {
-  if (mode !== "add" && mode !== "select-move") {
-    return;
-  }
-  interactionMode.value = mode;
-  if (mode !== "add") {
-    spriteBrushActive.value = false;
-  }
-  objectDragState = null;
-  objectDragPreview.value = null;
-  hoveredObjectId.value = "";
-  stopSelectionMode();
-  stopAnchorEdit();
-  statusMessage.value = t(mode === "add" ? "simple.addModeStatus" : "simple.selectModeStatus");
+  if (colorSelectionDisabled.value || !sprite) return;
+  selectedSpriteId.value = sprite.id;
+  spriteBrushActive.value = true;
 }
 
 function handleCellClick(x, y) {
+  if (busyAction.value) return;
   const frame = ensureActiveFrame();
   const existing = getExpandedCellAt(x, y);
   if (anchorEditMode.value) {
@@ -1887,16 +1879,8 @@ function handleCellClick(x, y) {
   }
   const topObject = getTopOccupancyEntry(existing?.occupants)?.object;
   if (topObject?.id) {
-    if (interactionMode.value === "select-move") {
       selectObject(topObject.id);
       statusMessage.value = t("simple.objectSelected");
-    } else {
-      statusMessage.value = t("simple.occupiedNoCreate");
-    }
-    return;
-  }
-  if (interactionMode.value !== "add") {
-    statusMessage.value = t("simple.switchToAdd");
     return;
   }
   if (!panoramaMode.value && !isRealCell(x, y)) {
@@ -1914,14 +1898,15 @@ function handleCellClick(x, y) {
       statusMessage.value = t("simple.spriteOutOfBounds");
       return;
     }
-    runRgbEdit(currentFrameRgbHistoryTargets(), "create-sprite-object", () => {
+    if (!runRgbEdit(currentFrameRgbHistoryTargets(), "create-sprite-object", () => {
       frame.matrix.push(object);
       patchMatrixFrame(frame, object, "add");
       selectedObjectId.value = object.id;
-    });
+    })) return;
     statusMessage.value = t("simple.spriteCreated", { name: sprite.name });
     return;
   }
+  if (!filterUnoccupiedColorCells(frame.matrix, [{x,y}], selectedColor.value).length) return;
   runRgbEdit(currentFrameRgbHistoryTargets(), "create-object", () => {
     const object = createMatrixObject(x, y, selectedColor.value, frame);
     frame.matrix.push(object);
@@ -1932,11 +1917,11 @@ function handleCellClick(x, y) {
 }
 
 function handleCellRangeCreate(payload) {
-  if (interactionMode.value !== "add" || spriteBrushActive.value || anchorEditMode.value || selectionMode.value) {
+  if (busyAction.value || spriteBrushActive.value || anchorEditMode.value || selectionMode.value) {
     return;
   }
   const frame = ensureActiveFrame();
-  const cells = dedupeCells(payload?.cells || []);
+  const cells = filterUnoccupiedColorCells(frame.matrix, dedupeCells(payload?.cells || []), selectedColor.value);
   if (!cells.length) {
     return;
   }
@@ -1962,7 +1947,7 @@ function handleCellRangeCreate(payload) {
 }
 
 function handleObjectDragStart(cell) {
-  if (interactionMode.value !== "select-move" || selectionMode.value || anchorEditMode.value) {
+  if (busyAction.value || selectionMode.value || anchorEditMode.value) {
     return;
   }
   const existing = getExpandedCellAt(cell?.x, cell?.y);
@@ -1995,7 +1980,6 @@ function handleObjectDragStart(cell) {
 
 function handleCellHover(cell) {
   if (
-    interactionMode.value !== "select-move" ||
     selectionMode.value ||
     anchorEditMode.value ||
     objectDragState ||
@@ -2045,7 +2029,7 @@ function handleObjectDragEnd(payload) {
     if (!selectedObject.value || selectedObject.value.id !== dragState.objectId) {
       return;
     }
-    runRgbEdit(currentFrameRgbHistoryTargets(), "drag-object", () => {
+    if (!runRgbEdit(currentFrameRgbHistoryTargets(), "drag-object", () => {
       const object = selectedObject.value;
       const previousX = toInteger(object.x, 0);
       const previousY = toInteger(object.y, 0);
@@ -2060,7 +2044,7 @@ function handleObjectDragEnd(payload) {
           y: anchorCandidate.value.y + toInteger(object.y, 0) - previousY,
         };
       }
-    });
+    })) return;
     statusMessage.value = t("simple.objectMoved");
   }
 }
@@ -2120,9 +2104,6 @@ function deleteSelectedObject() {
   const frame = ensureActiveFrame();
   const index = frame.matrix.findIndex((object) => object.id === selectedObjectId.value);
   if (index < 0) {
-    return;
-  }
-  if (!confirmWithRendererFocus(t("simple.deleteObjectConfirm"))) {
     return;
   }
   runRgbEdit(currentFrameRgbHistoryTargets(), "delete-object", () => {
@@ -2206,14 +2187,14 @@ function copySelectedObjectToAllFrames() {
   const targetIndices = frames.value
     .map((_frame, frameIndex) => frameIndex)
     .filter((frameIndex) => frameIndex !== activeFrameIndex.value);
-  runRgbEdit(currentLevelRgbHistoryTargets(targetIndices), "copy-object-to-all-frames", () => {
+  if (!runRgbEdit(currentLevelRgbHistoryTargets(targetIndices), "copy-object-to-all-frames", () => {
     targetIndices.forEach((frameIndex) => {
       const frame = frames.value[frameIndex];
       upsertObjectInFrame(selectedObject.value, frame);
       invalidateMatrixFrame(frame);
       copied += 1;
     });
-  });
+  })) return;
   statusMessage.value = copied
     ? t("simple.framesUpdated", { count: copied })
     : t("simple.noTargetFrames");
@@ -2233,7 +2214,7 @@ function copyColorObjectsToAllFrames(colorIndex) {
     .map((_frame, frameIndex) => frameIndex)
     .filter((frameIndex) => frameIndex !== activeFrameIndex.value);
   let copiedFrames = 0;
-  runRgbEdit(currentLevelRgbHistoryTargets(targetIndices), "copy-color-to-all-frames", () => {
+  if (!runRgbEdit(currentLevelRgbHistoryTargets(targetIndices), "copy-color-to-all-frames", () => {
     for (const frameIndex of targetIndices) {
       const targetFrame = frames.value[frameIndex];
       for (const object of sourceObjects) {
@@ -2242,7 +2223,7 @@ function copyColorObjectsToAllFrames(colorIndex) {
       invalidateMatrixFrame(targetFrame);
       copiedFrames += 1;
     }
-  });
+  })) return;
   statusMessage.value = copiedFrames
     ? t("simple.colorCopied", {
       objects: sourceObjects.length,
@@ -2256,10 +2237,10 @@ function copySelectedObjectToFrame(frameIndex) {
   if (!selectedObject.value || frameIndex < 0 || frameIndex >= frames.value.length) {
     return;
   }
-  runRgbEdit(currentLevelRgbHistoryTargets([frameIndex]), "copy-object-to-frame", () => {
+  if (!runRgbEdit(currentLevelRgbHistoryTargets([frameIndex]), "copy-object-to-frame", () => {
     upsertObjectInFrame(selectedObject.value, frames.value[frameIndex]);
     invalidateMatrixFrame(frames.value[frameIndex]);
-  });
+  })) return;
   statusMessage.value = t("simple.frameUpdated", { number: frameIndex + 1 });
 }
 
@@ -2318,6 +2299,7 @@ function executeWholeFrameCopy(mode) {
     return;
   }
   const plan = createWholeFrameCopyPlan(mode, activeFrameIndex.value, level.frameList.length);
+  if (!canApplyColorOccupancy([], activeFrame.value?.matrix)) return;
   if (!plan.targetIndices.length) {
     statusMessage.value = t("simple.noTargetFrames");
     return;
@@ -2520,12 +2502,12 @@ function mergeSelectedObjects() {
     return;
   }
 
-  runRgbEdit(currentFrameRgbHistoryTargets(), "merge-objects", () => {
+  if (!runRgbEdit(currentFrameRgbHistoryTargets(), "merge-objects", () => {
     frame.matrix = result.matrix;
     invalidateMatrixFrame(frame);
     selectedObjectId.value = result.object.id;
     stopSelectionMode();
-  });
+  })) return;
   statusMessage.value = t("merge.complete");
 }
 
@@ -2595,6 +2577,7 @@ function cleanFrameMatrix(frame) {
   return (frame?.matrix || [])
     .filter((object) => isObjectInsideRealMatrix(object))
     .map((object) => ({
+      ...object,
       x: Number(object.x || 0),
       y: Number(object.y || 0),
       id: object.id,
@@ -2721,7 +2704,7 @@ function normalizeMatrixObject(value, frame, frameIndex) {
   if (!object.id) {
     object.id = createUniqueObjectId(frame, frameIndex);
   }
-  return object;
+  return centerObjectAnchor(object);
 }
 
 function createObjectFromTuple(value) {
@@ -2913,9 +2896,9 @@ function handleGlobalKeydown(event) {
     }
     return;
   }
-  if (lowerKey === "q" && canTriggerGlobalShortcut(event)) {
+  if (event.key === "Delete" && canTriggerGlobalShortcut(event) && selectedObject.value) {
     event.preventDefault();
-    setInteractionMode(interactionMode.value === "add" ? "select-move" : "add");
+    deleteSelectedObject();
     return;
   }
   // A/D 切换上一帧/下一帧（不限定编辑模式，复用 Q 的冲突保护；首尾帧不回绕）。
@@ -2934,7 +2917,7 @@ function handleGlobalKeydown(event) {
     ArrowUp: [0, -1],
     ArrowDown: [0, 1],
   }[event.key];
-  if (interactionMode.value !== "select-move" || !movement || !selectedObject.value || selectionMode.value) {
+  if (!movement || !selectedObject.value || !canTriggerGlobalShortcut(event) || busyAction.value) {
     return;
   }
   event.preventDefault();
@@ -3052,7 +3035,7 @@ function formatRuntimeSummary(value) {
             </div>
           </div>
           <div class="frame-icon-actions">
-            <button class="icon-add-button" type="button" :aria-label="t('simple.addFrame')" :data-tip="t('simple.addFrame')" @click="addFrame">
+            <button v-if="false" class="icon-add-button" type="button" :aria-label="t('simple.addFrame')" :data-tip="t('simple.addFrame')" @click="addFrame">
               +
             </button>
             <button
@@ -3064,7 +3047,7 @@ function formatRuntimeSummary(value) {
             >
               +&gt;
             </button>
-            <button
+            <button v-if="false"
               class="icon-add-button"
               type="button"
               :aria-label="t('simple.copyPreviousFrame')"
@@ -3126,8 +3109,195 @@ function formatRuntimeSummary(value) {
       </div>
     </div>
 
-    <p v-if="errorMessage" class="error-line">{{ errorMessage }}</p>
-    <p v-if="statusMessage" class="status-line">{{ statusMessage }}</p>
+    <div v-if="document" class="editor-toolbar">
+            <div class="object-actions">
+              <template v-if="anchorEditMode">
+                <button
+                  class="soft-button compact-button object-icon-button"
+                  type="button"
+                  :aria-label="t('simple.confirm')"
+                  :title="t('simple.confirm')"
+                  @click="confirmAnchorEdit"
+                >
+                  <EditorActionIcon name="check" />
+                </button>
+                <button
+                  class="soft-button compact-button object-icon-button"
+                  type="button"
+                  :aria-label="t('simple.cancel')"
+                  :title="t('simple.cancel')"
+                  @click="stopAnchorEdit"
+                >
+                  <EditorActionIcon name="close" />
+                </button>
+              </template>
+              <template v-else>
+                <button
+                  class="soft-button compact-button object-icon-button"
+                  :disabled="!selectedObject"
+                  type="button"
+                  :aria-label="t('simple.rotateLeft')"
+                  :title="t('simple.rotateLeft')"
+                  @click="rotateSelectedObjectCounterClockwise"
+                >
+                  <EditorActionIcon name="rotate-left" />
+                </button>
+                <button
+                  class="soft-button compact-button object-icon-button"
+                  :disabled="!selectedObject"
+                  type="button"
+                  :aria-label="t('simple.rotateRight')"
+                  :title="t('simple.rotateRight')"
+                  @click="rotateSelectedObjectClockwise"
+                >
+                  <EditorActionIcon name="rotate-right" />
+                </button>
+                <button v-if="false"
+                  class="soft-button compact-button object-icon-button"
+                  :disabled="!selectedObject"
+                  type="button"
+                  :aria-label="t('simple.editAnchor')"
+                  :title="t('simple.editAnchor')"
+                  @click="startAnchorEdit"
+                >
+                  <EditorActionIcon name="anchor" />
+                </button>
+                <button v-if="false"
+                  class="soft-button compact-button object-icon-button layer-symbol-button"
+                  :disabled="!selectedObjectCanMoveUp"
+                  type="button"
+                  :title="t('simple.layerUpTitle')"
+                  :aria-label="t('simple.layerUp')"
+                  @click="moveSelectedObjectLayerUp"
+                >
+                  <EditorActionIcon name="layer-up" />
+                </button>
+                <button v-if="false"
+                  class="soft-button compact-button object-icon-button layer-symbol-button"
+                  :disabled="!selectedObjectCanMoveDown"
+                  type="button"
+                  :title="t('simple.layerDownTitle')"
+                  :aria-label="t('simple.layerDown')"
+                  @click="moveSelectedObjectLayerDown"
+                >
+                  <EditorActionIcon name="layer-down" />
+                </button>
+                <button v-if="false"
+                  class="soft-button compact-button object-icon-button layer-symbol-button"
+                  :disabled="!selectedObject"
+                  type="button"
+                  :title="t('simple.applyLayer')"
+                  :aria-label="t('simple.applyLayer')"
+                  @click="applySelectedObjectLayerToAllFrames"
+                >
+                  <EditorActionIcon name="layers" />
+                </button>
+                <button v-if="false"
+                  class="soft-button compact-button object-icon-button"
+                  :disabled="!selectedObject"
+                  type="button"
+                  :aria-label="t('simple.recolor')"
+                  :title="t('simple.recolor')"
+                  @click="applyBrushColorToSelectedObject"
+                >
+                  <EditorActionIcon name="palette" />
+                </button>
+                <button v-if="false"
+                  class="soft-button compact-button object-icon-button"
+                  :disabled="!selectedObject || activeFrameIndex <= 0"
+                  type="button"
+                  :aria-label="t('simple.copyPrevious')"
+                  :title="t('simple.copyPrevious')"
+                  @click="copySelectedObjectToPreviousFrame"
+                >
+                  <EditorActionIcon name="copy-previous" />
+                </button>
+                <button v-if="false"
+                  class="soft-button compact-button object-icon-button"
+                  :disabled="!selectedObject || activeFrameIndex >= frames.length - 1"
+                  type="button"
+                  :aria-label="t('simple.copyNext')"
+                  :title="t('simple.copyNext')"
+                  @click="copySelectedObjectToNextFrame"
+                >
+                  <EditorActionIcon name="copy-next" />
+                </button>
+                <button v-if="false"
+                  class="soft-button compact-button object-icon-button"
+                  :disabled="!selectedObject || frames.length <= 1"
+                  type="button"
+                  :aria-label="t('simple.copyAll')"
+                  :title="t('simple.copyAll')"
+                  @click="copySelectedObjectToAllFrames"
+                >
+                  <EditorActionIcon name="copy-all" />
+                </button>
+                <button
+                  class="soft-button compact-button object-icon-button object-danger-button"
+                  :disabled="!selectedObject"
+                  type="button"
+                  :aria-label="t('simple.delete')"
+                  :title="t('simple.delete')"
+                  @click="deleteSelectedObject"
+                >
+                  <EditorActionIcon name="trash" />
+                </button>
+              </template>
+              <template v-if="!anchorEditMode">
+              <button
+                class="soft-button compact-button object-icon-button color-copy-button color-copy-green"
+                :disabled="frames.length <= 1 || frameColorObjectCounts[0] === 0"
+                type="button"
+                :title="t('simple.greenCopyTitle')"
+                :aria-label="t('simple.greenToAll')"
+                @click="copyColorObjectsToAllFrames(0)"
+              >
+                <EditorActionIcon name="copy-color" />
+              </button>
+              <button
+                class="soft-button compact-button object-icon-button color-copy-button color-copy-blue"
+                :disabled="frames.length <= 1 || frameColorObjectCounts[1] === 0"
+                type="button"
+                :title="t('simple.blueCopyTitle')"
+                :aria-label="t('simple.blueToAll')"
+                @click="copyColorObjectsToAllFrames(1)"
+              >
+                <EditorActionIcon name="copy-color" />
+              </button>
+              <button
+                class="soft-button compact-button object-icon-button color-copy-button color-copy-red"
+                :disabled="frames.length <= 1 || frameColorObjectCounts[2] === 0"
+                type="button"
+                :title="t('simple.redCopyTitle')"
+                :aria-label="t('simple.redToAll')"
+                @click="copyColorObjectsToAllFrames(2)"
+              >
+                <EditorActionIcon name="copy-color" />
+              </button>
+                <button
+                  class="soft-button compact-button object-icon-button color-copy-button color-copy-pink"
+                :disabled="frames.length <= 1 || frameColorObjectCounts[3] === 0"
+                type="button"
+                :title="t('simple.pinkCopyTitle')"
+                :aria-label="t('simple.pinkToAll')"
+                @click="copyColorObjectsToAllFrames(3)"
+              >
+                <EditorActionIcon name="copy-color" />
+              </button>
+              </template>
+<button class="soft-button compact-button object-icon-button" type="button" :aria-label="t('simple.startGame')" :title="t('simple.startGame')" :disabled="Boolean(busyAction) || !document?.id" @click="startGame"><EditorActionIcon name="play" /></button>
+<button class="soft-button compact-button object-icon-button" type="button" :aria-label="t('simple.openPreview')" :title="t('simple.openPreview')" :disabled="Boolean(busyAction) || !activeLevel" @click="openPreview"><EditorActionIcon name="preview" /></button>
+<button class="soft-button compact-button object-icon-button" type="button" :aria-label="t('simple.save')" :title="t('simple.save')" :disabled="Boolean(busyAction) || !document" @click="saveEditor"><EditorActionIcon name="save" /></button>
+<button class="soft-button compact-button object-icon-button" type="button" :aria-label="t('simple.exportGif')" :title="t('simple.exportGif')" :disabled="Boolean(busyAction) || !activeLevel?.frameList?.length" @click="exportCurrentLevelGif"><EditorActionIcon name="export" /></button>
+            </div>
+    </div>
+    <div class="editor-feedback" aria-live="polite">
+      <p v-if="errorMessage" class="error-line">{{ errorMessage }}</p>
+      <p v-if="statusMessage" class="status-line">{{ statusMessage }}</p>
+      <p v-if="gifExportProgress" class="status-line">{{ gifExportProgress }}</p>
+      <p v-if="runtimeErrorMessage" class="error-line">{{ runtimeErrorMessage }}</p>
+      <div v-if="validationErrors.length" class="validation-list"><p v-for="error in validationErrors" :key="error.path + error.message">{{ error.path }}: {{ error.message }}</p></div>
+    </div>
 
     <div v-if="!document && !errorMessage" class="editor-loading">
       {{ t("simple.loading", { game: currentGameName }) }}
@@ -3313,13 +3483,13 @@ function formatRuntimeSummary(value) {
                     type="number"
                   />
                   <button
-                    class="inline-symbol-button"
+                    class="soft-button repeat-copy-button"
                     type="button"
                     :title="t('simple.applyRepeat')"
                     :aria-label="t('simple.applyRepeat')"
                     @click="applyCurrentRepeatTimesToAllFrames"
                   >
-                    *
+                    {{ t('simple.copyRepeat') }}
                   </button>
                 </div>
               </label>
@@ -3390,11 +3560,11 @@ function formatRuntimeSummary(value) {
             :base-patch-version="matrixBasePatchVersion"
             :overlay-highlights="matrixOverlayHighlights"
             :show-overlap-indicator="showOverlapIndicators"
-            :range-create-enabled="interactionMode === 'add' && !spriteBrushActive && !selectionMode && !anchorEditMode"
-            :object-drag-enabled="interactionMode === 'select-move' && !selectionMode && !anchorEditMode"
+            :range-create-enabled="!busyAction && !spriteBrushActive && !selectionMode && !anchorEditMode"
+            :object-drag-enabled="!busyAction && !selectionMode && !anchorEditMode"
             :outside-range-layout-enabled="!panoramaMode"
             :outside-range-padding="EDITOR_OUTSIDE_RANGE_PADDING"
-            :outside-range-create-enabled="interactionMode === 'add' && !spriteBrushActive && !panoramaMode && !selectionMode && !anchorEditMode"
+            :outside-range-create-enabled="!busyAction && !spriteBrushActive && !panoramaMode && !selectionMode && !anchorEditMode"
             @cell-click="handleCellClick"
             @cell-range-create="handleCellRangeCreate"
             @object-drag-start="handleObjectDragStart"
@@ -3443,14 +3613,6 @@ function formatRuntimeSummary(value) {
                 </button>
               </div>
             </div>
-            <div v-if="!anchorEditMode" class="object-edit-controls">
-              <EditorInteractionModeSwitch
-                :model-value="interactionMode"
-                :options="interactionModeOptions"
-                @update:model-value="setInteractionMode"
-              />
-            </div>
-            <div class="object-actions">
               <div v-if="!anchorEditMode" class="object-action-palette" :aria-label="t('simple.color')" role="group">
                 <button
                   v-for="color in colorOptions"
@@ -3470,194 +3632,7 @@ function formatRuntimeSummary(value) {
                   <span class="palette-swatch" :style="{ backgroundColor: color.value }"></span>
                   <span class="palette-label">{{ color.label }}</span>
                 </button>
-                <button
-                  class="soft-button compact-button object-icon-button object-sprite-button"
-                  :class="{ active: spriteBrushActive }"
-                  :disabled="selectionMode || anchorEditMode"
-                  type="button"
-                  :title="t('simple.spriteBrushTitle')"
-                  :aria-label="t('simple.spriteBrush')"
-                  :aria-pressed="spriteBrushActive"
-                  @click="toggleSpriteBrush"
-                >
-                  <EditorActionIcon name="sprite" />
-                </button>
               </div>
-              <template v-if="anchorEditMode">
-                <button
-                  class="soft-button compact-button object-icon-button"
-                  type="button"
-                  :aria-label="t('simple.confirm')"
-                  :title="t('simple.confirm')"
-                  @click="confirmAnchorEdit"
-                >
-                  <EditorActionIcon name="check" />
-                </button>
-                <button
-                  class="soft-button compact-button object-icon-button"
-                  type="button"
-                  :aria-label="t('simple.cancel')"
-                  :title="t('simple.cancel')"
-                  @click="stopAnchorEdit"
-                >
-                  <EditorActionIcon name="close" />
-                </button>
-              </template>
-              <template v-else>
-                <button
-                  class="soft-button compact-button object-icon-button"
-                  :disabled="!selectedObject"
-                  type="button"
-                  :aria-label="t('simple.rotateLeft')"
-                  :title="t('simple.rotateLeft')"
-                  @click="rotateSelectedObjectCounterClockwise"
-                >
-                  <EditorActionIcon name="rotate-left" />
-                </button>
-                <button
-                  class="soft-button compact-button object-icon-button"
-                  :disabled="!selectedObject"
-                  type="button"
-                  :aria-label="t('simple.rotateRight')"
-                  :title="t('simple.rotateRight')"
-                  @click="rotateSelectedObjectClockwise"
-                >
-                  <EditorActionIcon name="rotate-right" />
-                </button>
-                <button
-                  class="soft-button compact-button object-icon-button"
-                  :disabled="!selectedObject"
-                  type="button"
-                  :aria-label="t('simple.editAnchor')"
-                  :title="t('simple.editAnchor')"
-                  @click="startAnchorEdit"
-                >
-                  <EditorActionIcon name="anchor" />
-                </button>
-                <button
-                  class="soft-button compact-button object-icon-button layer-symbol-button"
-                  :disabled="!selectedObjectCanMoveUp"
-                  type="button"
-                  :title="t('simple.layerUpTitle')"
-                  :aria-label="t('simple.layerUp')"
-                  @click="moveSelectedObjectLayerUp"
-                >
-                  <EditorActionIcon name="layer-up" />
-                </button>
-                <button
-                  class="soft-button compact-button object-icon-button layer-symbol-button"
-                  :disabled="!selectedObjectCanMoveDown"
-                  type="button"
-                  :title="t('simple.layerDownTitle')"
-                  :aria-label="t('simple.layerDown')"
-                  @click="moveSelectedObjectLayerDown"
-                >
-                  <EditorActionIcon name="layer-down" />
-                </button>
-                <button
-                  class="soft-button compact-button object-icon-button layer-symbol-button"
-                  :disabled="!selectedObject"
-                  type="button"
-                  :title="t('simple.applyLayer')"
-                  :aria-label="t('simple.applyLayer')"
-                  @click="applySelectedObjectLayerToAllFrames"
-                >
-                  <EditorActionIcon name="layers" />
-                </button>
-                <button
-                  class="soft-button compact-button object-icon-button"
-                  :disabled="!selectedObject"
-                  type="button"
-                  :aria-label="t('simple.recolor')"
-                  :title="t('simple.recolor')"
-                  @click="applyBrushColorToSelectedObject"
-                >
-                  <EditorActionIcon name="palette" />
-                </button>
-                <button
-                  class="soft-button compact-button object-icon-button"
-                  :disabled="!selectedObject || activeFrameIndex <= 0"
-                  type="button"
-                  :aria-label="t('simple.copyPrevious')"
-                  :title="t('simple.copyPrevious')"
-                  @click="copySelectedObjectToPreviousFrame"
-                >
-                  <EditorActionIcon name="copy-previous" />
-                </button>
-                <button
-                  class="soft-button compact-button object-icon-button"
-                  :disabled="!selectedObject || activeFrameIndex >= frames.length - 1"
-                  type="button"
-                  :aria-label="t('simple.copyNext')"
-                  :title="t('simple.copyNext')"
-                  @click="copySelectedObjectToNextFrame"
-                >
-                  <EditorActionIcon name="copy-next" />
-                </button>
-                <button
-                  class="soft-button compact-button object-icon-button"
-                  :disabled="!selectedObject || frames.length <= 1"
-                  type="button"
-                  :aria-label="t('simple.copyAll')"
-                  :title="t('simple.copyAll')"
-                  @click="copySelectedObjectToAllFrames"
-                >
-                  <EditorActionIcon name="copy-all" />
-                </button>
-                <button
-                  class="soft-button compact-button object-icon-button object-danger-button"
-                  :disabled="!selectedObject"
-                  type="button"
-                  :aria-label="t('simple.delete')"
-                  :title="t('simple.delete')"
-                  @click="deleteSelectedObject"
-                >
-                  <EditorActionIcon name="trash" />
-                </button>
-              </template>
-              <template v-if="!anchorEditMode">
-              <button
-                class="soft-button compact-button object-icon-button color-copy-button color-copy-green"
-                :disabled="frames.length <= 1 || frameColorObjectCounts[0] === 0"
-                type="button"
-                :title="t('simple.greenCopyTitle')"
-                :aria-label="t('simple.greenToAll')"
-                @click="copyColorObjectsToAllFrames(0)"
-              >
-                <EditorActionIcon name="copy-color" />
-              </button>
-              <button
-                class="soft-button compact-button object-icon-button color-copy-button color-copy-blue"
-                :disabled="frames.length <= 1 || frameColorObjectCounts[1] === 0"
-                type="button"
-                :title="t('simple.blueCopyTitle')"
-                :aria-label="t('simple.blueToAll')"
-                @click="copyColorObjectsToAllFrames(1)"
-              >
-                <EditorActionIcon name="copy-color" />
-              </button>
-              <button
-                class="soft-button compact-button object-icon-button color-copy-button color-copy-red"
-                :disabled="frames.length <= 1 || frameColorObjectCounts[2] === 0"
-                type="button"
-                :title="t('simple.redCopyTitle')"
-                :aria-label="t('simple.redToAll')"
-                @click="copyColorObjectsToAllFrames(2)"
-              >
-                <EditorActionIcon name="copy-color" />
-              </button>
-                <button
-                  class="soft-button compact-button object-icon-button color-copy-button color-copy-pink"
-                :disabled="frames.length <= 1 || frameColorObjectCounts[3] === 0"
-                type="button"
-                :title="t('simple.pinkCopyTitle')"
-                :aria-label="t('simple.pinkToAll')"
-                @click="copyColorObjectsToAllFrames(3)"
-              >
-                <EditorActionIcon name="copy-color" />
-              </button>
-              </template>
-            </div>
             <div v-if="!anchorEditMode && showObjectList" class="object-list">
               <button
                 v-for="object in frameObjects"
@@ -3696,7 +3671,6 @@ function formatRuntimeSummary(value) {
                 :aria-label="t('simple.spriteSearch')"
               />
               <p v-if="effectSpiritLoadFailed" class="sprite-preview-empty">{{ t("effect.spiritLoadFailed") }}</p>
-              <p v-else-if="!spriteDimensionFilter" class="sprite-preview-empty">{{ t("simple.spriteSearchHint") }}</p>
               <p v-else-if="!filteredEditorSprites.length" class="sprite-preview-empty">{{ t("simple.spriteNoMatch") }}</p>
               <div v-else class="sprite-preview-grid">
                 <button
@@ -3704,8 +3678,11 @@ function formatRuntimeSummary(value) {
                   :key="sprite.id"
                   class="sprite-preview-card"
                   :class="{ active: selectedSpriteId === sprite.id }"
+                  :style="{ width: `${sprite.width * 13 + 17}px` }"
+                  :disabled="colorSelectionDisabled"
                   type="button"
                   :aria-label="sprite.name"
+
                   :aria-pressed="selectedSpriteId === sprite.id"
                   @click="selectEditorSprite(sprite)"
                 >
@@ -3723,64 +3700,7 @@ function formatRuntimeSummary(value) {
               <span>{{ t("simple.chooseAnchor") }}</span>
             </div>
           </div>
-          <div class="editor-side-rail">
-            <div class="editor-side-section">
-              <div class="editor-meta">
-                <p>
-                  {{ spriteBrushActive ? t("simple.spriteBrush") : t("simple.currentBrush", { color: selectedColor }) }}
-                </p>
-                <p>{{ t("simple.matrix", { width: matrixWidth, height: matrixHeight }) }}</p>
-                <p>{{ t("simple.zoom", { value: Math.round(matrixZoom * 100) }) }}</p>
-                <p>{{ t("simple.objectCount", { count: frameObjects.length }) }}</p>
-              </div>
-            </div>
-            <div class="runtime-panel">
-              <button
-                class="soft-button runtime-start-button"
-                :disabled="Boolean(busyAction) || !document?.id"
-                type="button"
-                @click="startGame"
-              >
-                {{ t(busyAction === "start" ? "simple.starting" : "simple.startGame") }}
-              </button>
-              <button
-                class="soft-button runtime-start-button"
-                :disabled="Boolean(busyAction) || !activeLevel"
-                type="button"
-                @click="openPreview"
-              >
-                {{ t("simple.openPreview") }}
-              </button>
-              <button
-                class="soft-button runtime-start-button"
-                :disabled="Boolean(busyAction) || !document"
-                type="button"
-                @click="saveEditor"
-              >
-                {{ t("simple.save") }}
-              </button>
-              <button
-                class="soft-button runtime-start-button"
-                :disabled="Boolean(busyAction) || !activeLevel?.frameList?.length"
-                type="button"
-                @click="exportCurrentLevelGif"
-              >
-                {{ t(busyAction === "gif-export" ? "simple.exporting" : "simple.exportGif") }}
-              </button>
-              <p v-if="gifExportProgress" class="status-line">{{ gifExportProgress }}</p>
-              <p v-if="runtimeStatusMessage" class="status-line">{{ runtimeStatusMessage }}</p>
-              <p v-if="previewStatusMessage" class="status-line">{{ previewStatusMessage }}</p>
-              <p v-if="runtimeErrorMessage" class="error-line">{{ runtimeErrorMessage }}</p>
-              <div v-if="runtimeSummary.length" class="runtime-summary">
-                <p v-for="line in runtimeSummary" :key="line">{{ line }}</p>
-              </div>
-            </div>
-            <div v-if="validationErrors.length" class="validation-list">
-              <p v-for="error in validationErrors" :key="`${error.path}-${error.message}`">
-                {{ error.path }}: {{ error.message }}
-              </p>
-            </div>
-          </div>
+
         </div>
       </aside>
     </div>

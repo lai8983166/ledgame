@@ -100,7 +100,7 @@ test("SimpleMatrixCanvas keeps outside interaction padding stable across editor 
   assert.match(styleSource, /\.matrix-scroll[\s\S]*scrollbar-gutter:\s*stable both-edges/);
   assert.match(
     editorSource,
-    /:outside-range-create-enabled="interactionMode === 'add' && !spriteBrushActive/,
+    /:outside-range-create-enabled="!busyAction && !spriteBrushActive/,
   );
 });
 

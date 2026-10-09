@@ -18,6 +18,7 @@ import '../../src/style.css';
 let app;
 await initializeApplicationLocale();
 window.changeTestLocale = setApplicationLocale;
+window.getComponentSetup = () => app?._instance?.subTree?.component?.setupState;
 window.mountComponent = (component, props) => {
   app?.unmount();
   window.componentEvents = [];

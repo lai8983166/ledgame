@@ -101,13 +101,13 @@ test("destructive confirmation restores renderer focus after Electron dialogs", 
   }
 });
 
-test("color controls are disabled outside add mode and import/export icons follow data flow", () => {
+test("color controls protect busy/modal editing and import/export icons follow data flow", () => {
   assert.match(
     editorSource,
-    /const colorSelectionDisabled = computed\([\s\S]*interactionMode\.value !== "add"[\s\S]*selectionMode\.value[\s\S]*anchorEditMode\.value/s,
+    /const colorSelectionDisabled = computed\([\s\S]*busyAction\.value[\s\S]*selectionMode\.value[\s\S]*anchorEditMode\.value/s,
   );
   assert.match(editorSource, /:disabled="colorSelectionDisabled"/);
-  const colorSelection = functionSource("selectColor", "setInteractionMode");
+  const colorSelection = functionSource("selectColor", "selectEditorSprite");
   assert.match(colorSelection, /if \(colorSelectionDisabled\.value\)/);
 
   const exportButton = editorSource.slice(
@@ -130,8 +130,8 @@ test("anchor editing leaves only confirm and cancel controls in the object edito
   const objectActions = editorSource.slice(objectActionsStart, objectListStart);
 
   assert.match(editorSource, /<button\s+v-if="!anchorEditMode"[\s\S]*class="soft-button compact-button object-list-toggle"/);
-  assert.match(editorSource, /<div v-if="!anchorEditMode" class="object-edit-controls">/);
-  assert.match(objectActions, /<div v-if="!anchorEditMode" class="object-action-palette"/);
+  assert.doesNotMatch(editorSource, /object-edit-controls/);
+  assert.match(editorSource, /<div v-if="!anchorEditMode" class="object-action-palette"/);
   assert.match(objectActions, /<template v-if="anchorEditMode">[\s\S]*simple\.confirm[\s\S]*simple\.cancel/);
   assert.match(objectActions, /<template v-if="!anchorEditMode">[\s\S]*simple\.greenToAll[\s\S]*simple\.pinkToAll/);
   assert.match(editorSource, /<div v-else class="anchor-edit-panel">[\s\S]*simple\.chooseAnchor/);

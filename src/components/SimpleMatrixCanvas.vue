@@ -81,6 +81,9 @@ const overlayCanvasRef = ref(null);
 let hoverCell = null;
 let dragStartCell = null;
 let dragCurrentCell = null;
+let draggingObject = false;
+let pointerOrigin = null;
+let pointerMoved = false;
 let baseAnimationFrame = 0;
 let overlayAnimationFrame = 0;
 let pendingBaseDrawMode = "full";
@@ -170,6 +173,7 @@ watch(
     if (!props.rangeCreateEnabled && !props.objectDragEnabled) {
       dragStartCell = null;
       dragCurrentCell = null;
+      draggingObject = false;
     }
     scheduleOverlayDraw();
   },
@@ -446,17 +450,21 @@ function handlePointerDown(event) {
   overlayCanvasRef.value?.setPointerCapture?.(event.pointerId);
   dragStartCell = cell;
   dragCurrentCell = cell;
+  pointerOrigin = { x: event.clientX, y: event.clientY };
+  pointerMoved = false;
+  draggingObject = props.objectDragEnabled && Boolean(cell.objectId);
   updateHoverCell(cell);
-  if (props.objectDragEnabled) {
+  if (draggingObject) {
     emit("object-drag-start", cell);
   }
   scheduleOverlayDraw();
 }
 
 function handlePointerMove(event) {
+  if (dragStartCell && pointerOrigin && Math.hypot(event.clientX - pointerOrigin.x, event.clientY - pointerOrigin.y) > 4) pointerMoved = true;
   const cell = getCellFromPointer(event);
   updateHoverCell(cell);
-  if (props.objectDragEnabled && dragStartCell && cell) {
+  if (draggingObject && dragStartCell && cell) {
     event.preventDefault();
     if (dragCurrentCell?.key === cell.key) {
       return;
@@ -487,7 +495,9 @@ function handlePointerUp(event) {
   overlayCanvasRef.value?.releasePointerCapture?.(event.pointerId);
   const startCell = dragStartCell;
   const endCell = getCellFromPointer(event) || dragCurrentCell || startCell;
-  if (props.objectDragEnabled) {
+  const moved = pointerMoved || startCell.key !== endCell.key;
+  const wasDraggingObject = draggingObject;
+  if (wasDraggingObject) {
     emit("object-drag-end", {
       objectId: startCell.objectId || "",
       start: startCell,
@@ -496,13 +506,16 @@ function handlePointerUp(event) {
   }
   dragStartCell = null;
   dragCurrentCell = null;
+  draggingObject = false;
+  pointerOrigin = null;
   scheduleOverlayDraw();
-  if (props.objectDragEnabled) {
+  if (wasDraggingObject) {
     return;
   }
   if (!endCell) {
     return;
   }
+  if (!props.rangeCreateEnabled && moved) return;
   if (!props.rangeCreateEnabled || startCell.key === endCell.key) {
     emit("cell-click", startCell.x, startCell.y);
     return;
@@ -515,7 +528,7 @@ function handlePointerUp(event) {
 }
 
 function handlePointerCancel(event) {
-  if (props.objectDragEnabled && dragStartCell) {
+  if (draggingObject && dragStartCell) {
     emit("object-drag-end", {
       objectId: dragStartCell.objectId || "",
       start: dragStartCell,
@@ -526,6 +539,8 @@ function handlePointerCancel(event) {
   overlayCanvasRef.value?.releasePointerCapture?.(event.pointerId);
   dragStartCell = null;
   dragCurrentCell = null;
+  draggingObject = false;
+  pointerOrigin = null;
   scheduleOverlayDraw();
 }
 
@@ -659,7 +674,7 @@ function getCellsInRange(startCell, endCell) {
 }
 
 function drawDragSelection(context) {
-  if (!props.rangeCreateEnabled || !dragStartCell || !dragCurrentCell) {
+  if (!props.rangeCreateEnabled || draggingObject || !dragStartCell || !dragCurrentCell) {
     return;
   }
   const startPosition = getOverlayCellPosition(dragStartCell);

@@ -27,8 +27,10 @@ const cells = computed(() => Array.from(
   },
 ));
 const gridStyle = computed(() => ({
-  gridTemplateColumns: `repeat(${width.value}, minmax(0, 1fr))`,
-  aspectRatio: `${width.value} / ${height.value}`,
+  gridTemplateColumns: `repeat(${width.value}, 12px)`,
+  gridTemplateRows: `repeat(${height.value}, 12px)`,
+  width: `${width.value * 13 - 1}px`,
+  height: `${height.value * 13 - 1}px`,
   "--editor-sprite-color": props.color,
 }));
 </script>
@@ -47,15 +49,13 @@ const gridStyle = computed(() => ({
 <style scoped>
 .editor-sprite-preview {
   display: grid;
-  width: min(100%, 132px);
-  max-height: 132px;
   gap: 1px;
   margin: 0 auto;
 }
 
 .editor-sprite-preview-cell {
-  min-width: 0;
-  min-height: 0;
+  width: 12px;
+  height: 12px;
   border-radius: 1px;
   background: rgba(113, 128, 145, 0.16);
 }
