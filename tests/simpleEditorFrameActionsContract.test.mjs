@@ -111,15 +111,26 @@ test("color controls protect busy/modal editing and import/export icons follow d
   assert.match(colorSelection, /if \(colorSelectionDisabled\.value\)/);
 
   const exportButton = editorSource.slice(
-    editorSource.indexOf(":data-tip=\"t\('simple.exportCurrentFrameJson'\)\""),
-    editorSource.indexOf(":data-tip=\"t\('simple.importReplaceFrameJson'\)\"")
+    editorSource.indexOf(":data-tip=\"t\('simple.exportCurrentLevelJson'\)\""),
+    editorSource.indexOf(":data-tip=\"t\('simple.importReplaceLevelJson'\)\"")
   );
   const importButton = editorSource.slice(
-    editorSource.indexOf(":data-tip=\"t\('simple.importReplaceFrameJson'\)\""),
-    editorSource.indexOf("</div>", editorSource.indexOf(":data-tip=\"t\('simple.importReplaceFrameJson'\)\"")),
+    editorSource.indexOf(":data-tip=\"t\('simple.importReplaceLevelJson'\)\""),
+    editorSource.indexOf("</div>", editorSource.indexOf(":data-tip=\"t\('simple.importReplaceLevelJson'\)\"")),
   );
-  assert.match(exportButton, /@click="exportCurrentFrame"[\s\S]*⬆/);
-  assert.match(importButton, /@click="importFrame"[\s\S]*⬇/);
+  assert.match(exportButton, /@click="exportCurrentLevel"[\s\S]*⬆/);
+  assert.match(importButton, /@click="importCurrentLevel"[\s\S]*⬇/);
+});
+
+test("level import validates before confirmation and replacement, and restores focus", () => {
+  const importing = functionSource("importCurrentLevel", "runEditorAction");
+  assert.ok(importing.indexOf('normalizeImportedLevel(') < importing.indexOf('confirmWithRendererFocus('));
+  assert.ok(importing.indexOf('confirmWithRendererFocus(') < importing.indexOf('document.value.levels[levelIndex] ='));
+  assert.match(importing, /nextTick\(restoreRendererFocus\)/);
+  assert.match(importing, /activeLevel\.value !== level/);
+  assert.doesNotMatch(importing, /saveGameEditor/);
+  assert.match(preloadSource, /importFrameJson: \(payload\) => ipcRenderer\.invoke\('frame:import-json', payload\)/);
+  assert.match(mainSource, /title: payload\?\.title \|\| '导入帧'/);
 });
 
 test("anchor editing leaves only confirm and cancel controls in the object editor", () => {

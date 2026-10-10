@@ -20,14 +20,15 @@ await page.addInitScript(commonNames => {
   const p=(id,x,y,color=2)=>({id,x,y,color,points:[[0,0]]});
   const game={id:1,name:'Simple测试',type:'default',mode:'[1]',siteSizeWidth:16,siteSizeHeight:36,commonConfig:{},gif:{},
     levels:[{label:'第一关',frameList:[{repeatTimes:2,matrix:[p('red',1,1)]},{repeatTimes:4,matrix:[]}]}]};
-  window.fixture={game,confirms:[],failSave:false,importContent:'',saves:0,exportContent:'',
+  window.fixture={game,confirms:[],confirmResult:false,failSave:false,importContent:'',saves:0,exportContent:'',
     reset(){game.levels[0].frameList=[{repeatTimes:2,matrix:[p('red',1,1)]},{repeatTimes:4,matrix:[]}];}};
-  window.confirm = message => {window.fixture.confirms.push(message);return false;};
+  window.confirm = message => {window.fixture.confirms.push(message);return window.fixture.confirmResult;};
   window.ledGame={getGameEditor:async()=>({data:structuredClone(game)}),listGameCategories:async()=>({data:[]}),
     saveGameEditor:async(id,value)=>{if(window.fixture.failSave)throw Error('保存失败');Object.assign(game,structuredClone(value));window.fixture.saves++;return {data:{saved:true}};},
     gameState:async()=>({data:{engineState:'IDLE',queueSummary:{waiting:[]}}}),
     validateGameEditor:async()=>({data:{valid:true,errors:[]}}),restoreFocus:async()=>{},
-    importFrameJson:async()=>({content:window.fixture.importContent}),exportFrameJson:async value=>{window.fixture.exportContent=value.content;return {filePath:'fixture.json'};},
+    importFrameJson:async()=>{if(window.fixture.deferImport)await new Promise(resolve=>window.fixture.finishImport=resolve);return {canceled:window.fixture.cancelImport,content:window.fixture.importContent};},
+    exportFrameJson:async value=>{window.fixture.exportContent=value.content;return {canceled:window.fixture.cancelExport,filePath:'fixture.json'};},
     saveGif:async value=>{window.fixture.gifBytes=Array.from(value.bytes);if(window.fixture.waitGif)await new Promise(resolve=>window.fixture.finishGif=resolve);return {fileName:'fixture.gif'};},onEngineState:()=>()=>{},onLedFrame:()=>()=>{},
   };
   window.spiritLibrary={list:async()=>({data:[...commonNames.map((name,index)=>({id:index+100,name,color:2,
@@ -55,6 +56,48 @@ try {
   await page.goto(`http://127.0.0.1:${server.httpServer.address().port}/tests/ui/catalog-library-harness.html`);
   await page.waitForFunction(()=>window.mountComponent);
   await mount();
+  await check('单格/多格统一黄色细线，自动中心不高亮，悬停不加粗且不修改数据',async()=>{
+    const before=await read(),bounds=await page.locator('.matrix-overlay-canvas').boundingBox();
+    await page.evaluate(()=>{
+      window.selectionStrokes=[];
+      const original=CanvasRenderingContext2D.prototype.strokeRect;
+      window.restoreSelectionStroke=()=>{CanvasRenderingContext2D.prototype.strokeRect=original;};
+      CanvasRenderingContext2D.prototype.strokeRect=function(...rect){
+        if(this.canvas.classList.contains('matrix-overlay-canvas'))window.selectionStrokes.push({rect,width:this.lineWidth,color:this.strokeStyle});
+        return original.apply(this,rect);
+      };
+      window.getComponentSetup().selectedObjectId='red';
+    });
+    await page.waitForFunction(()=>window.selectionStrokes.some(s=>s.color==='#f7d56f'));
+    const strokes=await page.evaluate(()=>window.selectionStrokes);
+    const anchor=strokes.filter(s=>s.color==='#f7d56f');assert.equal(anchor.length,1);
+    assert.equal(strokes.some(s=>s.color==='#ff8a5c'),false);
+    assert.equal(await page.evaluate(()=>window.getComponentSetup().matrixOverlayHighlights.some(h=>h.type==='anchor')),false);
+    assert.equal(anchor[0].width,1.25);
+    const size=await page.evaluate(()=>window.getComponentSetup().matrixCellSizeValue);
+    assert.equal(anchor[0].rect[2]+anchor[0].width,size);assert.equal(anchor[0].rect[3]+anchor[0].width,size);
+    assert.ok(strokes.filter(s=>s.color==='#f7d56f').every(s=>s.width===1.25));
+    const rect=anchor[0].rect;
+    const nativeSize=await page.locator('.matrix-overlay-canvas').evaluate(el=>({width:parseFloat(getComputedStyle(el).width),height:parseFloat(getComputedStyle(el).height)}));
+    await page.evaluate(()=>window.selectionStrokes=[]);
+    await page.mouse.move(bounds.x+(rect[0]+rect[2]/2)*bounds.width/nativeSize.width,bounds.y+(rect[1]+rect[3]/2)*bounds.height/nativeSize.height);
+    await page.waitForFunction(()=>window.selectionStrokes.some(s=>s.color==='#f7d56f'));
+    assert.ok(await page.evaluate(()=>window.selectionStrokes.every(s=>s.width===1.25)));
+    const after=await read();assert.deepEqual(after.matrix,before.matrix);assert.equal(after.undo,before.undo);
+    assert.deepEqual(await page.locator('.matrix-overlay-canvas').boundingBox(),bounds);
+    await page.locator('.matrix-overlay-canvas').screenshot({path:path.join(output,'selected-thin-outline.png')});
+    await page.evaluate(()=>{
+      const s=window.getComponentSetup();s.activeFrame.matrix=[{id:'hollow',x:5,y:5,color:2,points:[[-1,-1],[1,1]]}];s.invalidateMatrixFrame();s.selectedObjectId='hollow';window.selectionStrokes=[];
+    });
+    await page.mouse.move(0,0);
+    await page.waitForFunction(()=>window.selectionStrokes.some(s=>s.color==='#f7d56f'));
+    assert.deepEqual(await page.evaluate(()=>window.getComponentSetup().matrixOverlayHighlights),[{x:4,y:4,type:'selected'},{x:6,y:6,type:'selected'}]);
+    assert.ok(await page.evaluate(()=>window.selectionStrokes.every(s=>s.width===1.25&&s.color==='#f7d56f')));
+    assert.deepEqual(await page.evaluate(()=>{const o=window.getComponentSetup().activeFrame.matrix[0];return [o.x,o.y,o.points];}),[5,5,[[-1,-1],[1,1]]]);
+    await page.evaluate(matrix=>{const s=window.getComponentSetup();s.activeFrame.matrix=matrix;s.invalidateMatrixFrame();},before.matrix);
+    await page.evaluate(()=>{window.restoreSelectionStroke();window.getComponentSetup().selectedObjectId='';});
+    await page.mouse.move(0,0);
+  });
   await check('指定标签红色星号仅展示，不新增必填校验',async()=>{
     const basicMarkers=page.locator('.editor-left .editor-required-label');
     assert.equal(await basicMarkers.count(),5);
@@ -257,19 +300,70 @@ try {
   });
   await check('非法同色导入静默不改文档，语法错误仍提示',async()=>{
     const before=await read();
-    await page.evaluate(()=>{window.fixture.importContent=JSON.stringify({matrix:[{id:'a',x:0,y:0,color:1},{id:'b',x:0,y:0,color:1}]});});
-    await page.evaluate(()=>window.getComponentSetup().importFrame());
+    await page.evaluate(()=>{window.fixture.importContent=JSON.stringify({label:'冲突关卡',option:{},frameList:[{repeatTimes:1,matrix:[]},{repeatTimes:1,matrix:[{id:'a',x:0,y:0,color:1},{id:'b',x:0,y:0,color:1}]}]});});
+    await page.evaluate(()=>window.getComponentSetup().importCurrentLevel());
     assert.deepEqual((await read()).frames,before.frames);assert.equal((await read()).undo,before.undo);assert.equal((await read()).error,'');
-    await page.evaluate(()=>{window.fixture.importContent='{';return window.getComponentSetup().importFrame();});
+    await page.evaluate(()=>{window.fixture.importContent='{';return window.getComponentSetup().importCurrentLevel();});
     assert.notEqual((await read()).error,'');
+  });
+  await check('完整关卡 JSON：覆盖提醒、取消/失败无副作用、只替换当前关卡并保存重开',async()=>{
+    const backup=await page.evaluate(()=>structuredClone(window.fixture.game));
+    const snapshot=()=>page.evaluate(()=>{const s=window.getComponentSetup();return {document:JSON.parse(JSON.stringify(s.document)),frame:s.activeFrameIndex,selected:s.selectedObjectId,undo:s.rgbEditHistory.undoCount};});
+    await page.evaluate(()=>{
+      const s=window.getComponentSetup();s.document.levels.push({label:'第二关',option:{bgVoice:'other.mp3'},frameList:[{repeatTimes:7,matrix:[]}]});
+      s.activeLevel.option={...s.activeLevel.option,rewardPoints:10,bgVoice:'pass.mp3'};
+      s.activeFrame.__matrixVersion=123;s.selectFrame(1);
+      s.runRgbEdit([{levelIndex:0,frameIndex:1}],'import-test',()=>{s.activeFrame.matrix.push({id:'second',x:3,y:3,color:1,points:[[0,0]]});s.selectedObjectId='second';});
+    });
+    await button('导出当前关卡').click();
+    const exported=await page.evaluate(()=>JSON.parse(window.fixture.exportContent));
+    assert.equal(exported.label,'第一关');assert.equal(exported.option.rewardPoints,10);assert.equal(exported.option.bgVoice,'pass.mp3');
+    assert.equal(exported.frameList.length,2);assert.equal(exported.frameList[0].__matrixVersion,undefined);
+    assert.equal(exported.levels,undefined);assert.equal(exported.commonConfig,undefined);
+    assert.deepEqual(exported.frameList,(await read()).frames.map(({__matrixVersion,...frame})=>frame));
+    const before=await snapshot();assert.ok(before.undo>0);assert.equal(before.selected,'second');
+    await page.evaluate(()=>{window.fixture.importContent=window.fixture.exportContent;window.fixture.cancelImport=true;});
+    await button('导入替换当前关卡').click();assert.deepEqual(await snapshot(),before);
+    await page.evaluate(()=>{window.fixture.cancelImport=false;window.fixture.confirmResult=false;window.fixture.confirms=[];});
+    await button('导入替换当前关卡').click();assert.deepEqual(await snapshot(),before);
+    assert.match(await page.evaluate(()=>window.fixture.confirms.at(-1)),/覆盖.*第一关.*全部配置和.*帧/);
+    for(const invalid of [
+      {repeatTimes:1,matrix:[]},
+      {levels:[],frameList:[{repeatTimes:1,matrix:[]}]},
+      {label:'空序列',frameList:[]},
+      {label:'配置非法',option:{rewardPoints:-1},frameList:[{repeatTimes:1,matrix:[]}]},
+      {frameList:[{repeatTimes:1,matrix:[]},{repeatTimes:1,matrix:[{id:'outside',x:16,y:0,color:1}]}]},
+      {frameList:[{repeatTimes:0,matrix:[]}]},
+      {frameList:[{repeatTimes:1,matrix:[null]}]},
+      {frameList:[{repeatTimes:1,matrix:[{x:1.5,y:0,color:1}]}]},
+    ]){
+      await page.evaluate(value=>{window.fixture.importContent=JSON.stringify(value);window.fixture.confirmResult=true;},invalid);
+      await button('导入替换当前关卡').click();assert.deepEqual(await snapshot(),before);assert.notEqual((await read()).error,'');
+    }
+    await page.evaluate(()=>{window.fixture.importContent=window.fixture.exportContent;window.fixture.deferImport=true;});
+    await button('导入替换当前关卡').click();await page.waitForFunction(()=>window.fixture.finishImport);
+    assert.equal(await button('导出当前关卡').isDisabled(),true);
+    await page.evaluate(()=>{window.getComponentSetup().selectLevel(1);window.fixture.finishImport();window.fixture.deferImport=false;});
+    await page.waitForFunction(()=>window.getComponentSetup().busyAction==='');
+    assert.deepEqual((await snapshot()).document,before.document);assert.notEqual((await read()).error,'');
+    await page.evaluate(()=>{const s=window.getComponentSetup();s.selectLevel(0);s.activeLevel.label='替换目标';s.activeFrame.matrix=[];window.fixture.confirmResult=true;});
+    await button('导入替换当前关卡').click();
+    const imported=await snapshot();assert.equal(imported.document.levels[0].label,'第一关');
+    assert.deepEqual(imported.document.levels[0].option,exported.option);assert.deepEqual(imported.document.levels[0].frameList.map(({__matrixVersion,...f})=>f),exported.frameList);
+    assert.deepEqual(imported.document.levels[1],before.document.levels[1]);assert.deepEqual(imported.document.commonConfig,before.document.commonConfig);
+    assert.equal(imported.frame,0);assert.equal(imported.selected,'');assert.equal(imported.undo,0);assert.match((await read()).status,/请保存/);
+    assert.notEqual(await page.evaluate(()=>window.fixture.game.levels[0].option?.rewardPoints),10,'import must not auto-save');
+    await button('保存').click();await mount();
+    assert.deepEqual(await page.evaluate(()=>JSON.parse(JSON.stringify(window.getComponentSetup().createEditorPayload().levels[0]))),exported);
+    await page.evaluate(value=>{Object.assign(window.fixture.game,value);window.fixture.confirmResult=false;},backup);await mount();
   });
   await check('保存重开中心与旧叠层无损，错误仍可见，导出和预览正常',async()=>{
     await page.evaluate(()=>{const s=window.getComponentSetup();s.activeFrame.matrix.push({id:'legacy',x:1,y:1,color:2,points:[[0,0]]});window.fixture.failSave=true;});
     await button('保存').click();assert.match(await page.locator('.error-line').first().innerText(),/保存失败/);
     await page.evaluate(()=>window.fixture.failSave=false);await button('保存').click();
     const saved=(await read()).matrix;await mount();assert.deepEqual((await read()).matrix,saved);
-    await page.evaluate(()=>window.getComponentSetup().exportCurrentFrame());
-    assert.deepEqual(await page.evaluate(()=>JSON.parse(window.fixture.exportContent).matrix),saved);
+    await page.evaluate(()=>window.getComponentSetup().exportCurrentLevel());
+    assert.deepEqual(await page.evaluate(()=>JSON.parse(window.fixture.exportContent).frameList[0].matrix),saved);
     await button('打开预览').click();assert.equal(await page.locator('.simple-level-preview-dialog').count(),1);
     await page.evaluate(()=>window.getComponentSetup().closeLevelPreview());
   });

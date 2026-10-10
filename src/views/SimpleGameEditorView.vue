@@ -355,7 +355,7 @@ const matrixOverlayHighlights = computed(() => {
       }
     });
   }
-  const anchorHighlight = createAnchorHighlight(frame);
+  const anchorHighlight = anchorEditMode.value ? createAnchorHighlight(frame) : null;
   if (anchorHighlight && isCellInMatrixRange(anchorHighlight.x, anchorHighlight.y)) {
     highlights.push(anchorHighlight);
   }
@@ -1154,78 +1154,78 @@ function closeLevelPreview() {
   levelPreviewSnapshot.value = null;
 }
 
-async function exportCurrentFrame() {
+async function exportCurrentLevel() {
+  if (busyAction.value) return;
   statusMessage.value = "";
   errorMessage.value = "";
-  const frame = activeFrame.value;
-  if (!frame) {
-    errorMessage.value = t("simple.noExportFrame");
+  if (!activeLevel.value) {
+    errorMessage.value = t("simple.noExportLevel");
     return;
   }
+  busyAction.value = "level-export";
   try {
     if (!api?.exportFrameJson) {
       throw new Error(t("simple.exportApiUnavailable"));
     }
-    const content = JSON.stringify(serializeActiveFrame(), null, 2);
-    const defaultFileName = `led-frame-L${activeLevelIndex.value + 1}-F${activeFrameIndex.value + 1}.json`;
-    const result = await api.exportFrameJson({ content, defaultFileName });
+    const content = JSON.stringify(serializeActiveLevel(), null, 2);
+    const defaultFileName = `led-level-${activeLevelIndex.value + 1}.json`;
+    const result = await api.exportFrameJson({ content, defaultFileName, title: t("simple.exportCurrentLevel") });
     if (result?.canceled) {
       return;
     }
-    statusMessage.value = t("simple.frameExported", {
+    statusMessage.value = t("simple.levelExported", {
       file: result?.filePath || t("simple.fileFallback"),
     });
   } catch (error) {
     errorMessage.value = error.message || String(error);
+  } finally {
+    busyAction.value = "";
   }
 }
 
-async function importFrame() {
+async function importCurrentLevel() {
+  if (busyAction.value) return;
   statusMessage.value = "";
   errorMessage.value = "";
-  const frame = ensureActiveFrame();
-  if (!frame) {
-    errorMessage.value = t("simple.noReplaceFrame");
+  const level = activeLevel.value;
+  if (!level) {
+    errorMessage.value = t("simple.noReplaceLevel");
     return;
   }
-  const frameIndex = activeFrameIndex.value;
+  const targetDocument = document.value;
+  const levelIndex = activeLevelIndex.value;
+  busyAction.value = "level-import";
   try {
     if (!api?.importFrameJson) {
       throw new Error(t("simple.importApiUnavailable"));
     }
-    const result = await api.importFrameJson();
+    const result = await api.importFrameJson({ title: t("simple.importReplaceLevel") });
     if (result?.canceled) {
       return;
     }
-    const parsed = JSON.parse(result?.content || "");
-    const matrixSource = Array.isArray(parsed) ? parsed : parsed?.matrix;
-    if (!Array.isArray(matrixSource)) {
-      throw new Error(t("simple.matrixMissing"));
+    if (document.value !== targetDocument || activeLevel.value !== level || activeLevelIndex.value !== levelIndex) {
+      throw new Error(t("simple.levelImportStale"));
     }
-    const normalized = matrixSource
-      .map((entry) => normalizeMatrixObject(entry, frame, frameIndex))
-      .filter((object) => isObjectInsideRealMatrix(object));
-    if (!canApplyColorOccupancy([], normalized)) return;
-    const dropped = matrixSource.length - normalized.length;
-    frame.matrix = normalized.map((object) => ({
-      x: toInteger(object.x, 0),
-      y: toInteger(object.y, 0),
-      id: object.id,
-      color: clampColorIndex(object.color),
-      points: getObjectPoints(object).map(([dx, dy]) => [dx, dy]),
-    }));
-    if (parsed && Object.prototype.hasOwnProperty.call(parsed, "repeatTimes")) {
-      frame.repeatTimes = toInteger(parsed.repeatTimes, toInteger(frame.repeatTimes, 1));
-    }
-    invalidateMatrixFrame(frame);
+    const imported = normalizeImportedLevel(JSON.parse(result?.content || ""));
+    if (!imported.frameList.every(frame => canApplyColorOccupancy([], frame.matrix))) return;
+    if (!confirmWithRendererFocus(t("simple.confirmReplaceLevel", {
+      name: level.label || `Level ${levelIndex + 1}`, count: level.frameList.length,
+    }))) return;
+    document.value.levels[levelIndex] = imported;
+    activeFrameIndex.value = 0;
+    previewFrameIndex.value = null;
+    draggingFrameProgress.value = false;
+    selectedObjectId.value = "";
+    resetMatrixFrameCache();
     clearRgbEditHistory();
     syncSelectedObject();
-    scheduleMatrixCacheWarmup(frameIndex);
-    statusMessage.value = dropped > 0
-      ? t("simple.importedDropped", { count: normalized.length, dropped })
-      : t("simple.imported", { count: normalized.length });
+    scheduleMatrixCacheWarmup(0);
+    statusMessage.value = t("simple.levelImported", { count: imported.frameList.length });
   } catch (error) {
-    errorMessage.value = t("simple.importFailed", { message: error.message || String(error) });
+    errorMessage.value = t("simple.levelImportFailed", { message: error.message || String(error) });
+  } finally {
+    busyAction.value = "";
+    nextTick(restoreRendererFocus);
   }
 }
 
@@ -2613,16 +2613,49 @@ function createEditorPayload() {
   return payload;
 }
 
-// 导出当前帧内容：{ repeatTimes, matrix }，matrix 为清洗后的 object form，不含帧索引。
-function serializeActiveFrame() {
-  const frame = activeFrame.value;
-  if (!frame) {
-    return null;
-  }
-  return {
-    repeatTimes: toInteger(frame.repeatTimes, 1),
-    matrix: cleanFrameMatrix(frame),
-  };
+function serializeActiveLevel() {
+  const level = JSON.parse(JSON.stringify(toRaw(activeLevel.value)));
+  level.option = normalizeLevelOption(level.option);
+  level.frameList.forEach(frame => {
+    frame.matrix = cleanFrameMatrix(frame);
+    delete frame.__matrixVersion;
+  });
+  return level;
+}
+
+// 在脱离文档的候选关卡上校验全部帧；不能边读取边覆盖现有帧。
+function normalizeImportedLevel(level) {
+  const isRecord = value => value !== null && typeof value === "object" && !Array.isArray(value);
+  const invalid = () => { throw new Error(t("simple.levelJsonInvalid")); };
+  if (!isRecord(level) || level.levels != null || !Array.isArray(level.frameList) || !level.frameList.length ||
+      (level.label != null && typeof level.label !== "string") ||
+      (level.option != null && !isRecord(level.option))) invalid();
+  const optionErrors = validateLevelOption(level.option);
+  if (optionErrors.length) throw new Error(t(optionErrors[0].messageKey));
+  level.label ||= activeLevel.value.label;
+  level.option = normalizeLevelOption(level.option);
+  level.frameList.forEach((frame, frameIndex) => {
+    if (!isRecord(frame) || !Array.isArray(frame.matrix) ||
+        !Number.isSafeInteger(frame.repeatTimes) || frame.repeatTimes < 1) invalid();
+    const usedIds = new Set();
+    frame.matrix = frame.matrix.map(entry => {
+      const object = Array.isArray(entry) ? createObjectFromTuple(entry) : entry;
+      if (!isRecord(object) || !Number.isSafeInteger(object.x) || !Number.isSafeInteger(object.y) ||
+          !Number.isInteger(object.color) || object.color < 0 || object.color > 3 ||
+          (object.id != null && ((typeof object.id !== "string" && !Number.isSafeInteger(object.id)) || usedIds.has(object.id)))) invalid();
+      if (object.points != null && (!Array.isArray(object.points) || !object.points.length ||
+          object.points.some(point => {
+            const values = Array.isArray(point) ? point : [point?.x, point?.y];
+            return values.length !== 2 || !values.every(Number.isSafeInteger);
+          }))) invalid();
+      const normalized = normalizeMatrixObject(object, frame, frameIndex);
+      if (!isObjectInsideRealMatrix(normalized)) throw new Error(t("simple.levelJsonOutside"));
+      usedIds.add(normalized.id);
+      return normalized;
+    });
+    setMatrixFrameVersion(frame, 0);
+  });
+  return level;
 }
 
 function createOccupancyIndex(objects) {
@@ -3103,18 +3136,20 @@ function formatRuntimeSummary(value) {
             <button
               class="icon-add-button"
               type="button"
-              :aria-label="t('simple.exportCurrentFrame')"
-              :data-tip="t('simple.exportCurrentFrameJson')"
-              @click="exportCurrentFrame"
+              :aria-label="t('simple.exportCurrentLevel')"
+              :data-tip="t('simple.exportCurrentLevelJson')"
+              :disabled="Boolean(busyAction) || !activeLevel"
+              @click="exportCurrentLevel"
             >
               ⬆
             </button>
             <button
               class="icon-add-button"
               type="button"
-              :aria-label="t('simple.importReplaceFrame')"
-              :data-tip="t('simple.importReplaceFrameJson')"
-              @click="importFrame"
+              :aria-label="t('simple.importReplaceLevel')"
+              :data-tip="t('simple.importReplaceLevelJson')"
+              :disabled="Boolean(busyAction) || !activeLevel"
+              @click="importCurrentLevel"
             >
               ⬇
             </button>

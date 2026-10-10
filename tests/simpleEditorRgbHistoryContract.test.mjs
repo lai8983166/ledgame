@@ -58,7 +58,7 @@ test("matrix edits use RGB transactions while frame and level structure clear hi
 
   const structuralFunctions = [
     ["loadEditor", "waitForEditorFonts"],
-    ["importFrame", "runEditorAction"],
+    ["importCurrentLevel", "runEditorAction"],
     ["addLevel", "moveActiveLevelUp"],
     ["moveActiveLevel", "deleteCurrentLevel"],
     ["deleteCurrentLevel", "addFrame"],

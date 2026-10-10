@@ -700,11 +700,14 @@ function drawHoverOutline(context) {
   if (!hoverCell) {
     return;
   }
+  if (props.overlayHighlights.some(highlight =>
+    highlight.x === hoverCell.x && highlight.y === hoverCell.y &&
+    ["selected", "anchor", "merge"].includes(highlight.type))) return;
   const position = getOverlayCellPosition(hoverCell);
   if (!position) {
     return;
   }
-  drawOutline(context, position.left, position.top, props.cellSize, "rgba(219, 228, 241, 0.46)", 2, 1);
+  drawOutline(context, position.left, position.top, props.cellSize, "rgba(219, 228, 241, 0.46)", 1.25, -0.625);
 }
 
 function drawOverlayHighlights(context) {
@@ -718,11 +721,11 @@ function drawOverlayHighlights(context) {
     } else if (highlight.type === "drag-preview") {
       drawDragPreview(context, position.left, position.top, highlight.color);
     } else if (highlight.type === "hover-object") {
-      drawOutline(context, position.left, position.top, props.cellSize, "#71a7d8", 2, 1);
+      drawOutline(context, position.left, position.top, props.cellSize, "#71a7d8", 1.25, -0.625);
     } else if (highlight.type === "merge") {
       drawOutline(context, position.left, position.top, props.cellSize, "#70d6b3", 2, 1);
     } else {
-      drawOutline(context, position.left, position.top, props.cellSize, "#f7d56f", 2, 1);
+      drawOutline(context, position.left, position.top, props.cellSize, "#f7d56f", 1.25, -0.625);
     }
   }
 }
@@ -741,10 +744,7 @@ function drawDragPreview(context, left, top, color) {
 
 function drawAnchorOutline(context, left, top) {
   const size = props.cellSize;
-  drawOutline(context, left, top, size, "#ff8a5c", 3, 2);
-  context.strokeStyle = "rgba(255, 255, 255, 0.28)";
-  context.lineWidth = 2;
-  context.strokeRect(left + 3, top + 3, Math.max(1, size - 6), Math.max(1, size - 6));
+  drawOutline(context, left, top, size, "#f7d56f", 1.25, -0.625);
 }
 
 function getGridCellPosition(cell) {

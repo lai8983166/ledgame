@@ -1805,7 +1805,7 @@ ipcMain.handle('frame:export-json', async (event, payload) => {
     event,
     method: 'showSaveDialog',
     options: {
-    title: '导出帧',
+    title: payload?.title || '导出帧',
     defaultPath: payload?.defaultFileName || 'led-frame.json',
     filters: [{ name: 'JSON', extensions: ['json'] }],
     },
@@ -1816,14 +1816,14 @@ ipcMain.handle('frame:export-json', async (event, payload) => {
   await fs.writeFile(result.filePath, payload?.content ?? '', 'utf8')
   return { canceled: false, filePath: result.filePath }
 })
-ipcMain.handle('frame:import-json', async (event) => {
+ipcMain.handle('frame:import-json', async (event, payload) => {
   const result = await showNativeDialogWithFocusRestore({
     BrowserWindow,
     dialog,
     event,
     method: 'showOpenDialog',
     options: {
-    title: '导入帧',
+    title: payload?.title || '导入帧',
     properties: ['openFile'],
     filters: [{ name: 'JSON', extensions: ['json'] }],
     },
