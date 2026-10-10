@@ -1760,6 +1760,12 @@ html[data-language-direction="rtl"] :is(input, textarea) {
   font-weight: 600;
 }
 
+.editor-required-label::after {
+  content: " *";
+  color: #ef4444;
+  font-weight: 700;
+}
+
 .sequence-block {
   display: grid;
   gap: 7px;
@@ -1871,7 +1877,7 @@ html[data-language-direction="rtl"] :is(input, textarea) {
 
 .frame-sequence-header .frame-progress-track,
 .frame-sequence-header .frame-tick-row {
-  width: max(560px, calc(100% - 12px));
+  width: calc(100% - 12px);
 }
 
 .frame-icon-actions {
@@ -1926,7 +1932,7 @@ html[data-language-direction="rtl"] :is(input, textarea) {
 .frame-progress-shell {
   width: min(620px, 100%);
   min-width: 0;
-  overflow-x: auto;
+  overflow: hidden;
   padding: 7px 10px 5px;
   border-radius: 14px;
   background:
@@ -1971,14 +1977,16 @@ html[data-language-direction="rtl"] :is(input, textarea) {
 }
 
 .frame-tick-row {
-  display: flex;
-  align-items: start;
-  justify-content: space-between;
-  width: 572px;
-  min-height: 24px;
+  position: relative;
+  width: calc(100% - 12px);
+  height: 38px;
+  margin: 0 6px;
 }
 
 .frame-tick {
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
   display: grid;
   min-width: 22px;
   padding: 0;
@@ -1991,6 +1999,20 @@ html[data-language-direction="rtl"] :is(input, textarea) {
   font-weight: 720;
   letter-spacing: 0;
 }
+
+.frame-tick-label {
+  position: absolute;
+  top: 10px;
+  white-space: nowrap;
+}
+
+.frame-tick.active .frame-tick-label { top: 24px; }
+.frame-tick:first-child { transform: none; }
+.frame-tick:last-child:not(:first-child) { transform: translateX(-100%); }
+.frame-tick:first-child .frame-tick-dot { justify-self: start; }
+.frame-tick:last-child:not(:first-child) .frame-tick-dot { justify-self: end; }
+.frame-tick:first-child .frame-tick-label { left: 0; }
+.frame-tick:last-child:not(:first-child) .frame-tick-label { right: 0; }
 
 .frame-tick-dot {
   width: 5px;

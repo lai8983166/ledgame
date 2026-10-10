@@ -20,7 +20,7 @@ import { prepareSimpleLevelGif, selectSimpleTopItem } from "../lib/simpleLevelGi
 import { resolveLiveOccupancyCell, canApplyColorOccupancy, filterUnoccupiedColorCells } from "../lib/simpleOccupancy.js";
 import { createLevelPreviewSnapshot } from "../lib/simpleLevelPreview.js";
 import { createWholeFrameCopyPlan } from "../lib/simpleFrameCopyPlan.js";
-import { insertFrameAfter } from "../lib/simpleFrameSequence.js";
+import { insertFrameAfter, visibleFrameIndices } from "../lib/simpleFrameSequence.js";
 import { deleteLevelAt } from "../lib/simpleLevelSequence.js";
 import { normalizeLevelOption, validateLevelOption } from "../lib/simpleLevelOptions.js";
 import { createRgbEditHistory } from "../lib/simpleRgbEditHistory.js";
@@ -202,6 +202,7 @@ const MATRIX_CACHE_WARMUP_BATCH_SIZE = 2;
 const levels = computed(() => document.value?.levels || []);
 const activeLevel = computed(() => levels.value[activeLevelIndex.value] || null);
 const frames = computed(() => activeLevel.value?.frameList || []);
+const frameTickIndices = computed(() => visibleFrameIndices(frames.value.length, displayedFrameIndex.value));
 const activeLevelOptionErrors = computed(
   () => new Set(validateLevelOption(activeLevel.value?.option).map((error) => error.field)),
 );
@@ -3033,10 +3034,12 @@ function formatRuntimeSummary(value) {
             </div>
             <div class="frame-tick-row">
               <button
-                v-for="(frame, index) in frames"
+                v-for="index in frameTickIndices"
                 :key="`frame-${index}`"
                 class="frame-tick"
                 :class="{ active: displayedFrameIndex === index }"
+                :style="{ left: `${frames.length <= 1 ? 0 : index / (frames.length - 1) * 100}%` }"
+                :title="String(index + 1)"
                 type="button"
                 @click="selectFrame(index)"
               >
@@ -3335,11 +3338,11 @@ function formatRuntimeSummary(value) {
         </label>
         <div class="two-column-fields">
           <label>
-            <span>{{ t("simple.width") }}</span>
+            <span class="editor-required-label">{{ t("simple.width") }}</span>
             <input v-model.number="document.siteSizeWidth" min="1" type="number" />
           </label>
           <label>
-            <span>{{ t("simple.height") }}</span>
+            <span class="editor-required-label">{{ t("simple.height") }}</span>
             <input v-model.number="document.siteSizeHeight" min="1" type="number" />
           </label>
         </div>
@@ -3359,13 +3362,13 @@ function formatRuntimeSummary(value) {
         <div v-if="activeLevel" class="level-limit-fields">
           <h3>{{ t("simple.levelLimits") }}</h3>
           <label>
-            <span>{{ t('management.simpleReward') }}</span>
+            <span class="editor-required-label">{{ t('management.simpleReward') }}</span>
             <input v-model.number="activeLevel.option.rewardPoints" type="number" min="0" max="1000000" step="1" :class="{ invalid: activeLevelOptionErrors.has('rewardPoints') }" />
             <small>{{ t('management.simpleRewardHint') }}</small>
             <small v-if="activeLevelOptionErrors.has('rewardPoints')" class="field-error">{{ t('management.rewardInvalid') }}</small>
           </label>
           <label>
-            <span>{{ t("simple.levelTimeLimit") }}</span>
+            <span class="editor-required-label">{{ t("simple.levelTimeLimit") }}</span>
             <select
               :value="activeLevel.option.timeLimitMode"
               @change="updateActiveLevelTimeMode($event.target.value)"
@@ -3376,7 +3379,7 @@ function formatRuntimeSummary(value) {
             </select>
           </label>
           <label v-if="activeLevel.option.timeLimitMode !== 'UNLIMITED'">
-            <span>{{ t("simple.levelTimeValue") }}</span>
+            <span class="editor-required-label">{{ t("simple.levelTimeValue") }}</span>
             <input
               v-model.number="activeLevel.option.timeLimitValue"
               min="1"
@@ -3388,7 +3391,7 @@ function formatRuntimeSummary(value) {
             </small>
           </label>
           <label>
-            <span>{{ t("simple.levelLifeLimit") }}</span>
+            <span class="editor-required-label">{{ t("simple.levelLifeLimit") }}</span>
             <select
               :value="activeLevel.option.lifeLimitMode"
               @change="updateActiveLevelLifeMode($event.target.value)"
@@ -3398,7 +3401,7 @@ function formatRuntimeSummary(value) {
             </select>
           </label>
           <label v-if="activeLevel.option.lifeLimitMode === 'LIMITED'">
-            <span>{{ t("simple.levelLifeValue") }}</span>
+            <span class="editor-required-label">{{ t("simple.levelLifeValue") }}</span>
             <input
               v-model.number="activeLevel.option.lifeLimitValue"
               min="1"

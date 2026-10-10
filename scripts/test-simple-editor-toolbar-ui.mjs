@@ -55,6 +55,56 @@ try {
   await page.goto(`http://127.0.0.1:${server.httpServer.address().port}/tests/ui/catalog-library-harness.html`);
   await page.waitForFunction(()=>window.mountComponent);
   await mount();
+  await check('指定标签红色星号仅展示，不新增必填校验',async()=>{
+    const basicMarkers=page.locator('.editor-left .editor-required-label');
+    assert.equal(await basicMarkers.count(),5);
+    assert.ok((await basicMarkers.allTextContents()).includes('本关通关积分'));
+    for(const style of await basicMarkers.evaluateAll(items=>items.map(item=>({content:getComputedStyle(item,'::after').content,color:getComputedStyle(item,'::after').color})))){
+      assert.ok(style.content.includes('*'));assert.equal(style.color,'rgb(239, 68, 68)');
+    }
+    await button('全局配置').click();await page.locator('.global-config-dialog').waitFor();
+    const expected=['一级菜单','游戏封面','游戏开始语音','游戏成功语音','游戏失败语音','关卡通过语音','关卡重启语音','得分音效','受伤音效','double 音效','待机动画','游戏失败动画','游戏完成动画'];
+    const labels=await page.locator('.global-config-label.editor-required-label').allTextContents();
+    for(const name of expected) assert.ok(labels.includes(name),'缺少星号：'+name);
+    assert.equal(await page.locator('.global-config-field input[required],.global-config-field select[required]').count(),0);
+    assert.equal(await page.locator('.global-config-label').filter({hasText:'关卡结算动画'}).getAttribute('class'),'global-config-label');
+    const before=await page.evaluate(()=>window.fixture.saves);
+    await page.locator('.global-config-dialog').getByRole('button',{name:'保存',exact:true}).click();
+    await page.locator('.global-config-dialog').waitFor({state:'hidden'});
+    assert.equal(await page.evaluate(()=>window.fixture.saves),before+1);
+    assert.equal(await page.evaluate(()=>window.fixture.game.cover),'');
+  });
+  await check('帧数增加不出现滚动条，任意帧和末帧可达，多个视口 RGB 不抖动',async()=>{
+    for(const viewport of [{width:1366,height:768},{width:1920,height:1080},{width:2560,height:1440}]){
+      await page.setViewportSize(viewport);
+      await page.mouse.move(0,0);
+      let initial;
+      for(const count of [1,12,100,10000]){
+        await page.evaluate(count=>{const s=window.getComponentSetup();s.activeLevel.frameList=Array.from({length:count},()=>({repeatTimes:1,matrix:[]}));s.activeFrameIndex=Math.floor((count-1)/2);},count);
+        await page.waitForTimeout(100);
+        assert.ok(await page.locator('.frame-tick').count()<=13);
+        const overflow=await page.locator('.frame-sequence-header').evaluate(el=>[...el.querySelectorAll('.frame-progress-shell,.frame-tick-row')].map(item=>({horizontal:item.scrollWidth>item.clientWidth,vertical:item.scrollHeight>item.clientHeight})));
+        assert.ok(overflow.every(item=>!item.horizontal&&!item.vertical),JSON.stringify({count,viewport,overflow}));
+        const box=await page.locator('.matrix-overlay-canvas').boundingBox();
+        if(!initial)initial=box;else assert.deepEqual(box,initial);
+        assert.equal(await page.locator('.frame-tick.active .frame-tick-label').innerText(),String(Math.floor((count-1)/2)+1));
+        await page.locator('.frame-tick').last().click();
+        assert.equal(await page.evaluate(()=>window.getComponentSetup().activeFrameIndex),count-1);
+        if(count>1){
+          const track=await page.locator('.frame-progress-track').boundingBox();
+          await page.mouse.click(track.x+track.width*.37,track.y+track.height/2);
+          const index=await page.evaluate(()=>window.getComponentSetup().activeFrameIndex);
+          assert.ok(Math.abs(index-Math.round((count-1)*.37))<=1);
+          await page.keyboard.press('d');
+          assert.equal(await page.evaluate(()=>window.getComponentSetup().activeFrameIndex),Math.min(count-1,index+1));
+          await page.keyboard.press('a');
+          assert.equal(await page.evaluate(()=>window.getComponentSetup().activeFrameIndex),index);
+        }
+      }
+      await page.screenshot({path:path.join(output,`frame-sequence-${viewport.width}.png`)});
+    }
+    await page.setViewportSize({width:1366,height:768});await mount();
+  });
   await check('无模式开关与精灵画笔入口，四色画笔在对象面板',async()=>{
     assert.equal(await page.locator('.editor-mode-option').count(),0);
     assert.equal(await page.locator('.object-sprite-button').count(),0);

@@ -22,48 +22,48 @@ const sections = computed(() => [
     title: t("globalConfig.basicInfo"),
     columns: 1,
     fields: [
-      { label: t("globalConfig.cover"), path: "cover", kind: "media", accept: "image" },
+      { label: t("globalConfig.cover"), path: "cover", kind: "media", accept: "image", marked: true },
       { label: t("globalConfig.type"), path: "type", kind: "text" },
       { label: t("globalConfig.mode"), path: "mode", kind: "text" },
       { label: t("globalConfig.name"), path: "name", kind: "text" },
-      { label: t("globalConfig.firstCatalog"), path: "firstCatalog", kind: "category" },
+      { label: t("globalConfig.firstCatalog"), path: "firstCatalog", kind: "category", marked: true },
     ],
   },
   {
     title: t("globalConfig.timeLimit"),
     fields: [
-      { label: t("globalConfig.enableTimeLimit"), path: "globalTimeLimit", kind: "checkbox" },
-      { label: t("globalConfig.timeLimitSeconds"), path: "globalTimeLimitValue", kind: "number" },
+      { label: t("globalConfig.enableTimeLimit"), path: "globalTimeLimit", kind: "checkbox", marked: true },
+      { label: t("globalConfig.timeLimitSeconds"), path: "globalTimeLimitValue", kind: "number", marked: true },
     ],
   },
   {
     title: t("globalConfig.soundEffects"),
     fields: [
       { label: t("globalConfig.idleBgm"), path: "audio.globalBackgroundSound", kind: "media", accept: "audio" },
-      { label: t("globalConfig.scoreSound"), path: "audio.scoreSound", kind: "media", accept: "audio" },
-      { label: t("globalConfig.injurySound"), path: "audio.injurySound", kind: "media", accept: "audio" },
-      { label: t("globalConfig.doubleSound"), path: "audio.purpleSound", kind: "media", accept: "audio" },
+      { label: t("globalConfig.scoreSound"), path: "audio.scoreSound", kind: "media", accept: "audio", marked: true },
+      { label: t("globalConfig.injurySound"), path: "audio.injurySound", kind: "media", accept: "audio", marked: true },
+      { label: t("globalConfig.doubleSound"), path: "audio.purpleSound", kind: "media", accept: "audio", marked: true },
     ],
   },
   {
     title: t("globalConfig.voice"),
     fields: [
-      { label: t("globalConfig.gameStartVoice"), path: "commonConfig.gameStartAudio", kind: "media", accept: "audio" },
-      { label: t("globalConfig.gameSuccessVoice"), path: "commonConfig.gameEndSuccessAudio", kind: "media", accept: "audio" },
-      { label: t("globalConfig.gameFailureVoice"), path: "commonConfig.gameEndFailAudio", kind: "media", accept: "audio" },
-      { label: t("globalConfig.levelPassVoice"), path: "commonConfig.levelPassAudio", kind: "media", accept: "audio" },
-      { label: t("globalConfig.levelRestartVoice"), path: "commonConfig.levelRestartAudio", kind: "media", accept: "audio" },
+      { label: t("globalConfig.gameStartVoice"), path: "commonConfig.gameStartAudio", kind: "media", accept: "audio", marked: true },
+      { label: t("globalConfig.gameSuccessVoice"), path: "commonConfig.gameEndSuccessAudio", kind: "media", accept: "audio", marked: true },
+      { label: t("globalConfig.gameFailureVoice"), path: "commonConfig.gameEndFailAudio", kind: "media", accept: "audio", marked: true },
+      { label: t("globalConfig.levelPassVoice"), path: "commonConfig.levelPassAudio", kind: "media", accept: "audio", marked: true },
+      { label: t("globalConfig.levelRestartVoice"), path: "commonConfig.levelRestartAudio", kind: "media", accept: "audio", marked: true },
     ],
   },
   {
     title: t("globalConfig.animations"),
     columns: 3,
     fields: [
-      { label: t("globalConfig.idleAnimation"), path: "gif.standby", kind: "media", accept: "image" },
+      { label: t("globalConfig.idleAnimation"), path: "gif.standby", kind: "media", accept: "image", marked: true },
       { label: t("globalConfig.levelSettlementAnimation"), path: "gif.levelSettlement", kind: "media", accept: "image" },
       { label: t("globalConfig.levelFailureAnimation"), path: "gif.levelFailure", kind: "media", accept: "image" },
-      { label: t("globalConfig.gameFailureAnimation"), path: "gif.gameFailure", kind: "media", accept: "image" },
-      { label: t("globalConfig.gameCompleteAnimation"), path: "gif.gameOver", kind: "media", accept: "image" },
+      { label: t("globalConfig.gameFailureAnimation"), path: "gif.gameFailure", kind: "media", accept: "image", marked: true },
+      { label: t("globalConfig.gameCompleteAnimation"), path: "gif.gameOver", kind: "media", accept: "image", marked: true },
     ],
   },
 ]);
@@ -221,7 +221,7 @@ onBeforeUnmount(() => {
               :key="field.path"
               class="global-config-field"
             >
-              <span class="global-config-label">{{ field.label }}</span>
+              <span class="global-config-label" :class="{ 'editor-required-label': field.marked }">{{ field.label }}</span>
 
               <input
                 v-if="field.kind === 'text'"

@@ -18,7 +18,7 @@ let page;
 const api = (name,...args) => page.evaluate(([name,args])=>window.ledGame[name](...args),[name,args]);
 try {
   await expect.poll(()=>{
-    page=app.electron.windows().find(p=>p.url().includes('index.html')&&!p.url().includes('splash'));
+    page=app.electron.windows().find(p=>p.url().includes('index.html')&&!p.url().includes('window='));
     return Boolean(page);
   },{timeout:90_000}).toBe(true);
   page.on('pageerror',error=>errors.push(error.message));
@@ -51,9 +51,14 @@ try {
     await page.getByRole('menuitem',{name:'游戏列表',exact:true}).click();
     await page.locator('.game-card[data-id="'+id+'"] .game-card-main').click();
     await page.locator('.editor-toolbar').waitFor();
+    const labelStyles=await page.locator('.editor-left .editor-required-label').evaluateAll(items=>items.map(item=>({content:getComputedStyle(item,'::after').content,color:getComputedStyle(item,'::after').color})));
+    assert.ok(labelStyles.length>=5);
+    assert.ok(labelStyles.every(style=>style.content.includes('*')&&style.color==='rgb(239, 68, 68)'));
+    assert.equal(await page.locator('.frame-progress-shell').evaluate(el=>el.scrollWidth<=el.clientWidth&&el.scrollHeight<=el.clientHeight),true);
     const stageMedia=[doc.commonConfig?.levelPassAudio || '',doc.commonConfig?.levelRestartAudio || '',doc.gif?.levelSettlement || '',doc.gif?.levelFailure || ''];
     assert.equal(await page.locator('.editor-level-media-field input').inputValue(),doc.levels[0].option?.bgVoice || '');
     await page.getByRole('button',{name:'全局配置',exact:true}).click();
+    assert.equal(await page.locator('.global-config-label.editor-required-label').count(),15);
     for(const label of ['关卡通过语音','关卡重启语音','关卡结算动画','关卡失败动画'])assert.equal(await page.locator('.global-config-dialog .global-config-label').getByText(label,{exact:true}).count(),1);
     await page.locator('.global-config-dialog').getByRole('button',{name:'取消',exact:true}).click();
     assert.equal(await page.getByRole('button',{name:'左转90',exact:true}).count(),0);
