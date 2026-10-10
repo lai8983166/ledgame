@@ -122,7 +122,8 @@ test("secondary window stays single-instance, targets explicit bounds, and close
   assert.match(secondaryWindowSource, /secondaryWindowDisplayId === String\(display\.id\)/);
   assert.match(secondaryWindowSource, /activateSecondaryWindow\(secondaryWindow\)/);
   assert.match(secondaryWindowSource, /createdWindow\.setBounds\(bounds\)/);
-  assert.match(secondaryWindowSource, /createdWindow\.setFullScreen\(true\)/);
+  assert.match(secondaryWindowSource, /secondaryWindowPlacement\(display\)/);
+  assert.match(secondaryWindowSource, /createdWindow\.setFullScreen\(fullScreen\)/);
   assert.match(secondaryWindowSource, /window=secondary/);
   assert.match(displayRemovalSource, /secondaryWindowDisplayId === String\(display\?\.id\)/);
   assert.match(displayRemovalSource, /detachedWindow\.close\(\)/);

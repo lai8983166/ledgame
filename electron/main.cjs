@@ -32,6 +32,8 @@ const { createSplashLifecycle } = require('./splash-lifecycle.cjs')
 const {
   describeDisplays,
   matchSecondaryDisplay,
+  automaticSecondaryDisplay,
+  secondaryWindowPlacement,
   toDisplaySelection,
 } = require('./secondary-display.cjs')
 const {
@@ -268,6 +270,8 @@ async function getSecondaryDisplayState() {
   const settings = await applicationSettings.get()
   const displays = currentDisplayDescriptors()
   const selected = matchSecondaryDisplay(displays, settings.secondaryDisplay)
+    || (!displays.some((display) => display.selectable)
+      ? automaticSecondaryDisplay(displays, settings.secondaryDisplay) : null)
   return {
     displays,
     selectedId: selected?.id ?? null,
@@ -684,7 +688,8 @@ function closeSecondaryWindow() {
 }
 
 function createSecondaryWindow(display) {
-  if (!display?.selectable || display.primary) {
+  const placement = secondaryWindowPlacement(display)
+  if (!placement || (!display.primary && !display.selectable)) {
     throw new Error('SECONDARY_DISPLAY_UNAVAILABLE')
   }
   if (
@@ -697,14 +702,14 @@ function createSecondaryWindow(display) {
   }
   closeSecondaryWindow()
 
-  const bounds = display.bounds
+  const { bounds, fullScreen } = placement
   secondaryWindowDisplayId = String(display.id)
   secondaryWindow = new BrowserWindow({
     x: bounds.x,
     y: bounds.y,
     width: bounds.width,
     height: bounds.height,
-    useContentSize: true,
+    useContentSize: !display.primary,
     show: false,
     title: 'LED Game Secondary Display',
     backgroundColor: '#061019',
@@ -726,7 +731,7 @@ function createSecondaryWindow(display) {
       return
     }
     createdWindow.setBounds(bounds)
-    createdWindow.setFullScreen(true)
+    createdWindow.setFullScreen(fullScreen)
     activateSecondaryWindow(createdWindow)
   })
   createdWindow.on('closed', () => {
@@ -765,7 +770,10 @@ async function selectSecondaryDisplay(displayId) {
 
 async function openSecondaryDisplay() {
   const settings = await applicationSettings.get()
-  const display = matchSecondaryDisplay(currentDisplayDescriptors(), settings.secondaryDisplay)
+  const displays = currentDisplayDescriptors()
+  const display = matchSecondaryDisplay(displays, settings.secondaryDisplay)
+    || (!displays.some((item) => item.selectable)
+      ? automaticSecondaryDisplay(displays, settings.secondaryDisplay) : null)
   if (!display) {
     throw new Error('SECONDARY_DISPLAY_UNAVAILABLE')
   }
@@ -774,12 +782,12 @@ async function openSecondaryDisplay() {
 }
 
 async function openAutomaticSecondaryDisplay() {
-  const displays = currentDisplayDescriptors().filter((display) => display.selectable)
-  if (!displays.length) return null
+  const displays = currentDisplayDescriptors()
   const settings = await applicationSettings.get()
   const selected = matchSecondaryDisplay(displays, settings.secondaryDisplay)
-  const display = selected || displays[0]
-  if (!selected) {
+  const display = automaticSecondaryDisplay(displays, settings.secondaryDisplay)
+  if (!display) return null
+  if (!selected && !display.primary) {
     await updateApplicationSettings({ secondaryDisplay: toDisplaySelection(display) })
   }
   createSecondaryWindow(display)
@@ -2333,7 +2341,8 @@ app.whenReady()
 
     screen.on('display-added', () => {
       void broadcastSecondaryDisplayStatus()
-      if (!secondaryWindow || secondaryWindow.isDestroyed()) {
+      if (!secondaryWindow || secondaryWindow.isDestroyed()
+        || secondaryWindowDisplayId === String(screen.getPrimaryDisplay().id)) {
         void openAutomaticSecondaryDisplay().catch((error) => {
           appendStartupLog(`Automatic secondary display open failed: ${error.message || String(error)}`)
         })

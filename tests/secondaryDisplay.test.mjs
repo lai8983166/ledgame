@@ -7,6 +7,8 @@ const require = createRequire(import.meta.url);
 const {
   describeDisplays,
   matchSecondaryDisplay,
+  automaticSecondaryDisplay,
+  secondaryWindowPlacement,
   toDisplaySelection,
 } = require("../electron/secondary-display.cjs");
 
@@ -64,11 +66,40 @@ test("secondary display matching never falls back to primary or an unrelated scr
   );
 });
 
-test("startup automatically opens the first available external display", async () => {
+test("automatic secondary display prefers saved external, first external, then primary", () => {
+  const raw = [display(1, "Primary", 0), display(2, "Left", -1920), display(3, "Right", 1920)];
+  const descriptors = describeDisplays(raw, raw[0]);
+  const saved = toDisplaySelection(descriptors[2]);
+  assert.equal(automaticSecondaryDisplay(descriptors, saved).id, "3");
+  assert.equal(automaticSecondaryDisplay(descriptors, null).id, "2");
+  assert.equal(automaticSecondaryDisplay(descriptors.slice(0, 1), saved).id, "1");
+  assert.equal(automaticSecondaryDisplay([], saved), null);
+  assert.equal(toDisplaySelection(automaticSecondaryDisplay(descriptors.slice(0, 1), saved)), null);
+});
+
+test("primary fallback is centered and windowed inside the work area, external stays fullscreen", () => {
+  for (const raw of [display(1, "Primary", 0), display(1, "Small", -800, 800, 600)]) {
+    const [primary] = describeDisplays([raw], raw);
+    const plan = secondaryWindowPlacement(primary);
+    const area = primary.workArea;
+    assert.equal(plan.fullScreen, false);
+    assert.ok(plan.bounds.width <= 1280 && plan.bounds.height <= 720);
+    assert.ok(plan.bounds.x >= area.x && plan.bounds.y >= area.y);
+    assert.ok(plan.bounds.x + plan.bounds.width <= area.x + area.width);
+    assert.ok(plan.bounds.y + plan.bounds.height <= area.y + area.height);
+  }
+  const raw = [display(1, "Primary", 0), display(2, "Left", -1920)];
+  const external = describeDisplays(raw, raw[0])[1];
+  assert.deepEqual(secondaryWindowPlacement(external), { bounds: external.bounds, fullScreen: true });
+  assert.equal(secondaryWindowPlacement(null), null);
+  assert.equal(secondaryWindowPlacement({ primary: true, bounds: { width: 0, height: 0 } }), null);
+});
+
+test("startup uses automatic secondary target selection in the shared main process", async () => {
   const source = await readFile(new URL("../electron/main.cjs", import.meta.url), "utf8");
   assert.match(source, /async function openAutomaticSecondaryDisplay\(\)/);
   assert.match(source, /void openAutomaticSecondaryDisplay\(\)\.catch/);
-  assert.match(source, /currentDisplayDescriptors\(\)\.filter\(\(display\) => display\.selectable\)/);
+  assert.match(source, /automaticSecondaryDisplay\(displays, settings\.secondaryDisplay\)/);
 });
 
 test("secondary runtime view shows generic game time without treating Rank milliseconds as global time", async () => {

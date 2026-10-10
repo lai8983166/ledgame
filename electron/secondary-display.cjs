@@ -70,8 +70,35 @@ function matchSecondaryDisplay(descriptors, selection) {
   return boundsOnly.length === 1 ? boundsOnly[0] : null
 }
 
+function automaticSecondaryDisplay(descriptors, selection) {
+  return matchSecondaryDisplay(descriptors, selection)
+    || descriptors.find((display) => display.selectable && !display.primary)
+    || descriptors.find((display) => display.primary)
+    || null
+}
+
+function secondaryWindowPlacement(display) {
+  if (!display) return null
+  const area = normalizeRectangle(display.primary ? display.workArea ?? display.bounds : display.bounds)
+  if (!area.width || !area.height) return null
+  if (!display.primary) return { bounds: area, fullScreen: true }
+  const width = Math.max(1, Math.floor(Math.min(1280, area.width * 0.8)))
+  const height = Math.max(1, Math.floor(Math.min(720, area.height * 0.8)))
+  return {
+    bounds: {
+      x: area.x + Math.floor((area.width - width) / 2),
+      y: area.y + Math.floor((area.height - height) / 2),
+      width,
+      height,
+    },
+    fullScreen: false,
+  }
+}
+
 module.exports = {
   describeDisplays,
   matchSecondaryDisplay,
+  automaticSecondaryDisplay,
+  secondaryWindowPlacement,
   toDisplaySelection,
 }
