@@ -30,6 +30,7 @@ window.mountComponent = (component, props) => {
     onCancel: () => window.componentEvents.push(['cancel']),
     onSave: value => window.componentEvents.push(['save', value]),
     onExit: () => window.componentEvents.push(['exit']),
+    onOpenGame: game => window.componentEvents.push(['open-game', game]),
   }) });
   app.use(i18n).mount('#app');
 };

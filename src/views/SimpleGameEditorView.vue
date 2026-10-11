@@ -25,7 +25,7 @@ import { deleteLevelAt } from "../lib/simpleLevelSequence.js";
 import { normalizeLevelOption, validateLevelOption } from "../lib/simpleLevelOptions.js";
 import { createRgbEditHistory } from "../lib/simpleRgbEditHistory.js";
 import { createLatestAsyncTaskGuard } from "../lib/latestAsyncTask.js";
-import { saveSimpleGlobalConfigDocument } from "../lib/simpleGlobalConfig.js";
+import { applySimpleGlobalConfigPatch, saveSimpleGlobalConfigDocument } from "../lib/simpleGlobalConfig.js";
 import { normalizePixelLightWiring } from "../lib/pixelLightLayout.js";
 import { normalizeGameCategoryList } from "../lib/gameCategories.js";
 import {
@@ -49,6 +49,7 @@ import { confirmWithRendererFocus, restoreRendererFocus } from "../lib/rendererF
 const { t } = useI18n({ useScope: "global" });
 
 const props = defineProps({
+  initialDocument: { type: Object, default: null },
   gameId: {
     type: [Number, String],
     default: null,
@@ -105,7 +106,11 @@ async function saveWiring(wiring) {
   gameWiringSaving.value = true;
   gameWiringError.value = "";
   try {
-    await saveGameWiring(api, props.gameId, false, wiring, document.value);
+    if (currentGameId.value) await saveGameWiring(api, currentGameId.value, false, wiring, document.value);
+    else {
+      document.value.wiringData = JSON.parse(JSON.stringify(wiring));
+      statusMessage.value = t('gameCreation.draftHint');
+    }
     gameWiringOpen.value = false;
   } catch (error) {
     gameWiringError.value = error.message?.startsWith('gameWiring.') ? t(error.message) : error.message;
@@ -208,7 +213,7 @@ const activeLevelOptionErrors = computed(
 );
 const activeFrame = computed(() => frames.value[activeFrameIndex.value] || null);
 const currentGameId = computed(() => {
-  const value = Number(props.gameId);
+  const value = Number(document.value?.id ?? props.gameId);
   return Number.isFinite(value) && value > 0 ? Math.floor(value) : null;
 });
 const currentGameName = computed(() => props.gameName || document.value?.name || "Simple");
@@ -568,19 +573,19 @@ async function loadEditor() {
   document.value = null;
   effectDialogOpen.value = false;
   await runEditorAction("load", async () => {
-    if (!gameId) {
+    if (!gameId && !props.initialDocument) {
       throw new Error(t("simple.gameSelectionMissing"));
     }
-    const detail = await api.getGameEditor(gameId);
+    const detail = gameId ? await api.getGameEditor(gameId) : { data: JSON.parse(JSON.stringify(props.initialDocument)) };
     if (!isCurrentEditorLoad(loadTicket)) {
       return;
     }
     const loaded = detail?.data ?? detail;
-    if (!loaded || Number(loaded.id) !== gameId) {
+    if (!loaded || (gameId ? Number(loaded.id) !== gameId : loaded.id != null || loaded.type !== 'default')) {
       throw new Error(t("simple.editorGameMismatch", { game: currentGameName.value }));
     }
     document.value = ensureEditableShape({ ...loaded, id: gameId });
-    savedFingerprint.value = JSON.stringify(createEditorPayload());
+    savedFingerprint.value = gameId ? JSON.stringify(createEditorPayload()) : '';
     resetMatrixFrameCache();
     activeLevelIndex.value = 0;
     activeFrameIndex.value = 0;
@@ -591,7 +596,7 @@ async function loadEditor() {
     selectedObjectId.value = "";
     stopSelectionMode();
     panoramaMode.value = false;
-    statusMessage.value = t("simple.loadedGame", { game: currentGameName.value });
+    statusMessage.value = gameId ? t("simple.loadedGame", { game: currentGameName.value }) : t('gameCreation.draftHint');
     runtimeStatusMessage.value = "";
     runtimeErrorMessage.value = "";
     runtimeResult.value = null;
@@ -908,7 +913,7 @@ function setupMatrixContainerObserver() {
 }
 
 async function validateEditor() {
-  if (!document.value || !currentGameId.value) {
+  if (!document.value) {
     return;
   }
   const localErrors = document.value.levels.flatMap((level, index) =>
@@ -930,7 +935,7 @@ async function validateEditor() {
 }
 
 async function saveEditor() {
-  if (!document.value || !currentGameId.value) {
+  if (!document.value) {
     return;
   }
   const localErrors = document.value.levels.flatMap((level, index) =>
@@ -946,9 +951,16 @@ async function saveEditor() {
   }
   await runEditorAction("save", async () => {
     const payload = createEditorPayload();
-    const result = await api.saveGameEditor(currentGameId.value, payload);
-    if (result?.data?.saved === true) savedFingerprint.value = JSON.stringify(payload);
-    statusMessage.value = result?.data?.saved ? t("simple.saveSuccess") : t("simple.saveComplete");
+    const result = currentGameId.value
+      ? await api.saveGameEditor(currentGameId.value, payload)
+      : await api.createGameEditor(payload);
+    const saved = result?.data ?? result;
+    if (saved?.saved !== true || !Number.isInteger(saved.gameId) || saved.gameId < 1) {
+      throw new Error(result?.message || t('gameWiring.saveFailed'));
+    }
+    document.value.id = saved.gameId;
+    savedFingerprint.value = JSON.stringify(createEditorPayload());
+    statusMessage.value = t("simple.saveSuccess");
     validationErrors.value = [];
   });
 }
@@ -977,6 +989,9 @@ function openGlobalConfig() {
 async function saveGlobalConfig(patch) {
   const gameId = currentGameId.value;
   if (!gameId) {
+    applySimpleGlobalConfigPatch(document.value, patch);
+    globalConfigOpen.value = false;
+    statusMessage.value = t('gameCreation.draftHint');
     return;
   }
   // 仅持久化配置字段：用后端上次已保存的文档作为 base，只应用配置 patch 后落库，
@@ -1076,6 +1091,11 @@ function applyEffectResult(result) {
 async function savePixelLightLayout(layout) {
   const gameId = currentGameId.value;
   if (!gameId) {
+    document.value.commonConfig ||= {};
+    document.value.commonConfig.pixelLightWiring = normalizePixelLightWiring(layout);
+    pixelLightLayoutDraft.value = normalizePixelLightWiring(layout);
+    pixelLightLayoutOpen.value = false;
+    statusMessage.value = t('gameCreation.draftHint');
     return;
   }
   await runEditorAction("save", async () => {
@@ -1137,7 +1157,7 @@ async function exportCurrentLevelGif() {
 }
 
 async function startGame() {
-  if (!document.value || busyAction.value) return;
+  if (!document.value || !currentGameId.value || busyAction.value) return;
   if (JSON.stringify(createEditorPayload()) !== savedFingerprint.value) debugEntryOpen.value = true;
   else await enterDebug('saved');
 }

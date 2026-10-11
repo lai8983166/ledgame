@@ -61,6 +61,7 @@ const fullLedGameApi = {
   listGames: () => ipcRenderer.invoke('game:list'),
   listPlayableGames: () => ipcRenderer.invoke('game:playable-list'),
   listManageableGames: () => ipcRenderer.invoke('game:manageable-list'),
+  newGameDraft: (family) => ipcRenderer.invoke('game:new-draft', family),
   listGameCategories: () => ipcRenderer.invoke('game-categories:list'),
   createGameCategory: (payload) => ipcRenderer.invoke('game-categories:create', payload),
   updateGameCategory: (categoryId, payload) => ipcRenderer.invoke('game-categories:update', categoryId, payload),
@@ -96,9 +97,11 @@ const fullLedGameApi = {
   getGameEditor: (gameId) => ipcRenderer.invoke('game-editor:get', gameId),
   validateGameEditor: (document) => ipcRenderer.invoke('game-editor:validate', document),
   saveGameEditor: (gameId, document) => ipcRenderer.invoke('game-editor:save', gameId, document),
+  createGameEditor: (document) => ipcRenderer.invoke('game-editor:create', document),
   getRankGameEditor: (gameId) => ipcRenderer.invoke('rank-game-editor:get', gameId),
   validateRankGameEditor: (document) => ipcRenderer.invoke('rank-game-editor:validate', document),
   saveRankGameEditor: (gameId, document) => ipcRenderer.invoke('rank-game-editor:save', gameId, document),
+  createRankGameEditor: (document) => ipcRenderer.invoke('rank-game-editor:create', document),
   updateGameMetadata: (gameId, patch) => ipcRenderer.invoke('game:metadata-update', gameId, patch),
   reorderGames: (gameIds) => ipcRenderer.invoke('game:reorder', gameIds),
   readHelpDocument: (key) => ipcRenderer.invoke('help:document', key),
@@ -148,6 +151,8 @@ contextBridge.exposeInMainWorld('mediaLibrary', {
   list: () => ipcRenderer.invoke('media:list'),
   getPreviewUrl: (relativePath) => ipcRenderer.invoke('media:get-preview-url', relativePath),
   openFolder: () => ipcRenderer.invoke('media:open-folder'),
+  upload: (folder) => ipcRenderer.invoke('media:upload', folder),
+  createFolder: (folder, name) => ipcRenderer.invoke('media:create-folder', folder, name),
 })
 
 contextBridge.exposeInMainWorld('appLanguage', {

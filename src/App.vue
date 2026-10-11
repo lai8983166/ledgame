@@ -311,7 +311,7 @@ function enterGameFlow() {
 
 function openGameEditor(game) {
   selectedEditorGame.value = game
-    ? { id: game.id, name: game.name, displayName: game.displayName, type: game.type }
+    ? { id: game.id, name: game.name, displayName: game.displayName, type: game.type, draft: game.draft }
     : null;
   if (game?.type === "rank") {
     activeView.value = "rank-editor";
@@ -804,6 +804,7 @@ function formatRuntimeValue(value, fallback = "-") {
       v-else-if="activeView === 'simple-editor'"
       :game-id="selectedEditorGame?.id"
       :game-name="selectedEditorGame?.name"
+      :initial-document="selectedEditorGame?.draft"
       @debug-active="editorDebugActive = $event"
       @back="backToGameList"
     />
@@ -812,6 +813,7 @@ function formatRuntimeValue(value, fallback = "-") {
       v-else-if="activeView === 'rank-editor'"
       :game-id="selectedEditorGame?.id"
       :game-name="selectedEditorGame?.displayName || selectedEditorGame?.name"
+      :initial-document="selectedEditorGame?.draft"
       @debug-active="editorDebugActive = $event"
       @back="backToGameList"
     />

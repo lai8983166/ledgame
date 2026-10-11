@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { createLatestAsyncValueLoader } from "../lib/latestAsyncTask.js";
 
@@ -15,6 +15,13 @@ const noticeMessage = ref("");
 const rootExists = ref(true);
 const audioElement = ref(null);
 const isOpeningFolder = ref(false);
+const targetFolder = ref('');
+const isWriting = ref(false);
+const folderDialogOpen = ref(false);
+const folderName = ref('');
+const folderError = ref('');
+const folderInput = ref(null);
+let folderTrigger;
 let mounted = false;
 const mediaApi = computed(() => window.mediaLibrary);
 const previewLoader = createLatestAsyncValueLoader({
@@ -103,6 +110,7 @@ async function selectNode(node) {
   previewLoader.invalidate();
   preview.value = null;
   selectedPath.value = node.relativePath;
+  targetFolder.value = node.kind === 'directory' ? node.relativePath : node.relativePath.split('/').slice(0, -1).join('/');
   noticeMessage.value = "";
 
   if (node.kind === "directory") {
@@ -143,7 +151,7 @@ async function loadMedia() {
     const result = await mediaApi.value.list();
     mediaTree.value = Array.isArray(result?.items) ? result.items : [];
     rootExists.value = result?.exists !== false;
-    expandedPaths.value = new Set();
+    if (targetFolder.value && !findFolder(mediaTree.value, targetFolder.value)) targetFolder.value = '';
     if (mediaTree.value.length > 0) {
       noticeMessage.value = t("media.refreshed");
     }
@@ -154,6 +162,72 @@ async function loadMedia() {
   } finally {
     isLoading.value = false;
   }
+}
+
+function findFolder(nodes, relativePath) {
+  for (const node of nodes) {
+    if (node.kind !== 'directory') continue;
+    if (node.relativePath === relativePath || findFolder(node.children || [], relativePath)) return true;
+  }
+  return false;
+}
+
+function expandFolder(relativePath) {
+  const next = new Set(expandedPaths.value);
+  const parts = relativePath.split('/');
+  for (let index = 1; index <= parts.length; index++) next.add(parts.slice(0, index).join('/'));
+  expandedPaths.value = next;
+}
+
+async function uploadMedia() {
+  if (isWriting.value || isLoading.value) return;
+  errorMessage.value = ''; noticeMessage.value = '';
+  if (!mediaApi.value?.upload) { errorMessage.value = t('media.apiUnavailable'); return; }
+  const folder = targetFolder.value;
+  isWriting.value = true;
+  try {
+    const result = await mediaApi.value.upload(folder);
+    if (result?.canceled) return;
+    expandFolder(folder);
+    await loadMedia();
+    noticeMessage.value = t('mediaImport.uploaded', { count:result?.imported?.length || 0 });
+    if (result?.failures?.length) errorMessage.value = result.failures.map(item => `${item.name}：${item.message}`).join('\n');
+  } catch (error) { errorMessage.value = error?.message || t('mediaImport.failed'); }
+  finally { isWriting.value = false; }
+}
+
+function openFolderDialog() {
+  folderTrigger = document.activeElement;
+  folderName.value = ''; folderError.value = ''; folderDialogOpen.value = true;
+  nextTick(() => folderInput.value?.focus());
+}
+function closeFolderDialog() {
+  if (isWriting.value) return;
+  folderDialogOpen.value = false;
+  nextTick(() => folderTrigger?.focus?.());
+}
+function handleFolderKey(event) {
+  if (event.key === 'Escape') { event.stopPropagation(); closeFolderDialog(); }
+  if (event.key !== 'Tab') return;
+  const nodes = [...event.currentTarget.querySelectorAll('input:not(:disabled),button:not(:disabled)')];
+  if (event.shiftKey && document.activeElement === nodes[0]) { event.preventDefault(); nodes.at(-1)?.focus(); }
+  else if (!event.shiftKey && document.activeElement === nodes.at(-1)) { event.preventDefault(); nodes[0]?.focus(); }
+}
+async function createFolder() {
+  if (isWriting.value) return;
+  if (!folderName.value.trim()) { folderError.value = t('mediaImport.nameRequired'); return; }
+  if (!mediaApi.value?.createFolder) { folderError.value = t('media.apiUnavailable'); return; }
+  isWriting.value = true; folderError.value = '';
+  try {
+    const result = await mediaApi.value.createFolder(targetFolder.value, folderName.value.trim());
+    targetFolder.value = result.relativePath;
+    expandFolder(targetFolder.value);
+    await loadMedia();
+    noticeMessage.value = t('mediaImport.folderCreated');
+    isWriting.value = false;
+    closeFolderDialog();
+  } catch (error) { folderError.value = error?.message || t('mediaImport.folderFailed'); }
+  finally { isWriting.value = false; }
 }
 
 async function openMediaFolder() {
@@ -219,15 +293,21 @@ onBeforeUnmount(() => {
         <h1>{{ t("media.title") }}</h1>
       </div>
       <div class="media-heading-actions">
+        <button class="action-button primary media-upload-button" type="button" :disabled="isWriting || isLoading" @click="uploadMedia">{{ t(isWriting ? 'common.loading' : 'mediaImport.upload') }}</button>
+        <button class="soft-button" type="button" :disabled="isWriting || isLoading" @click="openFolderDialog">{{ t('mediaImport.newFolder') }}</button>
         <button class="soft-button media-open-folder-button" type="button" :disabled="isOpeningFolder" @click="openMediaFolder">
           {{ isOpeningFolder ? t("media.openingFolder") : t("media.openFolder") }}
         </button>
-        <button class="soft-button media-refresh-button" type="button" :disabled="isLoading" @click="loadMedia">
+        <button class="soft-button media-refresh-button" type="button" :disabled="isLoading || isWriting" @click="loadMedia">
           {{ isLoading ? t("common.refreshing") : t("common.refresh") }}
         </button>
       </div>
     </div>
 
+    <div class="media-upload-target">
+      <span>{{ t('mediaImport.target', { folder:targetFolder || t('mediaImport.root') }) }}</span>
+      <button v-if="targetFolder" class="soft-button" type="button" :disabled="isWriting" @click="targetFolder = ''">{{ t('mediaImport.root') }}</button>
+    </div>
     <div class="media-library-layout">
       <aside class="media-tree-panel" :aria-label="t('media.treeLabel')">
         <div class="media-panel-header">
@@ -258,6 +338,7 @@ onBeforeUnmount(() => {
               unsupported: node.kind === 'file' && !node.previewable,
             }"
             type="button"
+            :disabled="isWriting"
             :title="nodeTitle(node)"
             :style="{ paddingLeft: `${12 + depth * 18}px` }"
             @click="selectNode(node)"
@@ -320,5 +401,27 @@ onBeforeUnmount(() => {
         </div>
       </section>
     </div>
+    <div v-if="folderDialogOpen" class="media-folder-backdrop" @mousedown.self="closeFolderDialog">
+      <form class="media-folder-dialog" role="dialog" aria-modal="true" :aria-label="t('mediaImport.newFolder')" @submit.prevent="createFolder" @keydown="handleFolderKey">
+        <h2>{{ t('mediaImport.newFolder') }}</h2>
+        <p>{{ t('mediaImport.target', { folder:targetFolder || t('mediaImport.root') }) }}</p>
+        <label>{{ t('mediaImport.folderName') }}<input ref="folderInput" v-model="folderName" maxlength="120" :disabled="isWriting" /></label>
+        <p v-if="folderError" class="error-line" role="alert">{{ folderError }}</p>
+        <footer>
+          <button class="soft-button" type="button" :disabled="isWriting" @click="closeFolderDialog">{{ t('common.cancel') }}</button>
+          <button class="action-button primary" type="submit" :disabled="isWriting">{{ t(isWriting ? 'common.loading' : 'common.confirm') }}</button>
+        </footer>
+      </form>
+    </div>
   </section>
 </template>
+
+<style scoped>
+.media-upload-target { display:flex; align-items:center; flex-wrap:wrap; gap:12px; margin-bottom:14px; color:var(--ui-muted); overflow-wrap:anywhere; }
+.media-folder-backdrop { position:fixed; inset:0; z-index:1000; display:grid; place-items:center; padding:20px; background:var(--ui-overlay); }
+.media-folder-dialog { width:min(440px,100%); padding:24px; border:1px solid var(--ui-border); border-radius:var(--ui-radius-dialog); background:var(--ui-elevated); box-shadow:var(--ui-shadow); }
+.media-folder-dialog h2 { margin:0 0 12px; }
+.media-folder-dialog label { display:grid; gap:8px; }
+.media-folder-dialog input { width:100%; box-sizing:border-box; }
+.media-folder-dialog footer { display:flex; justify-content:flex-end; gap:12px; margin-top:20px; }
+</style>

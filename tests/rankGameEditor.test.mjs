@@ -32,6 +32,7 @@ test("Rank editor keeps non-coordinate level data and clamps coordinates at zero
     bounds: { minX: 0, minY: 1, maxX: 19, maxY: 3 },
     durationSeconds: 30,
   });
+  assert.equal(payload.id, null, 'an unsaved draft must not serialize a fake ID of zero');
 });
 
 test("Rank editor exposes the shared media picker and previews for all lifecycle media", async () => {

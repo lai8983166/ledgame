@@ -30,13 +30,13 @@ test("help documents use a fixed key whitelist and are packaged as resources", (
   assert.match(resourceText, /软件介绍\.txt/);
 });
 
-test("spirit search is debounced prefix matching and deletion uses confirmation", () => {
-  assert.match(spiritSource, /createDebouncedPrefix/);
-  assert.match(spiritSource, /filterByNamePrefix/);
+test("spirit library uses selectable thumbnails and deletion uses confirmation", () => {
+  assert.match(spiritSource, /SpiritThumbnail/);
+  assert.match(spiritSource, /spirit-thumbnail-card/);
   assert.match(spiritSource, /confirmWithRendererFocus/);
   assert.match(spiritSource, /requestSpiritDeletion/);
   assert.match(spiritSource, /spirits\.value = spirits\.value\.filter/);
-  assert.match(styleSource, /\.spirit-list-panel\s*\{[\s\S]*?grid-template-rows:\s*auto auto minmax\(0, 1fr\)/);
+  assert.doesNotMatch(spiritSource, /spirit-preview-stage|spirit-list-row/);
 });
 
 test("renderer cannot read the configured touch exit password", () => {

@@ -1427,6 +1427,27 @@ mergedMessages['en-US'].editorDebug = {
   unsaved:'Unsaved game changes',unsavedHint:'Debug uses the saved game. Using the saved version preserves your editor draft.',saveEnter:'Save and enter debug',useSaved:'Use saved version',
 };
 
+mergedMessages['zh-CN'].gameCreation = {
+  draftHint:'新游戏尚未保存，首次保存后才会生成游戏卡片。',
+  create:'新建游戏', title:'选择游戏类型', family:'游戏类型', entertainment:'娱乐挑战', ranked:'排位赛', multidimensional:'多维竞技',
+  entertainmentHint:'使用 Simple 共用编辑器', rankedHint:'使用 Rank 编辑器', multidimensionalHint:'暂未开放',
+  unavailable:'当前版本不支持新建游戏', invalidResponse:'创建结果无效，请刷新游戏列表检查', failed:'新建游戏失败',
+};
+mergedMessages['en-US'].gameCreation = {
+  draftHint:'This game is an unsaved draft. Save it once to create its game card.',
+  create:'New game', title:'Choose game type', family:'Game type', entertainment:'Entertainment challenge', ranked:'Ranked match', multidimensional:'Multidimensional competition',
+  entertainmentHint:'Uses the Simple editor', rankedHint:'Uses the Rank editor', multidimensionalHint:'Not available yet',
+  unavailable:'Game creation is unavailable', invalidResponse:'Invalid creation response. Refresh the game list to check.', failed:'Game creation failed',
+};
+mergedMessages['zh-CN'].mediaImport = {
+  upload:'上传文件', newFolder:'新建文件夹', folderName:'文件夹名称', target:'目标目录：{folder}', root:'媒体库根目录',
+  uploaded:'已上传 {count} 个文件', folderCreated:'文件夹已创建', failed:'上传失败', folderFailed:'新建文件夹失败', nameRequired:'请输入文件夹名称',
+};
+mergedMessages['en-US'].mediaImport = {
+  upload:'Upload files', newFolder:'New folder', folderName:'Folder name', target:'Destination: {folder}', root:'Library root',
+  uploaded:'Uploaded {count} files', folderCreated:'Folder created', failed:'Upload failed', folderFailed:'Folder creation failed', nameRequired:'Enter a folder name',
+};
+
 export const authoredMessages = Object.fromEntries(
   canonicalLocales.map((locale) => [locale, mergedMessages[locale] || {}]),
 );

@@ -1,7 +1,7 @@
 export function createRankEditorPayload(value, gameId) {
   const payload = JSON.parse(JSON.stringify(value && typeof value === "object" ? value : {}));
   const normalizedId = Number(gameId);
-  if (Number.isFinite(normalizedId)) payload.id = normalizedId;
+  payload.id = Number.isInteger(normalizedId) && normalizedId > 0 ? normalizedId : null;
   // Rank editor coordinates are intentionally 1-based for operators. Keep
   // the persisted/runtime contract 0-based by converting only the boundary
   // fields when constructing the API payload.

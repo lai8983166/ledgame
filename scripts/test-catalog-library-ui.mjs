@@ -13,7 +13,7 @@ const cache = path.join(process.env.LOCALAPPDATA, 'ms-playwright');
 const chromeDir = (await readdir(cache)).filter(name => /^chromium-\d+$/.test(name)).sort().at(-1);
 const output = path.join(root, '.build/catalog-library-ui');
 await mkdir(output, { recursive:true });
-const server = await createServer({root, server:{host:'127.0.0.1',port:0}});
+const server = await createServer({root, server:{host:'127.0.0.1',port:20000 + Math.floor(Math.random()*30000),strictPort:false}});
 await server.listen();
 const url = `http://127.0.0.1:${server.httpServer.address().port}`;
 const browser = await chromium.launch({executablePath:path.join(cache,chromeDir,'chrome-win64/chrome.exe')});
@@ -50,6 +50,17 @@ const page = await context.newPage();
 const errors = []; page.on('pageerror', error=>errors.push(error.message));
 const results=[];
 async function check(name, fn) { await fn(); results.push(name); console.log(`PASS ${name}`); }
+const thumbnailColor = locator => locator.locator('canvas').evaluate(canvas => {
+  const pixels = canvas.getContext('2d').getImageData(0,0,240,240).data;
+  const colors = new Map();
+  for(let index=0;index<pixels.length;index+=4) {
+    if(pixels[index+3] && !(pixels[index]===8&&pixels[index+1]===13&&pixels[index+2]===20)) {
+      const color = `rgb(${pixels[index]}, ${pixels[index+1]}, ${pixels[index+2]})`;
+      colors.set(color,(colors.get(color)||0)+1);
+    }
+  }
+  return [...colors].sort((left,right)=>right[1]-left[1])[0]?.[0] || '';
+});
 async function gameSection(section) {await page.getByTestId('game-menu-button').click(); await page.getByRole('menuitem',{name:section,exact:true}).click();}
 const cardIds=selector=>page.locator(selector).evaluateAll(nodes=>nodes.map(node=>Number(node.dataset.id)));
 async function drag(source,target) {
@@ -162,7 +173,7 @@ try {
     await page.getByTestId('language-menu-button').click();await page.locator('.language-dialog input[value="zh-CN"]').click();await page.locator('.language-dialog').waitFor({state:'hidden'});
   });
   await check('四色创建互斥、画布与库预览保色、基础标志及重载',async()=>{
-    await page.locator('.nav-tab').filter({hasText:'精灵库'}).click();await page.locator('.spirit-list-row').first().waitFor();
+    await page.locator('.nav-tab').filter({hasText:'精灵库'}).click();await page.locator('.spirit-thumbnail-card').first().waitFor();
     const palette=['rgb(34, 197, 94)','rgb(59, 130, 246)','rgb(239, 68, 68)','rgb(168, 85, 247)'];
     for(let color=0;color<4;color++) {
       await page.locator('.spirit-heading-actions .icon-add-button').click();await page.locator('.spirit-editor-name input').fill(`New ${color}`);
@@ -171,15 +182,15 @@ try {
       const rgba=await page.locator('.spirit-editor-canvas').evaluate(canvas=>Array.from(canvas.getContext('2d').getImageData(4,4,1,1).data));
       assert.equal(`rgb(${rgba[0]}, ${rgba[1]}, ${rgba[2]})`,palette[color]);
       await page.locator('.spirit-editor-actions .primary').click();await page.locator('.spirit-editor-dialog').waitFor({state:'hidden'});
-      assert.equal(await page.locator('.spirit-preview-cell.active').first().evaluate(node=>getComputedStyle(node).backgroundColor),palette[color]);
-      assert.equal(await page.locator('.spirit-badge').count(),0);
-      await page.locator('.spirit-preview-actions button').first().click();assert.equal(await page.locator('.spirit-editor-colors').count(),0);
+      assert.equal(await thumbnailColor(page.locator('.spirit-thumbnail-card.selected')),palette[color]);
+      await page.locator('.spirit-browser-toolbar button').first().click();assert.equal(await page.locator('.spirit-editor-colors').count(),0);
       await page.locator('.spirit-editor-actions .primary').click();await page.locator('.spirit-editor-dialog').waitFor({state:'hidden'});
     }
     await page.reload();await page.locator('.nav-tab').filter({hasText:'精灵库'}).click();
-    for(let color=0;color<4;color++){await page.locator('.spirit-list-row').filter({hasText:`New ${color}`}).click();assert.equal(await page.locator('.spirit-preview-cell.active').first().evaluate(node=>getComputedStyle(node).backgroundColor),palette[color]);}
-    await page.locator('.spirit-list-row').filter({hasText:'Color 0'}).click();assert.equal(await page.locator('.spirit-badge.basic').count(),1);
-    await page.locator('.spirit-list-row').filter({hasText:'Color 99'}).click();assert.equal(await page.locator('.spirit-preview-cell.active').first().evaluate(node=>getComputedStyle(node).backgroundColor),palette[1]);
+    for(let color=0;color<4;color++){await page.locator('.spirit-thumbnail-card').filter({hasText:`New ${color}`}).click();assert.equal(await thumbnailColor(page.locator('.spirit-thumbnail-card.selected')),palette[color]);}
+    await page.locator('.spirit-thumbnail-card').filter({hasText:'Color 0'}).click();
+    assert.equal(await page.evaluate(async()=> (await window.spiritLibrary.list()).data.find(item=>item.id==='s0').basic),true);
+    await page.locator('.spirit-thumbnail-card').filter({hasText:'Color 99'}).click();assert.equal(await thumbnailColor(page.locator('.spirit-thumbnail-card.selected')),palette[1]);
   });
   await check('媒体文件夹和横图、竖图、像素图等比半尺寸预览',async()=>{
     await page.locator('.nav-tab').filter({hasText:'媒体库'}).click();assert.equal(await page.locator('.media-folder-icon').count(),2);

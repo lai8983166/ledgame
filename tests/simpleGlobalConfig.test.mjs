@@ -127,3 +127,18 @@ test("global config patch replaces scalar fields and preserves unspecified neste
     gameEndSuccessAudio: "success.mp3",
   });
 });
+
+test('pixel-light-only saves preserve game identity, media and bounded game time', async () => {
+  const persisted = {id:19,type:'default',mode:'[2]',name:'Newly saved game',cover:'cover.png',firstCatalog:'A',
+    globalTimeLimit:true,globalTimeLimitValue:60,commonConfig:{gameStartAudio:'start.mp3'},levels:[{label:'Existing level'}]};
+  const live = structuredClone(persisted);
+  const patch = {commonConfig:{pixelLightWiring:{form:{open:0},rows:[]}}};
+  let submitted;
+  await saveSimpleGlobalConfigDocument({api:{getGameEditor:async()=>({data:structuredClone(persisted)}),
+    saveGameEditor:async(_id,doc)=>{submitted=structuredClone(doc);return{data:{saved:true,gameId:19}};}},
+    gameId:19,patch,liveDocument:live});
+  for (const field of ['id','type','mode','name','cover','firstCatalog','globalTimeLimit','globalTimeLimitValue','levels']) {
+    assert.deepEqual(submitted[field],persisted[field]);assert.deepEqual(live[field],persisted[field]);
+  }
+  assert.deepEqual(submitted.commonConfig,{...persisted.commonConfig,...patch.commonConfig});
+});

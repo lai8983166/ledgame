@@ -3,6 +3,7 @@ const childProcess = require('node:child_process')
 const nodeNet = require('node:net')
 const nodeFs = require('node:fs')
 const fs = require('node:fs/promises')
+const { createLibraryFolder, importMediaFiles, resolveLibraryFolder } = require('./media-library-import.cjs')
 const { pathToFileURL } = require('node:url')
 const { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, protocol, shell, net: electronNet, screen } = require('electron')
 const {
@@ -1880,6 +1881,10 @@ ipcMain.handle('engine:state', () => engineStateRequest('/engine/demo/state'))
 ipcMain.handle('game:list', () => backendRequest('/game'))
 ipcMain.handle('game:playable-list', () => backendRequest('/games/playable'))
 ipcMain.handle('game:manageable-list', () => backendRequest('/games/manageable'))
+ipcMain.handle('game:new-draft', async (_event, family) => {
+  if (!['entertainment', 'ranked'].includes(family)) throw new Error('不支持的游戏类型')
+  return backendRequest('/games/draft', { method: 'POST', body: JSON.stringify({ family }) })
+})
 ipcMain.handle('game-categories:list', () => backendRequest('/game-categories'))
 ipcMain.handle('game-categories:reorder', (_event, categoryIds) => backendRequest('/game-categories/display-order', {
   method: 'PUT', body: JSON.stringify({ categoryIds }),
@@ -2004,6 +2009,15 @@ ipcMain.handle('game-editor:save', (_event, gameId, document) =>
     body: JSON.stringify(document),
   }),
 )
+ipcMain.handle('game-editor:create', async (_event, document) => {
+  const result = await backendRequest('/game-editor', { method: 'POST', body: JSON.stringify(document) })
+  if (result?.data?.saved === true) {
+    for (const window of BrowserWindow.getAllWindows()) {
+      if (!window.isDestroyed()) window.webContents.send('game-catalog-changed', { gameId: result.data.gameId })
+    }
+  }
+  return result
+})
 ipcMain.handle('spirit:list', () => backendRequest('/spirit/simpleListSpirits'))
 ipcMain.handle('spirit:create', (_event, payload) => backendRequest('/spirit', {
   method: 'POST',
@@ -2021,6 +2035,21 @@ ipcMain.handle('spirit:update', (_event, spiritId, payload) => {
 ipcMain.handle('media:list', () => listMediaLibrary())
 ipcMain.handle('media:get-preview-url', (_event, relativePath) => getMediaPreviewUrl(relativePath))
 ipcMain.handle('media:open-folder', () => openMediaFolder())
+ipcMain.handle('media:create-folder', (_event, folder, name) => createLibraryFolder(getMediaRoot(), folder, name))
+ipcMain.handle('media:upload', async (event, folder) => {
+  const destination = await resolveLibraryFolder(getMediaRoot(), folder)
+  const result = await showNativeDialogWithFocusRestore({
+    BrowserWindow, dialog, event, method:'showOpenDialog',
+    options: {
+      title:'上传文件到媒体库', properties:['openFile', 'multiSelections'],
+      filters:[{ name:'媒体文件', extensions:[...new Set([...imageExtensions, ...videoExtensions, ...audioExtensions])].map(extension => extension.slice(1)) }],
+    },
+  })
+  if (result.canceled || !result.filePaths?.length) return { canceled:true }
+  // Resolve again after the picker closes in case the folder changed meanwhile.
+  return { canceled:false, ...await importMediaFiles(getMediaRoot(), destination.relative, result.filePaths,
+    source => isPreviewableMediaKind(getMediaKind(source))) }
+})
 ipcMain.handle('app-language:get', () => languagePreferences.get())
 ipcMain.handle('app-language:set', (_event, locale) => setApplicationLanguage(locale))
 ipcMain.handle('app-settings:get', async () => toPublicApplicationSettings(await applicationSettings.get()))
@@ -2174,6 +2203,15 @@ ipcMain.handle('rank-game-editor:save', (_event, gameId, document) =>
     body: JSON.stringify(document),
   }),
 )
+ipcMain.handle('rank-game-editor:create', async (_event, document) => {
+  const result = await backendRequest('/rank-game-editor', { method: 'POST', body: JSON.stringify(document) })
+  if (result?.data?.saved === true) {
+    for (const window of BrowserWindow.getAllWindows()) {
+      if (!window.isDestroyed()) window.webContents.send('game-catalog-changed', { gameId: result.data.gameId })
+    }
+  }
+  return result
+})
 ipcMain.handle('game:metadata-update', async (_event, gameId, patch) => {
   const result = await backendRequest(`/games/${gameId}/metadata`, {
     method: 'PATCH',

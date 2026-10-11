@@ -14,7 +14,8 @@ import { isDebugRuntimeAvailable } from '../lib/editorDebugSession.js';
 import { saveGameWiring } from "../lib/gameWiring.js";
 
 const props = defineProps({
-  gameId: { type: [Number, String], required: true },
+  gameId: { type: [Number, String], default: null },
+  initialDocument: { type: Object, default: null },
   gameName: { type: String, default: "" },
 });
 const emit = defineEmits(["back", "debug-active"]);
@@ -28,7 +29,7 @@ async function enterDebug(choice) {
   try {
     if (!isDebugRuntimeAvailable((await api.gameState())?.data)) throw new Error(t('editorDebug.busy'));
     if (choice === 'save') await saveBeforeStart();
-    debugGame.value = (await api.getRankGameEditor(props.gameId))?.data;
+    debugGame.value = (await api.getRankGameEditor(currentGameId.value))?.data;
     if (!debugGame.value) throw new Error(t('gameWiring.missing'));
     debugEntryOpen.value = false; emit('debug-active',true);
   } catch(error) { errorMessage.value = error.message; }
@@ -37,6 +38,10 @@ async function enterDebug(choice) {
 const { t } = useI18n({ useScope: "global" });
 const api = window.ledGame;
 const document = ref(null);
+const currentGameId = computed(() => {
+  const id = Number(document.value?.id ?? props.gameId);
+  return Number.isInteger(id) && id > 0 ? id : null;
+});
 const gameWiringOpen = ref(false);
 const gameWiringSaving = ref(false);
 const gameWiringError = ref("");
@@ -44,7 +49,11 @@ async function saveWiring(wiring) {
   gameWiringSaving.value = true;
   gameWiringError.value = "";
   try {
-    await saveGameWiring(api, props.gameId, true, wiring, document.value);
+    if (currentGameId.value) await saveGameWiring(api, currentGameId.value, true, wiring, document.value);
+    else {
+      document.value.wiringData = JSON.parse(JSON.stringify(wiring));
+      statusMessage.value = t('gameCreation.draftHint');
+    }
     gameWiringOpen.value = false;
   } catch (error) {
     gameWiringError.value = error.message?.startsWith('gameWiring.') ? t(error.message) : error.message;
@@ -106,10 +115,15 @@ async function load() {
   loading.value = true;
   errorMessage.value = "";
   try {
-    const result = await api.getRankGameEditor(props.gameId);
+    const result = props.gameId ? await api.getRankGameEditor(props.gameId) : { data: props.initialDocument };
+    if (!result?.data || (!props.gameId && (result.data.id != null || result.data.type !== 'rank'))) {
+      throw new Error(t('rank.loadFailed'));
+    }
     hydrating = true;
     document.value = normalizeDocument(result?.data ?? result);
-    dirty.value = false;
+    await nextTick();
+    dirty.value = !props.gameId;
+    if (!props.gameId) statusMessage.value = t('gameCreation.draftHint');
   } catch (error) {
     errorMessage.value = extractErrorMessage(error, t("rank.loadFailed"));
   } finally {
@@ -130,7 +144,7 @@ async function loadGameCategories() {
 }
 
 function normalizeDocument(value) {
-  const source = value && typeof value === "object" ? structuredClone(value) : {};
+  const source = value && typeof value === "object" ? JSON.parse(JSON.stringify(value)) : {};
   source.palette = Array.isArray(source.palette) ? source.palette : [];
   source.levels = Array.isArray(source.levels) ? source.levels : [];
   source.audio = { ...(source.audio || {}) };
@@ -198,7 +212,7 @@ async function validate() {
   errorMessage.value = "";
   statusMessage.value = "";
   try {
-    const payload = createRankEditorPayload(document.value, props.gameId);
+    const payload = createRankEditorPayload(document.value, currentGameId.value);
     const result = await api.validateRankGameEditor(payload);
     const validation = result?.data ?? result;
     if (!validation?.valid) {
@@ -224,7 +238,7 @@ async function save() {
   errorMessage.value = "";
   statusMessage.value = "";
   try {
-    const payload = createRankEditorPayload(document.value, props.gameId);
+    const payload = createRankEditorPayload(document.value, currentGameId.value);
     const validationResult = await api.validateRankGameEditor(payload);
     const validation = validationResult?.data ?? validationResult;
     if (!validation?.valid) {
@@ -234,7 +248,15 @@ async function save() {
       throw new Error(first ? `${first.path}: ${first.message}` : t("rank.validationFailed"));
     }
     validationErrors.value = [];
-    await api.saveRankGameEditor(props.gameId, payload);
+    const result = currentGameId.value
+      ? await api.saveRankGameEditor(currentGameId.value, payload)
+      : await api.createRankGameEditor(payload);
+    const saved = result?.data ?? result;
+    if (saved?.saved !== true || !Number.isInteger(saved.gameId) || saved.gameId < 1) {
+      throw new Error(result?.message || t('rank.saveFailed'));
+    }
+    document.value.id = saved.gameId;
+    await nextTick();
     dirty.value = false;
     statusMessage.value = t("rank.saved");
   } catch (error) {
@@ -245,7 +267,7 @@ async function save() {
 }
 
 async function saveBeforeStart() {
-  const payload = createRankEditorPayload(document.value, props.gameId);
+  const payload = createRankEditorPayload(document.value, currentGameId.value);
   const validationResult = await api.validateRankGameEditor(payload);
   const validation = validationResult?.data ?? validationResult;
   if (!validation?.valid) {
@@ -255,7 +277,7 @@ async function saveBeforeStart() {
     throw new Error(first ? `${first.path}: ${first.message}` : t("rank.validationFailed"));
   }
   validationErrors.value = [];
-  const saved = await api.saveRankGameEditor(props.gameId, payload);
+  const saved = await api.saveRankGameEditor(currentGameId.value, payload);
   if (saved?.data?.saved !== true) throw new Error(saved?.message || t('rank.saveFailed'));
   dirty.value = false;
 }
@@ -280,7 +302,7 @@ function validationField(path) {
 
 async function exportJson() {
   if (!document.value || !api?.exportFrameJson) return;
-  const exportPayload = createRankEditorPayload(document.value, props.gameId);
+  const exportPayload = createRankEditorPayload(document.value, currentGameId.value);
   const result = await api.exportFrameJson({
     content: JSON.stringify(exportPayload, null, 2),
     defaultFileName: `${document.value.name || "rank-type1"}.json`,
@@ -296,7 +318,7 @@ async function importJson() {
     const parsed = JSON.parse(result.content || "");
     if (parsed?.type !== "rank") throw new Error(t("rank.invalidImport"));
     hydrating = true;
-    document.value = normalizeDocument({ ...parsed, id: Number(props.gameId) });
+    document.value = normalizeDocument({ ...parsed, id: currentGameId.value });
     hydrating = false;
     dirty.value = true;
   } catch (error) {
@@ -306,7 +328,7 @@ async function importJson() {
 }
 
 async function startTest() {
-  if (!document.value || busy.value) return;
+  if (!document.value || !currentGameId.value || busy.value) return;
   if (dirty.value) debugEntryOpen.value = true;
   else await enterDebug('saved');
 }
@@ -330,7 +352,7 @@ function goBack() {
         <button class="soft-button" type="button" :disabled="!document || Boolean(busy)" @click="gameWiringError = ''; gameWiringOpen = true">{{ t('gameWiring.title') }}</button>
         <button class="soft-button" type="button" :disabled="!document || Boolean(busy)" @click="importJson">{{ t("rank.import") }}</button>
         <button class="soft-button" type="button" :disabled="!document || Boolean(busy)" @click="exportJson">{{ t("rank.export") }}</button>
-        <button class="soft-button" type="button" :disabled="!document || Boolean(busy) || invalidConfiguration" @click="startTest">{{ t("rank.startTest") }}</button>
+        <button class="soft-button" type="button" :disabled="!document || !currentGameId || Boolean(busy) || invalidConfiguration" @click="startTest">{{ t("rank.startTest") }}</button>
         <button class="action-button primary" type="button" :disabled="!canSave" @click="save">{{ saveLabel }}</button>
       </div>
     </header>

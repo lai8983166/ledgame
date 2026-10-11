@@ -1,11 +1,12 @@
 <script setup>
 import { computed, onMounted, ref, watch } from "vue";
 import GameInfoEditDialog from "../components/GameInfoEditDialog.vue";
+import GameCreationDialog from "../components/GameCreationDialog.vue";
 import GameCategoryCard from "../components/GameCategoryCard.vue";
 import GameCategoryEditDialog from "../components/GameCategoryEditDialog.vue";
 import SimpleGameCard from "../components/SimpleGameCard.vue";
 import { useI18n } from "vue-i18n";
-import { extractErrorMessage } from "../lib/gameFlowState.js";
+import { extractErrorMessage, unwrapBackendData } from "../lib/gameFlowState.js";
 import { loadSupportedGames } from "../lib/gameCatalog.js";
 import { reorderVisibleSlots, orderedGameIds } from "../lib/catalogOrdering.js";
 import { gamesInCategory, normalizeGameCategoryList } from "../lib/gameCategories.js";
@@ -27,6 +28,9 @@ const categoriesLoading = ref(false);
 const errorMessage = ref("");
 const categoryErrorMessage = ref("");
 const warningMessage = ref("");
+const creationOpen = ref(false);
+const creationSaving = ref(false);
+const creationError = ref("");
 const editingGame = ref(null);
 const editCover = ref("");
 const editName = ref("");
@@ -88,6 +92,26 @@ async function loadGames() {
   } finally {
     loading.value = false;
   }
+}
+
+function beginCreateGame() {
+  creationError.value = "";
+  creationOpen.value = true;
+}
+
+async function createGame(family) {
+  if (creationSaving.value) return;
+  creationSaving.value = true;
+  creationError.value = "";
+  try {
+    if (!api?.newGameDraft) throw new Error(t('gameCreation.unavailable'));
+    const game = unwrapBackendData(await api.newGameDraft(family));
+    if (!game || game.id != null || !['default', 'rank'].includes(game.type)) throw new Error(t('gameCreation.invalidResponse'));
+    creationOpen.value = false;
+    emit('open-game', { ...game, draft: game });
+  } catch (error) {
+    creationError.value = extractErrorMessage(error, t('gameCreation.failed'));
+  } finally { creationSaving.value = false; }
 }
 
 async function loadCategories() {
@@ -283,6 +307,7 @@ async function dropCard(id, kind) {
         <h1>{{ t("games.title") }}</h1>
         <p v-if="selectedCategory">{{ selectedCategory.name }}</p>
       </div>
+      <button v-if="section === 'list'" class="action-button primary" type="button" @click="beginCreateGame">{{ t('gameCreation.create') }}</button>
     </div>
 
     <p v-if="warningMessage" class="status-line" role="status">{{ warningMessage }}</p>
@@ -354,6 +379,9 @@ async function dropCard(id, kind) {
           />
       </div>
     </template>
+
+    <GameCreationDialog v-if="creationOpen" :saving="creationSaving" :error="creationError"
+      @cancel="creationOpen = false" @create="createGame" />
 
     <GameInfoEditDialog
       v-if="editingGame"

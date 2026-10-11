@@ -1,11 +1,9 @@
 export function applySimpleGlobalConfigPatch(target, patch) {
-  target.cover = patch.cover ?? "";
-  target.type = patch.type ?? "";
-  target.mode = patch.mode ?? "";
-  target.name = patch.name ?? "";
-  target.firstCatalog = patch.firstCatalog ?? "";
-  target.globalTimeLimit = Boolean(patch.globalTimeLimit);
-  target.globalTimeLimitValue = patch.globalTimeLimitValue ?? 0;
+  for (const field of ['cover', 'type', 'mode', 'name', 'firstCatalog']) {
+    if (Object.hasOwn(patch, field)) target[field] = patch[field] ?? "";
+  }
+  if (Object.hasOwn(patch, 'globalTimeLimit')) target.globalTimeLimit = Boolean(patch.globalTimeLimit);
+  if (Object.hasOwn(patch, 'globalTimeLimitValue')) target.globalTimeLimitValue = patch.globalTimeLimitValue ?? 0;
   target.audio = { ...(target.audio || {}), ...(patch.audio || {}) };
   target.gif = { ...(target.gif || {}), ...(patch.gif || {}) };
   target.commonConfig = { ...(target.commonConfig || {}), ...(patch.commonConfig || {}) };

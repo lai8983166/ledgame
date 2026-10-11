@@ -50,7 +50,7 @@ watch(
       </span>
       <span class="game-card-copy">
         <h2>{{ game.displayName || game.name }}</h2>
-        <small v-if="game.type === 'rank'" class="game-card-badge">{{ t("rank.typeLabel") }}</small>
+        <small class="game-card-badge">{{ t(game.type === 'rank' ? 'gameCreation.ranked' : 'gameCreation.entertainment') }}</small>
         <small v-if="game.name === 'simple-demo'" class="game-card-badge">
           {{ t("games.testOnly") }}
         </small>

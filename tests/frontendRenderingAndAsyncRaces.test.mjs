@@ -157,7 +157,7 @@ test("Simple editor invalidates load generations and refuses fit scheduling afte
   assert.match(editorSource, /const editorLoadGuard = createLatestAsyncTaskGuard\(\)/);
   assert.match(editorSource, /onBeforeUnmount\(\(\) => \{[\s\S]*editorLoadGuard\.invalidate\(\)/);
   assert.match(editorSource, /const loadTicket = editorLoadGuard\.begin\(gameId\)/);
-  assert.match(editorSource, /await api\.getGameEditor\(gameId\);[\s\S]*!isCurrentEditorLoad\(loadTicket\)/);
+  assert.match(editorSource, /await api\.getGameEditor\(gameId\)[\s\S]*!isCurrentEditorLoad\(loadTicket\)/);
   assert.match(editorSource, /waitForGuardedPromise\(\{/);
   assert.match(editorSource, /runGuardedFrameSequence\(\{/);
 
