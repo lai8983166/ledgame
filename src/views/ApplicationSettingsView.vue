@@ -17,7 +17,6 @@ const savedMessage = ref("");
 const connectionTestStatus = ref("");
 const saved = ref({
   entryMethod: "touch",
-  mode: "debug",
   memberPlatformHost: "127.0.0.1",
   memberPlatformPort: 8090,
   touchIdlePromptTexts: defaultPromptTexts(),
@@ -32,7 +31,6 @@ const saved = ref({
 });
 const draft = reactive({
   entryMethod: "touch",
-  mode: "debug",
   memberPlatformHost: "127.0.0.1",
   memberPlatformPort: 8090,
   touchIdlePromptTexts: defaultPromptTexts(),
@@ -59,7 +57,6 @@ const currentIdlePromptText = computed({
 
 const dirty = computed(
     () => draft.entryMethod !== saved.value.entryMethod
-    || draft.mode !== saved.value.mode
     || draft.memberPlatformHost !== saved.value.memberPlatformHost
     || Number(draft.memberPlatformPort) !== Number(saved.value.memberPlatformPort)
     || JSON.stringify(draft.touchIdlePromptTexts) !== JSON.stringify(saved.value.touchIdlePromptTexts)
@@ -121,7 +118,6 @@ function applySettings(settings) {
     entryMethod: ["touch", "coin", "wristband"].includes(settings?.entryMethod)
       ? settings.entryMethod
       : "touch",
-    mode: settings?.mode === "game" ? "game" : "debug",
     memberPlatformHost: typeof settings?.memberPlatformHost === "string" && settings.memberPlatformHost.trim()
       ? settings.memberPlatformHost.trim()
       : "127.0.0.1",
@@ -152,7 +148,6 @@ function applySettings(settings) {
   };
   saved.value = normalized;
   draft.entryMethod = normalized.entryMethod;
-  draft.mode = normalized.mode;
   draft.memberPlatformHost = normalized.memberPlatformHost;
   draft.memberPlatformPort = normalized.memberPlatformPort;
   draft.touchIdlePromptTexts = normalized.touchIdlePromptTexts;
@@ -274,13 +269,12 @@ async function testMemberPlatform() {
       <template v-else>
         <section class="application-settings-connection">
           <label class="application-settings-field"><span>{{ t('management.appTitle') }}</span><input v-model.trim="draft.applicationTitle" type="text" maxlength="64" /></label>
-          <label class="application-settings-field"><span>{{ t('management.exitPassword') }}</span><input v-model="draft.touchExitPassword" v-bind="{ placeholder: t('management.passwordPlaceholder') }" type="password" inputmode="numeric" maxlength="12" /><small>{{ t('management.passwordHint') }}</small></label>
+          <label class="application-settings-field"><span>{{ t('management.exitPassword') }}</span><input v-model="draft.touchExitPassword" type="password" inputmode="numeric" maxlength="12" /></label>
           <div class="application-settings-actions"><button class="application-settings-secondary" type="button" @click="chooseApplicationIcon">{{ t('management.chooseIcon') }}</button><span>{{ applicationIconLabel }}</span></div>
           <div class="application-settings-actions application-settings-background-actions">
             <button class="application-settings-secondary" type="button" @click="chooseSecondaryBackground">{{ t('management.chooseSecondaryBackground') }}</button>
             <span>{{ secondaryBackgroundLabel }}</span>
           </div>
-          <small>{{ t('management.secondaryBackgroundHint') }}</small>
         </section>
         <label class="application-settings-field">
           <span>{{ t("applicationSettings.entryMethod") }}</span>
@@ -289,7 +283,6 @@ async function testMemberPlatform() {
             <option value="coin">{{ t("applicationSettings.entryMethods.coin") }}</option>
             <option value="wristband">{{ t("applicationSettings.entryMethods.wristband") }}</option>
           </select>
-          <small>{{ t("applicationSettings.entryMethodHint") }}</small>
         </label>
 
         <label class="application-settings-field">
@@ -300,7 +293,6 @@ async function testMemberPlatform() {
             maxlength="48"
             autocomplete="off"
           />
-          <small>{{ t("applicationSettings.idlePromptTextHint") }}</small>
         </label>
 
         <label class="application-settings-field">
@@ -314,11 +306,7 @@ async function testMemberPlatform() {
               step="1"
               inputmode="numeric"
             />
-            <span class="application-settings-range-hint">
-              {{ t("applicationSettings.idlePromptFontSizeRange") }}
-            </span>
           </span>
-          <small>{{ t("applicationSettings.idlePromptFontSizeHint") }}</small>
         </label>
 
         <section class="application-settings-connection">
@@ -330,7 +318,6 @@ async function testMemberPlatform() {
               maxlength="64"
               autocomplete="off"
             />
-            <small>{{ t("applicationSettings.secondaryIdlePromptTextHint") }}</small>
           </label>
           <label class="application-settings-field">
             <span>{{ t("applicationSettings.secondaryIdlePromptFontSize") }}</span>
@@ -343,11 +330,7 @@ async function testMemberPlatform() {
                 step="1"
                 inputmode="numeric"
               />
-              <span class="application-settings-range-hint">
-                {{ t("applicationSettings.idlePromptFontSizeRange") }}
-              </span>
             </span>
-            <small>{{ t("applicationSettings.secondaryIdlePromptFontSizeHint") }}</small>
           </label>
           <div class="application-settings-actions application-settings-idle-media-actions">
             <button class="application-settings-secondary" type="button" @click="chooseSecondaryIdleMedia">
@@ -355,20 +338,9 @@ async function testMemberPlatform() {
             </button>
             <span>{{ secondaryIdleMediaLabel }}</span>
           </div>
-          <small>{{ t("applicationSettings.secondaryIdleMediaHint") }}</small>
         </section>
 
-        <label class="application-settings-field">
-          <span>{{ t("applicationSettings.mode") }}</span>
-          <select v-model="draft.mode">
-            <option value="debug">{{ t("applicationSettings.modes.debug") }}</option>
-            <option value="game">{{ t("applicationSettings.modes.game") }}</option>
-          </select>
-          <small>{{ t(`applicationSettings.modeHints.${draft.mode}`) }}</small>
-        </label>
-
         <section class="application-settings-connection">
-          <p>{{ t("applicationSettings.memberPlatform.description") }}</p>
           <label class="application-settings-field">
             <span>{{ t("applicationSettings.memberPlatform.host") }}</span>
             <input v-model.trim="draft.memberPlatformHost" type="text" autocomplete="off" />

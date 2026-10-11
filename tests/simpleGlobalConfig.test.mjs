@@ -6,6 +6,20 @@ import {
   saveSimpleGlobalConfigDocument,
 } from "../src/lib/simpleGlobalConfig.js";
 
+test('life mode patches preserve per-level life and unrelated partial saves preserve mode', () => {
+  const target = {globalLifeLimit:false,levels:[{option:{lifeLimitMode:'LIMITED',lifeLimitValue:10}}]};
+  const levels = structuredClone(target.levels);
+  applySimpleGlobalConfigPatch(target,{globalLifeLimit:true,globalLifeLimitValue:20});
+  assert.equal(target.globalLifeLimit,true);
+  assert.equal(target.globalLifeLimitValue,20);
+  applySimpleGlobalConfigPatch(target,{commonConfig:{gameStartAudio:'start.mp3'}});
+  assert.equal(target.globalLifeLimit,true);
+  applySimpleGlobalConfigPatch(target,{globalLifeLimit:false});
+  assert.equal(target.globalLifeLimit,false);
+  assert.equal(target.globalLifeLimitValue,20);
+  assert.deepEqual(target.levels,levels);
+});
+
 test("global config save uses the persisted document without submitting unsaved matrix edits", async () => {
   const persistedDocument = {
     id: 7,

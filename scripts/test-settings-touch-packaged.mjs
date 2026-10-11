@@ -63,6 +63,9 @@ try {
   await page.locator('.nav-tab').filter({ hasText: /^配置$/ }).click();
   await page.locator('.application-settings-field input').first().fill('验收标题');
   assert.equal(await page.locator('input[max="65535"]').count(), 0);
+  assert.equal(await page.locator('.application-settings-panel small').count(),0);
+  assert.equal(await page.locator('select').filter({has:page.locator('option[value="debug"]')}).count(),0);
+  assert.equal(await page.evaluate(async()=> (await window.appSettings.get()).mode),'game');
   await page.getByRole('button', { name: '保存', exact: true }).click();
   await page.waitForFunction(async () => (await window.appSettings.get()).applicationTitle === '验收标题');
   assert.equal(await page.evaluate(async () => (await window.appSettings.get()).memberPlatformPort), memberPort);
@@ -86,12 +89,24 @@ try {
   await page.evaluate(() => window.ledGame.enterGameFlow({ mode: 'debug' }));
   const touch = await findWindow('touch');
   await touch.locator('.touch-shell[data-state="IDLE"]').waitFor();
+  assert.equal(app.windows().filter(w=>w.url().includes('window=debug')).length,0);
+  assert.equal(await touch.locator('.touch-shell').evaluate(node=>node.classList.contains('touch-game-presentation')),true);
   await touch.screenshot({ path: path.join(data, 'touch-idle.png') });
   await page.evaluate(async id => {
     const prepared = (await window.ledGame.createPreparation()).data;
+    if (prepared.preparation.options.runtimeMode !== 'PRODUCTION') throw new Error('普通游戏准备必须使用生产模式');
     await window.ledGame.selectPreparationGame(prepared.preparation.sessionId, id);
   }, id);
-  await touch.getByTestId(`game-option-${id}`).waitFor();
+  await touch.getByTestId('game-player-count-1').click();
+  await touch.getByTestId('game-player-next').click();
+  await touch.getByTestId('game-carousel').waitFor();
+  for (let attempts = 0; attempts < 20; attempts += 1) {
+    if (Number(await touch.getByTestId('game-carousel').getAttribute('data-selected-game-id')) === id) break;
+    await touch.getByTestId('game-carousel-next').click();
+  }
+  assert.equal(Number(await touch.getByTestId('game-carousel').getAttribute('data-selected-game-id')), id);
+  await touch.getByTestId('game-game-next').click();
+  await touch.locator('.touch-level-step').waitFor();
   await page.locator(`.game-card[data-id="${id}"] .game-card-edit`).click();
   await page.locator('.game-info-name input').fill('不会保存的草稿');
   await page.locator('.game-info-visibility input').uncheck();

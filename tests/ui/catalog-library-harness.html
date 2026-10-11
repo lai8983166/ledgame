@@ -14,24 +14,32 @@ import GameWiringDialog from '../../src/components/GameWiringDialog.vue';
 import SimpleGameEditorView from '../../src/views/SimpleGameEditorView.vue';
 import RankGameEditorView from '../../src/views/RankGameEditorView.vue';
 import EditorDebugWorkspace from '../../src/views/EditorDebugWorkspace.vue';
+import App from '../../src/App.vue';
 import '../../src/style.css';
 let app;
 await initializeApplicationLocale();
 window.changeTestLocale = setApplicationLocale;
 window.getComponentSetup = () => app?._instance?.subTree?.component?.setupState;
-window.mountComponent = (component, props) => {
+window.mountComponent = (component, props, { applicationShell = false } = {}) => {
   app?.unmount();
   window.componentEvents = [];
-  app = createApp({ render: () => h({ MediaPickerDialog, GameGlobalConfigDialog, ApplicationSettingsView,
+  app = createApp({ render: () => {
+    const view = h({ MediaPickerDialog, GameGlobalConfigDialog, ApplicationSettingsView,
     Elc408DebugAssistantView, GameListView, LedGameTouchView, MediaLibraryView, SpiritLibraryView,
-    GameWiringDialog, SimpleGameEditorView, RankGameEditorView, EditorDebugWorkspace }[component], {
+    GameWiringDialog, SimpleGameEditorView, RankGameEditorView, EditorDebugWorkspace, App }[component], {
     ...props,
     onSelect: path => window.componentEvents.push(['select', path]),
     onCancel: () => window.componentEvents.push(['cancel']),
     onSave: value => window.componentEvents.push(['save', value]),
     onExit: () => window.componentEvents.push(['exit']),
     onOpenGame: game => window.componentEvents.push(['open-game', game]),
-  }) });
+    });
+    return applicationShell ? h('main', { class: 'app-shell app-shell--custom-titlebar' }, [
+      h('div', { class: 'window-titlebar' }, 'LED Game'),
+      h('header', { class: 'app-nav' }, '游戏'),
+      view,
+    ]) : view;
+  } });
   app.use(i18n).mount('#app');
 };
-</script><style>#app { height: 100vh; overflow: auto; padding: 20px; background: var(--ui-base); color: var(--ui-text); }</style></body></html>
+</script><style>#app { height: 100vh; overflow: auto; padding: 20px; background: var(--ui-base); color: var(--ui-text); } #app:has(> .app-shell) { padding: 0; overflow: hidden; }</style></body></html>

@@ -20,6 +20,12 @@ test("normalizes legacy level limits into canonical modes", () => {
   );
 });
 
+test('challenge ignores dormant level life validation without ignoring other limits', () => {
+  const option = {lifeLimitMode:'LIMITED',lifeLimitValue:0,timeLimitMode:'CYCLE_COUNT',timeLimitValue:0};
+  assert.deepEqual(validateLevelOption(option,true).map(error=>error.field),['timeLimitValue']);
+  assert.deepEqual(validateLevelOption(option,false).map(error=>error.field),['timeLimitValue','lifeLimitValue']);
+});
+
 test("unlimited modes clear stale values and bounded modes require positive integers", () => {
   assert.equal(normalizeLevelOption({
     timeLimitMode: "UNLIMITED",

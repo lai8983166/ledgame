@@ -4,6 +4,8 @@ export function applySimpleGlobalConfigPatch(target, patch) {
   }
   if (Object.hasOwn(patch, 'globalTimeLimit')) target.globalTimeLimit = Boolean(patch.globalTimeLimit);
   if (Object.hasOwn(patch, 'globalTimeLimitValue')) target.globalTimeLimitValue = patch.globalTimeLimitValue ?? 0;
+  if (Object.hasOwn(patch, 'globalLifeLimit')) target.globalLifeLimit = Boolean(patch.globalLifeLimit);
+  if (Object.hasOwn(patch, 'globalLifeLimitValue')) target.globalLifeLimitValue = patch.globalLifeLimitValue ?? 0;
   target.audio = { ...(target.audio || {}), ...(patch.audio || {}) };
   target.gif = { ...(target.gif || {}), ...(patch.gif || {}) };
   target.commonConfig = { ...(target.commonConfig || {}), ...(patch.commonConfig || {}) };

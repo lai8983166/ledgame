@@ -43,7 +43,7 @@ export function normalizeLevelOption(option = {}) {
   };
 }
 
-export function validateLevelOption(option) {
+export function validateLevelOption(option, globalLifeLimit = false) {
   const normalized = normalizeLevelOption(option);
   const errors = [];
   if (String(option?.pixelLightType) === '1') {
@@ -56,7 +56,7 @@ export function validateLevelOption(option) {
   if (normalized.timeLimitMode !== "UNLIMITED" && normalized.timeLimitValue <= 0) {
     errors.push({ field: "timeLimitValue", messageKey: "simple.levelLimitPositive" });
   }
-  if (normalized.lifeLimitMode === "LIMITED" && normalized.lifeLimitValue <= 0) {
+  if (!globalLifeLimit && normalized.lifeLimitMode === "LIMITED" && normalized.lifeLimitValue <= 0) {
     errors.push({ field: "lifeLimitValue", messageKey: "simple.levelLimitPositive" });
   }
   if (option?.rewardPoints != null && (!Number.isInteger(Number(option.rewardPoints)) || Number(option.rewardPoints) < 0 || Number(option.rewardPoints) > 1_000_000)) {

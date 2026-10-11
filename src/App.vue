@@ -39,6 +39,8 @@ const languageDialogOpen = ref(false);
 const languageButtonRef = ref(null);
 const selectedEditorGame = ref(null);
 const editorDebugActive = ref(false);
+const editorRef = ref(null);
+const navigationBusy = ref(false);
 const helpMenuOpen = ref(false);
 const helpDocument = ref(null);
 const helpDocumentLoading = ref(false);
@@ -239,9 +241,25 @@ function closeHelpMenu() {
   helpMenuOpen.value = false;
 }
 
-function selectHelpItem(view) {
+async function leaveEditorDebug() {
+  if (navigationBusy.value) return false;
+  if (!editorDebugActive.value) return true;
+  navigationBusy.value = true;
+  try {
+    return Boolean(await editorRef.value?.exitDebugForNavigation());
+  } finally {
+    navigationBusy.value = false;
+  }
+}
+
+async function navigateTo(view) {
+  if (!await leaveEditorDebug()) return false;
   activeView.value = view;
-  closeHelpMenu();
+  return true;
+}
+
+async function selectHelpItem(view) {
+  if (await navigateTo(view)) closeHelpMenu();
 }
 
 function onHelpButtonKeydown(event) {
@@ -301,7 +319,8 @@ function openDebugPanel() {
   return runAction("debug", () => api.openDebugPanel());
 }
 
-function enterGameFlow() {
+async function enterGameFlow() {
+  if (!await leaveEditorDebug()) return;
   if (!api?.enterGameFlow) {
     errorMessage.value = t("debug.entryApiUnavailable");
     return;
@@ -324,7 +343,8 @@ function openGameEditor(game) {
   }
 }
 
-function selectGameSection(value) {
+async function selectGameSection(value) {
+  if (!await leaveEditorDebug()) return;
   gameMenuOpen.value = false;
   gameSection.value = value === "list" ? "list" : "home";
   activeView.value = "games";
@@ -621,7 +641,7 @@ function formatRuntimeValue(value, fallback = "-") {
         <button type="button" class="window-titlebar-control window-titlebar-control--close" :aria-label="t('windowControls.close')" @click="api.closeWindow?.()">×</button>
       </span>
     </div>
-    <header class="app-nav" aria-label="Primary" :inert="editorDebugActive">
+    <header class="app-nav" aria-label="Primary" :inert="navigationBusy">
       <div class="brand-mark" aria-hidden="true"></div>
       <nav class="nav-tabs">
         <div class="nav-help-wrapper">
@@ -640,7 +660,7 @@ function formatRuntimeValue(value, fallback = "-") {
           class="nav-tab"
           :class="{ active: activeView === 'media' }"
           type="button"
-          @click="activeView = 'media'"
+          @click="navigateTo('media')"
         >
           {{ t("nav.media") }}
         </button>
@@ -648,7 +668,7 @@ function formatRuntimeValue(value, fallback = "-") {
           class="nav-tab"
           :class="{ active: activeView === 'spirits' }"
           type="button"
-          @click="activeView = 'spirits'"
+          @click="navigateTo('spirits')"
         >
           {{ t("nav.spirits") }}
         </button>
@@ -715,7 +735,7 @@ function formatRuntimeValue(value, fallback = "-") {
           class="nav-tab"
           :class="{ active: activeView === 'application-settings' }"
           type="button"
-          @click="activeView = 'application-settings'"
+          @click="navigateTo('application-settings')"
         >
           {{ t("nav.configuration") }}
         </button>
@@ -802,6 +822,7 @@ function formatRuntimeValue(value, fallback = "-") {
 
     <SimpleGameEditorView
       v-else-if="activeView === 'simple-editor'"
+      ref="editorRef"
       :game-id="selectedEditorGame?.id"
       :game-name="selectedEditorGame?.name"
       :initial-document="selectedEditorGame?.draft"
@@ -811,6 +832,7 @@ function formatRuntimeValue(value, fallback = "-") {
 
     <RankGameEditorView
       v-else-if="activeView === 'rank-editor'"
+      ref="editorRef"
       :game-id="selectedEditorGame?.id"
       :game-name="selectedEditorGame?.displayName || selectedEditorGame?.name"
       :initial-document="selectedEditorGame?.draft"

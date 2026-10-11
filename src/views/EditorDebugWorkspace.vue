@@ -67,7 +67,8 @@ async function cleanup(){
   sessionId.value=null;scanOpen.value=false;scanBuffer='';
 }
 async function restart(){const needsScan=await action(async()=>{await cleanup();await prepare();if(enough.value)apply(await api.confirmPreparation(sessionId.value));else return true;});if(needsScan)await openScan();}
-async function exit(){await action(async()=>{await cleanup();emit('exit');});}
+async function exit(){return Boolean(await action(async()=>{await cleanup();emit('exit');return true;}));}
+defineExpose({exit});
 async function command(name){await action(async()=>{apply(await api.sendDebugCommand({command:name,sessionId:sessionId.value}));});}
 function hoverCell(x,y){hover.value={x,y};}
 async function clickCell(x,y){if(!active.value||state.value.engineState!=='RUNNING')return;await action(async()=>{apply(await api.sendDebugCommand({command:'tileinput',sessionId:sessionId.value,x,y}));});}
@@ -82,7 +83,7 @@ onMounted(async()=>{
 onBeforeUnmount(()=>{alive=false;clearInterval(balanceTimer);removeState?.();removeFrame?.();window.removeEventListener('keydown',scanKey);});
 </script>
 <template>
-  <section class="editor-debug-workspace">
+  <section class="workspace editor-debug-workspace">
     <header><button class="soft-button" :disabled="busy" @click="exit">{{t('editorDebug.exit')}}</button><h1>{{game.displayName || game.name}}</h1><span>{{t('editorDebug.title')}}</span></header>
     <div class="debug-workspace-columns">
       <aside class="debug-workspace-controls">
@@ -103,7 +104,7 @@ onBeforeUnmount(()=>{alive=false;clearInterval(balanceTimer);removeState?.();rem
   </section>
 </template>
 <style scoped>
-.editor-debug-workspace{height:calc(100dvh - 118px);min-height:0;display:flex;flex-direction:column;padding:16px 24px;gap:14px}
+.editor-debug-workspace{width:100%;height:100%;margin:0;min-width:0;min-height:0;display:flex;flex-direction:column;padding:16px 24px;gap:14px;overflow:hidden}
 header{display:flex;align-items:center;gap:16px;flex-shrink:0}
 h1{font-size:24px;margin:0}
 .debug-workspace-columns{flex:1;min-height:0;display:grid;grid-template-columns:clamp(420px,32vw,560px) minmax(0,1fr);gap:22px}

@@ -61,9 +61,12 @@ const props = defineProps({
 });
 const emit = defineEmits(["back", "debug-active"]);
 const debugGame = ref(null);
+const debugWorkspaceRef = ref(null);
 const debugEntryOpen = ref(false);
 const savedFingerprint = ref('');
 function exitDebug() { debugGame.value = null; emit('debug-active',false); nextTick(scheduleEditorFitMeasurement); }
+async function exitDebugForNavigation() { return !debugGame.value || Boolean(await debugWorkspaceRef.value?.exit()); }
+defineExpose({exitDebugForNavigation});
 async function enterDebug(choice) {
   if (choice === 'cancel') { debugEntryOpen.value = false; return; }
   if (busyAction.value) return;
@@ -209,7 +212,7 @@ const activeLevel = computed(() => levels.value[activeLevelIndex.value] || null)
 const frames = computed(() => activeLevel.value?.frameList || []);
 const frameTickIndices = computed(() => visibleFrameIndices(frames.value.length, displayedFrameIndex.value));
 const activeLevelOptionErrors = computed(
-  () => new Set(validateLevelOption(activeLevel.value?.option).map((error) => error.field)),
+  () => new Set(validateLevelOption(activeLevel.value?.option, document.value?.globalLifeLimit).map((error) => error.field)),
 );
 const activeFrame = computed(() => frames.value[activeFrameIndex.value] || null);
 const currentGameId = computed(() => {
@@ -917,7 +920,7 @@ async function validateEditor() {
     return;
   }
   const localErrors = document.value.levels.flatMap((level, index) =>
-    validateLevelOption(level.option).map((error) => ({
+    validateLevelOption(level.option, document.value.globalLifeLimit).map((error) => ({
       path: "levels[" + index + "].option." + error.field,
       message: t(error.messageKey),
     })),
@@ -939,7 +942,7 @@ async function saveEditor() {
     return;
   }
   const localErrors = document.value.levels.flatMap((level, index) =>
-    validateLevelOption(level.option).map((error) => ({
+    validateLevelOption(level.option, document.value.globalLifeLimit).map((error) => ({
       path: "levels[" + index + "].option." + error.field,
       message: t(error.messageKey),
     })),
@@ -978,6 +981,8 @@ function openGlobalConfig() {
     firstCatalog: doc.firstCatalog ?? "",
     globalTimeLimit: Boolean(doc.globalTimeLimit),
     globalTimeLimitValue: doc.globalTimeLimitValue ?? 0,
+    globalLifeLimit: Boolean(doc.globalLifeLimit),
+    globalLifeLimitValue: doc.globalLifeLimitValue ?? 20,
     audio: { ...(doc.audio || {}) },
     gif: { ...(doc.gif || {}) },
     commonConfig: { ...(doc.commonConfig || {}) },
@@ -2650,7 +2655,7 @@ function normalizeImportedLevel(level) {
   if (!isRecord(level) || level.levels != null || !Array.isArray(level.frameList) || !level.frameList.length ||
       (level.label != null && typeof level.label !== "string") ||
       (level.option != null && !isRecord(level.option))) invalid();
-  const optionErrors = validateLevelOption(level.option);
+  const optionErrors = validateLevelOption(level.option, document.value?.globalLifeLimit);
   if (optionErrors.length) throw new Error(t(optionErrors[0].messageKey));
   level.label ||= activeLevel.value.label;
   level.option = normalizeLevelOption(level.option);
@@ -3050,7 +3055,7 @@ function formatRuntimeSummary(value) {
 </script>
 
 <template>
-  <EditorDebugWorkspace v-if="debugGame" :game="debugGame" :start-level-index="activeLevelIndex" @exit="exitDebug" />
+  <EditorDebugWorkspace v-if="debugGame" ref="debugWorkspaceRef" :game="debugGame" :start-level-index="activeLevelIndex" @exit="exitDebug" />
   <EditorDebugEntryDialog v-if="debugEntryOpen" :saving="Boolean(busyAction)" :error="errorMessage" @choose="enterDebug" />
   <div v-show="!debugGame" ref="fitViewportRef" class="simple-editor-fit-viewport">
     <div class="simple-editor-fit-shell" :class="{ ready: editorFitReady }" :style="editorFitShellStyle">
@@ -3419,7 +3424,6 @@ function formatRuntimeSummary(value) {
           <label>
             <span class="editor-required-label">{{ t('management.simpleReward') }}</span>
             <input v-model.number="activeLevel.option.rewardPoints" type="number" min="0" max="1000000" step="1" :class="{ invalid: activeLevelOptionErrors.has('rewardPoints') }" />
-            <small>{{ t('management.simpleRewardHint') }}</small>
             <small v-if="activeLevelOptionErrors.has('rewardPoints')" class="field-error">{{ t('management.rewardInvalid') }}</small>
           </label>
           <label>
@@ -3445,7 +3449,7 @@ function formatRuntimeSummary(value) {
               {{ t("simple.levelLimitPositive") }}
             </small>
           </label>
-          <label>
+          <label v-if="!document.globalLifeLimit">
             <span class="editor-required-label">{{ t("simple.levelLifeLimit") }}</span>
             <select
               :value="activeLevel.option.lifeLimitMode"
@@ -3455,7 +3459,7 @@ function formatRuntimeSummary(value) {
               <option value="LIMITED">{{ t("simple.levelLifeLimited") }}</option>
             </select>
           </label>
-          <label v-if="activeLevel.option.lifeLimitMode === 'LIMITED'">
+          <label v-if="!document.globalLifeLimit && activeLevel.option.lifeLimitMode === 'LIMITED'">
             <span class="editor-required-label">{{ t("simple.levelLifeValue") }}</span>
             <input
               v-model.number="activeLevel.option.lifeLimitValue"
@@ -3474,7 +3478,6 @@ function formatRuntimeSummary(value) {
             <label><span>{{t('circleLights.min')}}</span><input v-model.number="activeLevel.option.countdownMin" type="number" min="1" max="99" step="1" :class="{invalid:activeLevelOptionErrors.has('countdownMin')}" /></label>
             <label><span>{{t('circleLights.max')}}</span><input v-model.number="activeLevel.option.countdownMax" type="number" min="1" max="99" step="1" :class="{invalid:activeLevelOptionErrors.has('countdownMax')}" /></label>
             <small v-if="activeLevelOptionErrors.has('countdownMin')" class="field-error">{{t('circleLights.invalid')}}</small>
-            <small v-if="!document.commonConfig?.pixelLightWiring?.form?.open">{{t('circleLights.layoutRequired')}}</small>
           </template>
         </section>
         <section v-if="activeLevel" class="editor-level-media">

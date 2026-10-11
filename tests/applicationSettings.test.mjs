@@ -38,10 +38,26 @@ const BRAND_DEFAULTS = {
   secondaryIdlePromptFontSize: 72,
 };
 
+test('legacy global debug settings normalize to game without changing connection or entry method', async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'led-game-old-mode-'));
+  try {
+    const settingsPath = path.join(directory, 'application.json');
+    await writeFile(settingsPath, JSON.stringify({mode:'debug',entryMethod:'wristband',memberPlatformPort:18090}));
+    const store = createApplicationSettingsStore({fs,settingsPath});
+    const current = await store.get();
+    assert.equal(current.mode,'game');
+    assert.equal(current.entryMethod,'wristband');
+    assert.equal(current.memberPlatformPort,18090);
+    await store.update({applicationTitle:'Changed'});
+    assert.equal(JSON.parse(await readFile(settingsPath,'utf8')).mode,'game');
+    assert.equal((await store.update({mode:'debug'})).mode,'game');
+  } finally { await rm(directory,{recursive:true,force:true}); }
+});
+
 test("application settings normalize missing and unsupported fields to safe defaults", () => {
   assert.deepEqual(normalizeApplicationSettings(null), {
     entryMethod: "touch",
-    mode: "debug",
+    mode: "game",
     memberPlatformHost: "127.0.0.1",
     memberPlatformPort: 8090,
     secondaryDisplay: null,
@@ -115,7 +131,7 @@ test("application settings reject invalid writes and recover damaged JSON", asyn
     const store = createApplicationSettingsStore({ fs, settingsPath });
     assert.deepEqual(await store.get(), {
       entryMethod: "touch",
-      mode: "debug",
+      mode: "game",
       memberPlatformHost: "127.0.0.1",
       memberPlatformPort: 8090,
       secondaryDisplay: null,

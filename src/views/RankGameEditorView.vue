@@ -20,8 +20,11 @@ const props = defineProps({
 });
 const emit = defineEmits(["back", "debug-active"]);
 const debugGame = ref(null);
+const debugWorkspaceRef = ref(null);
 const debugEntryOpen = ref(false);
 function exitDebug() { debugGame.value = null; emit('debug-active',false); }
+async function exitDebugForNavigation() { return !debugGame.value || Boolean(await debugWorkspaceRef.value?.exit()); }
+defineExpose({exitDebugForNavigation});
 async function enterDebug(choice) {
   if (choice === 'cancel') { debugEntryOpen.value = false; return; }
   if (busy.value) return;
@@ -340,7 +343,7 @@ function goBack() {
 </script>
 
 <template>
-  <EditorDebugWorkspace v-if="debugGame" :game="debugGame" @exit="exitDebug" />
+  <EditorDebugWorkspace v-if="debugGame" ref="debugWorkspaceRef" :game="debugGame" @exit="exitDebug" />
   <EditorDebugEntryDialog v-if="debugEntryOpen" :saving="Boolean(busy)" :error="errorMessage" @choose="enterDebug" />
   <section v-show="!debugGame" class="rank-editor workspace">
     <header class="rank-toolbar">

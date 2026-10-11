@@ -37,6 +37,13 @@ const sections = computed(() => [
     ],
   },
   {
+    title: t("globalConfig.lifeMode"),
+    fields: [
+      { label: t("globalConfig.lifeMode"), path: "globalLifeLimit", kind: "life-mode" },
+      ...(draft.value.globalLifeLimit ? [{ label: t("globalConfig.totalLife"), path: "globalLifeLimitValue", kind: "number", min: 1 }] : []),
+    ],
+  },
+  {
     title: t("globalConfig.soundEffects"),
     fields: [
       { label: t("globalConfig.idleBgm"), path: "audio.globalBackgroundSound", kind: "media", accept: "audio" },
@@ -98,6 +105,8 @@ function resetDraft() {
     firstCatalog: source.firstCatalog ?? "",
     globalTimeLimit: Boolean(source.globalTimeLimit),
     globalTimeLimitValue: source.globalTimeLimitValue ?? 0,
+    globalLifeLimit: Boolean(source.globalLifeLimit),
+    globalLifeLimitValue: source.globalLifeLimitValue ?? 20,
     audio: { ...(source.audio || {}) },
     gif: { ...(source.gif || {}) },
     commonConfig: { ...(source.commonConfig || {}) },
@@ -141,13 +150,13 @@ function openAudioPlayer(field) {
 }
 
 function handleSave() {
-  if (props.saving) {
-    return;
-  }
+  if (!canSave.value) return;
   emit("save", JSON.parse(JSON.stringify(draft.value)));
 }
 
-const canSave = computed(() => !props.saving);
+const lifeError = computed(() => draft.value.globalLifeLimit &&
+  (!Number.isInteger(draft.value.globalLifeLimitValue) || draft.value.globalLifeLimitValue <= 0));
+const canSave = computed(() => !props.saving && !lifeError.value);
 
 function handleKeydown(event) {
   if (picker.value) {
@@ -252,11 +261,16 @@ onBeforeUnmount(() => {
               <input
                 v-else-if="field.kind === 'number'"
                 type="number"
-                min="0"
+                :min="field.min ?? 0"
                 :value="getPath(field.path)"
                 :disabled="saving"
                 @input="setPath(field.path, Number($event.target.value))"
               />
+
+              <select v-else-if="field.kind === 'life-mode'" :value="String(Boolean(draft.globalLifeLimit))" :disabled="saving" @change="draft.globalLifeLimit = $event.target.value === 'true'">
+                <option value="false">{{ t('globalConfig.entertainment') }}</option>
+                <option value="true">{{ t('globalConfig.challenge') }}</option>
+              </select>
 
               <label v-else-if="field.kind === 'checkbox'" class="global-config-checkbox">
                 <input
@@ -305,6 +319,7 @@ onBeforeUnmount(() => {
                   <span v-else class="global-config-inline-preview-placeholder">{{ t("globalConfig.notSelected") }}</span>
                 </div>
               </template>
+              <small v-if="field.path === 'globalLifeLimitValue' && lifeError" class="global-config-error">{{ t('globalConfig.lifePositive') }}</small>
             </label>
           </div>
         </section>

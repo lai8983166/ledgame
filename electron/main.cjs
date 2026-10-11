@@ -1541,11 +1541,10 @@ function refreshDatabase() {
   })
 }
 
-async function enterGameFlow(options = {}) {
+async function enterGameFlow() {
   const settings = await applicationSettings.get()
   currentEntryMethod = settings.entryMethod
-  const requestedMode = options?.mode === 'debug' ? 'debug' : settings.mode
-  const windowPlan = gameFlowWindowPlan(requestedMode)
+  const windowPlan = gameFlowWindowPlan('game')
   const splitBounds = windowPlan.openDebugPanel ? resolveDebugGameSplitBounds() : null
   if (windowPlan.openDebugPanel) {
     createDebugWindow(splitBounds.debug)
@@ -1908,7 +1907,7 @@ ipcMain.handle('game:preparation:create', async () => {
   currentEntryMethod = settings.entryMethod
   return executePreparationRequest('create', null, {
     launchMethod: settings.entryMethod,
-    runtimeMode: settings.mode === 'debug' ? 'SIMULATION' : 'PRODUCTION',
+    runtimeMode: 'PRODUCTION',
   })
 })
 ipcMain.handle('game:preparation:create-wristband', async (event, sessionId, value) => {

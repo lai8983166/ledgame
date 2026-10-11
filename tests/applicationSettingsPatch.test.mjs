@@ -2,6 +2,11 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createApplicationSettingsPatch } from "../src/lib/applicationSettingsPatch.js";
 
+test('ordinary settings patches cannot restore global debug mode', () => {
+  assert.equal(createApplicationSettingsPatch({mode:'debug'}).mode,'game');
+  assert.equal(createApplicationSettingsPatch({}).mode,'game');
+});
+
 test("application settings IPC patch detaches nested reactive proxies", () => {
   const promptTexts = new Proxy({
     "zh-CN": "开始游戏",

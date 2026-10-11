@@ -363,9 +363,8 @@ onBeforeUnmount(() => {
             <small v-if="fieldError('spriteId')" class="game-effect-field-error">{{ errorMessage('spriteId') }}</small>
           </label>
 
-          <div class="game-effect-help">
-            <span>{{ t("effect.coordinateHint") }}</span>
-            <span v-if="selectedSprite">{{ t("effect.spriteSize", { width: selectedSprite.width, height: selectedSprite.height }) }}</span>
+          <div v-if="selectedSprite" class="game-effect-help">
+            <span>{{ t("effect.spriteSize", { width: selectedSprite.width, height: selectedSprite.height }) }}</span>
           </div>
         </section>
 

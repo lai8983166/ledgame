@@ -64,6 +64,8 @@ try {
     if (!rank) {
       await page.locator('.editor-toolbar').getByRole('button',{name:'全局配置',exact:true}).click();
       await page.locator('.global-config-field').filter({has:page.locator('.global-config-label').filter({hasText:/^名称$/})}).locator('input').fill('配置草稿');
+      await page.locator('.global-config-dialog select').filter({has:page.locator('option[value="true"]')}).selectOption('true');
+      await page.locator('.global-config-field').filter({has:page.locator('.global-config-label').filter({hasText:/^整局生命值$/})}).locator('input').fill('20');
       await page.locator('.global-config-actions .primary').click();await page.locator('.global-config-dialog').waitFor({state:'hidden'});
       await page.locator('.editor-toolbar').getByRole('button',{name:'符号灯布局',exact:true}).click();
       await page.locator('.pixel-layout-actions .primary').click();await page.locator('.pixel-layout-dialog').waitFor({state:'hidden'});
@@ -86,6 +88,11 @@ try {
     assert.equal(await debugButton.isDisabled(),false);
     const firstSaved=(await api(rank?'getRankGameEditor':'getGameEditor',game.gameId)).data;
     assert.equal(firstSaved.wiringData.runtimeEnabled,true);
+    if (!rank) {
+      assert.equal(firstSaved.globalLifeLimit,true);
+      assert.equal(firstSaved.globalLifeLimitValue,20);
+      passed.push('闯关模式及整局生命 20 经真实 IPC、首次创建接口正确落库，符号灯和布线保存不重置模式');
+    }
     await input.fill(`再次保存-${family}`);await button.click();
     await expect.poll(async()=> (await api(rank?'getRankGameEditor':'getGameEditor',game.gameId)).data.name).toBe(`再次保存-${family}`);
     assert.equal((await api('listManageableGames')).data.length,countBefore+1,'subsequent saves must update the same ID');
@@ -138,6 +145,9 @@ try {
   const reloaded=(await api('listManageableGames')).data;
   assert.equal(reloaded.length,before.length+2);
   for (const id of createdIds) assert.ok(reloaded.some(game=>game.gameId===id));
+  const reopenedLife = (await api('getGameEditor', createdIds[0])).data;
+  assert.equal(reopenedLife.globalLifeLimit,true);
+  assert.equal(reopenedLife.globalLifeLimitValue,20);
   for (const old of before) assert.deepEqual(reloaded.find(game=>game.gameId===old.gameId),old);
   const imported=await page.evaluate(async()=> (await window.mediaLibrary.list()).items);
   assert.equal(imported[0].children.length,2);

@@ -513,7 +513,8 @@ test("editor debug is a main-window workspace while customer/soak window IPC sta
   const rankSource = await readFile(new URL("../src/views/RankGameEditorView.vue", import.meta.url), "utf8");
 
   assert.match(preloadSource, /enterGameFlow:\s*\(options\)\s*=>\s*ipcRenderer\.invoke\('game-flow:enter', options\)/);
-  assert.match(mainSource, /options\?\.mode === 'debug' \? 'debug' : settings\.mode/);
+  assert.match(mainSource, /gameFlowWindowPlan\('game'\)/);
+  assert.doesNotMatch(mainSource, /options\?\.mode === 'debug' \? 'debug' : settings\.mode/);
   assert.match(mainSource, /ipcMain\.handle\('game-flow:enter', \(_event, options\) => enterGameFlow\(options\)\)/);
   assert.match(preloadSource, /createEditorPreparation/);
   assert.match(mainSource, /editor-debug:prepare/);

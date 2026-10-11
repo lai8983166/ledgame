@@ -73,6 +73,9 @@ try {
   await check('配置隐藏端口，修改 IP、标题、取消文件选择后可继续输入', async () => {
     await mount('ApplicationSettingsView'); await page.locator('.application-settings-field input').first().waitFor();
     assert.equal(await page.locator('input[max="65535"]').count(), 0);
+    assert.equal(await page.locator('.application-settings-panel small').count(),0);
+    assert.equal(await page.locator('.application-settings-range-hint').count(),0);
+    assert.equal(await page.locator('select').filter({has:page.locator('option[value="debug"]')}).count(),0);
     assert.equal(await page.locator('.application-settings-panel legend').count(),0);
     for(const name of ['应用外观与安全','副屏待机标题','会员管理端连接'])assert.equal(await page.getByText(name,{exact:true}).count(),0);
     for(const section of await page.locator('.application-settings-connection').all()){
@@ -86,6 +89,7 @@ try {
     await page.locator('.application-settings-field input').first().fill('Changed title');
     await page.getByRole('button', { name: '保存', exact: true }).click();
     assert.equal(await page.evaluate(() => window.fixture.settings.memberPlatformPort), 18090);
+    assert.equal(await page.evaluate(() => window.fixture.settings.mode), 'game');
     for (const [width, height] of [[1366,768],[1920,1080],[2560,1440],[600,800]]) {
       await page.setViewportSize({ width, height }); await noOverflow();
       if (width > 720) {

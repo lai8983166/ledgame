@@ -1,7 +1,7 @@
 export function createApplicationSettingsPatch(settings) {
   const patch = {
     entryMethod: settings?.entryMethod,
-    mode: settings?.mode,
+    mode: 'game',
     touchIdlePromptTexts: {
       ...(settings?.touchIdlePromptTexts || {}),
     },

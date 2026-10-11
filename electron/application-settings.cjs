@@ -33,7 +33,7 @@ const SECONDARY_DISPLAY_BACKGROUND_DEFAULT = null
 const SECONDARY_IDLE_MEDIA_DEFAULT = null
 const DEFAULT_APPLICATION_SETTINGS = Object.freeze({
   entryMethod: 'touch',
-  mode: 'debug',
+  mode: 'game',
   memberPlatformHost: '127.0.0.1',
   memberPlatformPort: 8090,
   secondaryDisplay: null,
@@ -142,9 +142,8 @@ function normalizeApplicationSettings(value) {
     entryMethod: ENTRY_METHODS.includes(source.entryMethod)
       ? source.entryMethod
       : DEFAULT_APPLICATION_SETTINGS.entryMethod,
-    mode: APPLICATION_MODES.includes(source.mode)
-      ? source.mode
-      : DEFAULT_APPLICATION_SETTINGS.mode,
+    // Global debug mode is retired; editor debugging owns its simulation session.
+    mode: 'game',
     memberPlatformHost: normalizeMemberPlatformHost(source.memberPlatformHost),
     memberPlatformPort: normalizeMemberPlatformPort(source.memberPlatformPort),
     secondaryDisplay: normalizeSecondaryDisplay(source.secondaryDisplay),

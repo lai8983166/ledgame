@@ -24,6 +24,9 @@ await context.addInitScript(()=>{
   window.appLanguage={get:async()=>'zh-CN',set:async v=>v,onChanged:()=>()=>{}};
   window.ledGame={
     gameState:async()=>ret(),onEngineState:f=>{stateListeners.push(f);return()=>{stateListeners=stateListeners.filter(x=>x!==f);};},
+    state:async()=>ret(),customTitleBarEnabled:true,
+    listManageableGames:async()=>({data:[simple,rank].map(game=>({...clone(game),gameId:game.id}))}),
+    readHelpDocument:async()=> '测试帮助内容',
     onLedFrame:f=>{frameListeners.push(f);return()=>{frameListeners=frameListeners.filter(x=>x!==f);};},
     getGameEditor:async()=>({data:clone(simple)}),getRankGameEditor:async()=>({data:clone(rank)}),listGameCategories:async()=>({data:[]}),
     saveGameEditor:async(id,value)=>{if(window.fixture.failSave)throw Error('保存失败');Object.assign(simple,clone(value));return {data:{saved:true}};},
@@ -35,7 +38,7 @@ await context.addInitScript(()=>{
     cancelPreparation:async id=>{window.fixture.requests.push(['cancel',id]);state={engineState:'IDLE',queueSummary:{waiting:[]}};return ret();},
     sendDebugCommand:async request=>{window.fixture.requests.push(['command',clone(request)]);if(request.command==='endgame'){if(window.fixture.failStop)throw Error('停止失败');state={engineState:'STOPPED',sessionId:state.sessionId,terminationReason:'MANUAL_STOP',queueSummary:{waiting:[]}};}
       else if(request.command==='pause')state.engineState='PAUSED';else if(request.command==='resume')state.engineState='RUNNING';return ret();},
-    enterGameFlow:async()=>{throw Error('不允许创建旧窗口');},
+    enterGameFlow:async()=>{window.fixture.requests.push(['game-flow']);return ret();},
   };
   window.mediaLibrary={list:async()=>({items:[]}),getPreviewUrl:async()=>({url:''})};
   window.spiritLibrary={list:async()=>({data:[]})};
@@ -164,6 +167,74 @@ try{
     assert.equal(await page.evaluate(()=>window.fixture.simple.wiringData.runtimeEnabled),true);
     await mount('RankGameEditorView',{gameId:4});await button('地砖布线').click();await button('取消').click();
     assert.equal(await page.evaluate(()=>window.fixture.rank.wiringData),undefined);
+  });
+  await check('实际应用外壳中的 Rank：16×36/8×8、窗口缩放、完整末行及末行点击',async()=>{
+    for(const [columns,rows] of [[16,36],[8,8]]){
+      const game=await page.evaluate(([columns,rows])=>({...window.fixture.rank,siteSizeWidth:columns,siteSizeHeight:rows}),[columns,rows]);
+      await page.evaluate(game=>window.mountComponent('EditorDebugWorkspace',{game},{applicationShell:true}),game);
+      await button('启动游戏').click();
+      await page.evaluate(([width,height])=>window.fixture.frame({width,height,rgb:Array(width*height*3).fill(120)}),[columns,rows]);
+      for(const [width,height] of [[1366,768],[1920,1080],[2560,1440],[1280,600],[960,640]]){
+        await page.setViewportSize({width,height});await page.waitForTimeout(150);
+        const canvas=await page.locator('canvas').boundingBox();
+        const board=await page.locator('.debug-light-board').boundingBox();
+        assert.ok(canvas.y+canvas.height<=height && canvas.y+canvas.height<=board.y+board.height+1,JSON.stringify({width,height,canvas,board}));
+        assert.equal(await page.locator('.editor-debug-workspace').evaluate(el=>el.scrollHeight<=el.clientHeight),true);
+        assert.equal(await page.locator('.app-shell').evaluate(el=>el.scrollHeight<=el.clientHeight),true);
+        // Same logical cell size is used on both axes; padding and gaps are symmetric.
+        const padding=Math.min(14,Math.max(2,Math.floor(Math.min(board.width,board.height)/24)));
+        const gap=Math.min(4,Math.max(1,Math.floor(Math.min(board.width/columns,board.height/rows)/4)));
+        const cellX=(canvas.width-padding*2-gap*(columns-1))/columns;
+        const cellY=(canvas.height-padding*2-gap*(rows-1))/rows;
+        assert.ok(Math.abs(cellX-cellY)<0.1,JSON.stringify({cellX,cellY}));
+        await page.locator('canvas').click({position:{x:padding+cellX/2,y:padding+(rows-1)*(cellY+gap)+cellY/2}});
+        const request=(await page.evaluate(()=>window.fixture.requests)).at(-1);
+        assert.equal(request[1].command,'tileinput');assert.equal(request[1].x,0);assert.equal(request[1].y,rows-1);
+        await page.screenshot({path:path.join(output,`rank-shell-${columns}x${rows}-${width}x${height}.png`)});
+      }
+      await button('退出调试，返回编辑').click();
+    }
+  });
+  await check('Simple/Rank 调试页导航：语言不中断，运行/暂停切换清理，失败保留与重试，准备取消',async()=>{
+    await page.setViewportSize({width:1366,height:768});
+    const nav=name=>page.locator('.nav-tab').filter({hasText:new RegExp(`^${name}$`)});
+    async function enter(id){
+      await page.getByTestId('game-menu-button').click();await page.getByRole('menuitem',{name:'游戏列表',exact:true}).click();
+      await page.locator(`.game-card[data-id="${id}"] .game-card-main`).click();await button('启动游戏').click();
+      if(await page.getByRole('dialog').count())await button('使用已保存版本').click();
+      await page.locator('.editor-debug-workspace').waitFor();
+    }
+    for(const id of [1,4]){
+      await page.evaluate(()=>window.fixture.update({engineState:'IDLE',queueSummary:{waiting:[]}}));await mount('App');
+      await enter(id);await button('启动游戏').click();
+      assert.equal(await page.locator('.app-nav').evaluate(el=>el.inert),false);
+      await page.getByTestId('language-menu-button').click();await page.locator('.language-dialog').waitFor();await button('取消').click();
+      await page.locator('.nav-help-button').filter({hasText:/^帮助/}).click();await page.getByRole('menuitem',{name:'版本变更记录',exact:true}).click();
+      await page.locator('.help-document-dialog').waitFor();await page.locator('.help-document-dialog header button').click();
+      await page.locator('.nav-help-button').filter({hasText:/^副屏/}).click();await page.getByRole('menuitem',{name:'副屏列表',exact:true}).click();
+      await page.locator('.display-picker').waitFor();await page.locator('.display-picker header button').click();
+      assert.equal((await page.evaluate(()=>window.ledGame.gameState())).data.engineState,'RUNNING');
+      await nav('媒体库').click();await page.locator('.editor-debug-workspace').waitFor({state:'hidden'});
+      assert.equal((await page.evaluate(()=>window.ledGame.gameState())).data.engineState,'STOPPED');
+      assert.deepEqual(await page.evaluate(()=>window.fixture.listeners()),[1,0]);
+      await enter(id);await button('启动游戏').click();await button('暂停').click();
+      await page.evaluate(()=>window.fixture.failStop=true);await nav('精灵库').click();
+      await page.locator('.editor-debug-workspace [role=alert]').waitFor();
+      assert.equal(await page.locator('.editor-debug-workspace [role=alert]').innerText(),'停止失败');
+      assert.equal((await page.evaluate(()=>window.ledGame.gameState())).data.engineState,'PAUSED');
+      assert.equal(await page.locator('.app-nav').evaluate(el=>el.inert),false);
+      await page.evaluate(()=>window.fixture.failStop=false);await nav('配置').click();await page.locator('.application-settings-panel').waitFor();
+      assert.equal((await page.evaluate(()=>window.ledGame.gameState())).data.engineState,'STOPPED');
+      await enter(id);await page.locator('.debug-workspace-controls select').first().selectOption('wristband');await button('请刷手环').click();await button('取消').click();
+      await page.getByTestId('game-menu-button').click();await page.getByRole('menuitem',{name:'首页',exact:true}).click();await page.locator('.game-category-heading').waitFor();
+      assert.equal((await page.evaluate(()=>window.ledGame.gameState())).data.engineState,'IDLE');
+      await enter(id);await button('启动游戏').click();await page.getByTestId('game-enter-flow').click();
+      assert.equal((await page.evaluate(()=>window.ledGame.gameState())).data.engineState,'STOPPED');
+      assert.equal((await page.evaluate(()=>window.fixture.requests)).at(-1)[0],'game-flow');
+      await enter(id);
+      await page.locator('.nav-help-button').filter({hasText:/^帮助/}).click();await page.getByRole('menuitem',{name:'调试助手',exact:true}).click();
+      await page.locator('.elc408-assistant').waitFor();assert.equal(await page.locator('.editor-debug-workspace').count(),0);
+    }
   });
   assert.deepEqual(errors,[]);
 }finally{await writeFile(path.join(output,'验证记录.json'),JSON.stringify({passed,errors},null,2));await browser.close();await server.close();}
