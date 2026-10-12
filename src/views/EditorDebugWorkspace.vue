@@ -8,6 +8,28 @@ const props=defineProps({game:{type:Object,required:true},startLevelIndex:{type:
 const emit=defineEmits(['exit']);
 const {t}=useI18n({useScope:'global'}), api=window.ledGame;
 const state=ref({}),sessionId=ref(null),busy=ref(false),error=ref(''),scanOpen=ref(false),scanPrompt=ref(null),hover=ref(null);
+const hardwareNotice=ref(false),hardwareDialog=ref(null),entryHardwareWarning=ref('');
+let hardwareNoticeTimer,hardwareReturnFocus;
+function hardwareMessage(value){
+  const message=String(value?.message || value || '');
+  if(/ELC408_NO_CONTROLLERS|SEARCH_NO_CONTROLLERS/.test(message))return t('editorDebug.deviceNotConnected');
+  if(/ELC408_RUNTIME_DISABLED|SDK_NOT_ENABLED/.test(message))return t('editorDebug.sdkDisabled');
+  if(/ELC408_RUNTIME_FILES_UNAVAILABLE|ELC408_RUNTIME_LOAD_FAILED|ELC408_GAME_WIRING_LOAD_FAILED|ELC408_FRAME_SIZE_MISMATCH|ELC408_OUTPUT_PORT_MISMATCH/.test(message))return `${t('editorDebug.hardwareConfigError')} ${message}`;
+  return message;
+}
+function closeHardwareNotice(){
+  clearTimeout(hardwareNoticeTimer);hardwareNotice.value=false;
+  if(hardwareReturnFocus?.isConnected)hardwareReturnFocus.focus({preventScroll:true});
+}
+async function showHardwareNotice(){
+  clearTimeout(hardwareNoticeTimer);hardwareReturnFocus=document.activeElement;
+  hardwareNotice.value=true;await nextTick();
+  if(!alive)return;
+  hardwareDialog.value?.querySelector('button')?.focus();
+  hardwareNoticeTimer=setTimeout(closeHardwareNotice,2000);
+}
+const hardwareWarning=computed(()=>sessionId.value && state.value.sessionId===sessionId.value
+  ? hardwareMessage(state.value.hardwareWarning || '') : entryHardwareWarning.value);
 const options=reactive({userCount:props.game.minPlayers || 1,startLevel:Math.min(props.startLevelIndex+1,props.game.levels?.length || 1),launchMethod:'debug',stageFailurePolicy:'END_GAME'});
 const blank=()=>Array.from({length:props.game.siteSizeHeight},()=>Array.from({length:props.game.siteSizeWidth},()=>({r:0,g:0,b:0})));
 const pixels=ref(blank());
@@ -78,9 +100,17 @@ onMounted(async()=>{
   removeState=api.onEngineState?.(apply);
   removeFrame=api.onLedFrame?.(frame=>{if(alive && active.value){const value=pixelsFromDebugFrame(frame,props.game.siteSizeWidth,props.game.siteSizeHeight);if(value)pixels.value=value;}});
   window.addEventListener('keydown',scanKey);
-  await action(async()=>{apply(await api.gameState());if(!isDebugRuntimeAvailable(state.value))throw new Error('editorDebug.busy');});
+  await action(async()=>{
+    apply(await api.gameState());if(!isDebugRuntimeAvailable(state.value))throw new Error('editorDebug.busy');
+    try{await api.prepareEditorDebugHardware();}
+    catch(e){
+      if(!alive)return;
+      entryHardwareWarning.value=hardwareMessage(e);
+      if(/ELC408_NO_CONTROLLERS|SEARCH_NO_CONTROLLERS/.test(e.message || ''))await showHardwareNotice();
+    }
+  });
 });
-onBeforeUnmount(()=>{alive=false;clearInterval(balanceTimer);removeState?.();removeFrame?.();window.removeEventListener('keydown',scanKey);});
+onBeforeUnmount(()=>{alive=false;clearTimeout(hardwareNoticeTimer);clearInterval(balanceTimer);removeState?.();removeFrame?.();window.removeEventListener('keydown',scanKey);});
 </script>
 <template>
   <section class="workspace editor-debug-workspace">
@@ -93,7 +123,7 @@ onBeforeUnmount(()=>{alive=false;clearInterval(balanceTimer);removeState?.();rem
         <label><span>{{t('editorDebug.failurePolicy')}}</span><select v-model="options.stageFailurePolicy" :disabled="busy || active || !!preparation"><option value="END_GAME">{{t('rank.endGame')}}</option><option value="RETRY">{{t('rank.retry')}}</option></select></label>
         <div v-if="options.launchMethod==='wristband'" class="debug-participants"><button class="soft-button" :disabled="busy || active || enough" @click="scan">{{t('editorDebug.scan')}}</button><p>{{participants.length}} / {{options.userCount}}</p><p v-for="player in participants" :key="player.access.uid">{{player.member?.name}} · {{player.access.uid}}<br/>{{t('editorDebug.balance')}} {{playerAccessRemainingSeconds(player,balanceNow) ?? '—'}}s</p><small>{{t('editorDebug.balanceHint')}}</small></div>
         <div class="debug-workspace-actions"><button class="action-button primary" :disabled="busy || active" @click="start">{{t('editorDebug.start')}}</button><button class="soft-button" :disabled="busy || !active" @click="command(state.engineState==='PAUSED'?'resume':'pause')">{{t(state.engineState==='PAUSED'?'editorDebug.resume':'editorDebug.pause')}}</button><button class="soft-button" :disabled="busy || !sessionId" @click="restart">{{t('editorDebug.restart')}}</button></div>
-        <p v-if="error" class="error-line" role="alert">{{error}}</p><p v-if="state.hardwareWarning" class="error-line">{{state.hardwareWarning}}</p>
+        <p v-if="error" class="error-line" role="alert">{{error}}</p><p v-if="hardwareWarning" class="error-line">{{hardwareWarning}}</p>
         <dl><dt>{{t('editorDebug.state')}}</dt><dd>{{state.engineState || '—'}}</dd><dt>{{t('editorDebug.score')}}</dt><dd>{{gameplay.score ?? '—'}}</dd><dt>{{t('editorDebug.life')}}</dt><dd>{{game.type==='rank'?'—':gameplay.life ?? '—'}}</dd><dt>{{t('editorDebug.points')}}</dt><dd>{{gameplay.memberPoints ?? '—'}}</dd><dt>{{t('editorDebug.time')}}</dt><dd>{{countdown}}</dd><dt>{{t('editorDebug.currentLevel')}}</dt><dd>{{state.currentStageIndex==null?'—':state.currentStageIndex+1}}</dd></dl>
         <article v-for="player in gameplay.players || []" :key="player.playerNumber" class="debug-player"><i :style="{background:player.color || '#888'}"></i><span>{{player.playerNumber}} · {{player.totalScore ?? player.score}} / {{t('editorDebug.points')}} {{player.memberPoints ?? 0}}</span></article>
         <p v-if="state.terminationReason">{{t('editorDebug.finished')}} · {{state.terminationReason}}</p>
@@ -101,9 +131,18 @@ onBeforeUnmount(()=>{alive=false;clearInterval(balanceTimer);removeState?.();rem
       <div class="debug-workspace-rgb"><DebugLightBoard :pixels="pixels" :layout="game.commonConfig?.pixelLightWiring" :runtime="state.sessionId===sessionId ? state.peripheralLights : undefined" :hover-cell="hover" :disabled="busy || state.engineState!=='RUNNING'" @hover-cell="hoverCell" @clear-hover="hover=null" @cell-click="clickCell" @circle-click="clickCircle" /></div>
     </div>
     <div v-if="scanOpen" class="debug-scan-backdrop"><section ref="scanPrompt" tabindex="-1" role="dialog" aria-modal="true" :aria-label="t('editorDebug.scan')"><h2>{{t('editorDebug.scan')}}</h2><p>{{t('editorDebug.scanHint')}}</p><p v-if="error" class="error-line">{{error}}</p><button class="soft-button" :disabled="busy" @click="scanOpen=false;scanBuffer=''">{{t('common.cancel')}}</button></section></div>
+    <div v-if="hardwareNotice" class="debug-hardware-backdrop" @click.self="closeHardwareNotice">
+      <section ref="hardwareDialog" class="debug-hardware-dialog" role="dialog" aria-modal="true" :aria-label="t('editorDebug.deviceNotConnected')" @keydown.esc.stop="closeHardwareNotice">
+        <p>{{t('editorDebug.deviceNotConnected')}}</p>
+        <button type="button" class="soft-button" :aria-label="t('common.close')" @click="closeHardwareNotice">×</button>
+      </section>
+    </div>
   </section>
 </template>
 <style scoped>
+.debug-hardware-backdrop{position:fixed;inset:0;z-index:1100;display:grid;place-items:center;background:var(--ui-overlay)}
+.debug-hardware-dialog{display:flex;align-items:center;gap:32px;padding:24px 28px;background:var(--ui-elevated);border:1px solid var(--ui-border);border-radius:12px;box-shadow:var(--ui-shadow)}
+.debug-hardware-dialog p{margin:0;font-size:20px;font-weight:600}
 .editor-debug-workspace{width:100%;height:100%;margin:0;min-width:0;min-height:0;display:flex;flex-direction:column;padding:16px 24px;gap:14px;overflow:hidden}
 header{display:flex;align-items:center;gap:16px;flex-shrink:0}
 h1{font-size:24px;margin:0}

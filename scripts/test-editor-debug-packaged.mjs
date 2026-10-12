@@ -48,6 +48,8 @@ try{
     await button('地砖布线').click();await button('取消').click();
     await button('启动游戏').click();if(await page.getByRole('dialog').count())await button('使用已保存版本').click();
     await page.locator('.editor-debug-workspace').waitFor();
+    await expect(page.locator('.debug-workspace-controls .error-line')).toContainText('SDK 未启用');
+    assert.equal(await page.locator('.debug-hardware-dialog').count(),0);
     assert.equal(app.windows().filter(w=>/window=(debug|touch)/.test(w.url())).length,0);
     await button('启动游戏').click();await expect.poll(async()=>(await state()).engineState).toBe('RUNNING');
     assert.equal((await state()).runtimeMode,'SIMULATION');

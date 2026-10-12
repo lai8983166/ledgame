@@ -1962,6 +1962,10 @@ ipcMain.handle('game:queue:cancel', async (_event, itemId) => {
   await backendRequest(request.pathname, request.options)
   return requestCurrentGameState()
 })
+ipcMain.handle('editor-debug:hardware', async (event) => {
+  if (event.sender !== mainWindow?.webContents) throw new Error('Editor debugging requires the main window');
+  return backendRequest('/hardware/elc408/debug/prepare', { method: 'POST' });
+})
 ipcMain.handle('editor-debug:prepare', async (event, payload) => {
   if (!mainWindow || event.sender !== mainWindow.webContents) throw new Error('EDITOR_DEBUG_MAIN_WINDOW_REQUIRED')
   const current = (await requestCurrentGameState())?.data

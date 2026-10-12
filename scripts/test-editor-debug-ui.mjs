@@ -19,10 +19,11 @@ await context.addInitScript(()=>{
     palette:['#ff0000','#00ff00','#0000ff'],levels:[{type:1,bounds:{minX:0,minY:0,maxX:7,maxY:7}}]};
   let state={engineState:'IDLE',queueSummary:{waiting:[]}},stateListeners=[],frameListeners=[],sequence=0;
   const clone=structuredClone,ret=()=>({data:clone(state)});
-  window.fixture={simple,rank,requests:[],failStop:false,failSave:false,update(stateValue){state=clone(stateValue);stateListeners.forEach(f=>f(clone(state)));},
+  window.fixture={simple,rank,requests:[],hardwareError:'',failStop:false,failSave:false,update(stateValue){state=clone(stateValue);stateListeners.forEach(f=>f(clone(state)));},
     frame(frame){frameListeners.forEach(f=>f(frame));},listeners(){return [stateListeners.length,frameListeners.length];}};
   window.appLanguage={get:async()=>'zh-CN',set:async v=>v,onChanged:()=>()=>{}};
   window.ledGame={
+    prepareEditorDebugHardware:async()=>{window.fixture.requests.push(['hardware']);if(window.fixture.deferHardware)await new Promise(resolve=>window.fixture.resolveHardware=resolve);if(window.fixture.hardwareError)throw Error(window.fixture.hardwareError);return {data:{controllerCount:1}};},
     gameState:async()=>ret(),onEngineState:f=>{stateListeners.push(f);return()=>{stateListeners=stateListeners.filter(x=>x!==f);};},
     state:async()=>ret(),customTitleBarEnabled:true,
     listManageableGames:async()=>({data:[simple,rank].map(game=>({...clone(game),gameId:game.id}))}),
@@ -235,6 +236,33 @@ try{
       await page.locator('.nav-help-button').filter({hasText:/^帮助/}).click();await page.getByRole('menuitem',{name:'调试助手',exact:true}).click();
       await page.locator('.elc408-assistant').waitFor();assert.equal(await page.locator('.editor-debug-workspace').count(),0);
     }
+  });
+  await check('调试进入立即检查硬件；无设备提示2秒关闭/手动关闭；配置错误不误报、无设备可模拟',async()=>{
+    const game=await page.evaluate(()=>window.fixture.simple);
+    await page.evaluate(()=>{window.fixture.update({engineState:'IDLE',queueSummary:{waiting:[]}});window.fixture.hardwareError='ELC408_NO_CONTROLLERS: SEARCH_NO_CONTROLLERS';});
+    const before=await page.evaluate(()=>window.fixture.requests.length);
+    await mount('EditorDebugWorkspace',{game});await page.locator('.debug-hardware-dialog').waitFor();
+    assert.equal(await page.locator('.debug-hardware-dialog p').innerText(),'未连接设备');
+    assert.equal((await page.evaluate(()=>window.fixture.requests.slice(-1)))[0][0],'hardware');
+    assert.equal(await page.evaluate(()=>window.fixture.requests.length),before+1);
+    await page.waitForTimeout(850);assert.equal(await page.locator('.debug-hardware-dialog').count(),1);
+    await page.locator('.debug-hardware-dialog').waitFor({state:'hidden',timeout:1800});
+    await page.locator('.debug-workspace-controls input').first().fill('2');await button('启动游戏').click();await button('退出调试，返回编辑').click();
+    await mount('EditorDebugWorkspace',{game});await page.locator('.debug-hardware-dialog').waitFor();
+    await page.locator('.debug-hardware-dialog button').click();assert.equal(await page.locator('.debug-hardware-dialog').count(),0);
+    await page.locator('.debug-workspace-controls input').first().fill('2');
+    await mount('GameWiringDialog',{width:8,height:8});await page.waitForTimeout(2100);assert.equal(await page.locator('.debug-hardware-dialog').count(),0);
+    await page.evaluate(()=>window.fixture.deferHardware=true);await mount('EditorDebugWorkspace',{game});
+    await page.waitForFunction(()=>typeof window.fixture.resolveHardware==='function');
+    await mount('GameWiringDialog',{width:8,height:8});await page.evaluate(()=>{window.fixture.deferHardware=false;window.fixture.resolveHardware();});
+    await page.waitForTimeout(100);assert.equal(await page.locator('.debug-hardware-dialog').count(),0);
+    for(const code of ['ELC408_RUNTIME_DISABLED','ELC408_RUNTIME_FILES_UNAVAILABLE']){
+      await page.evaluate(code=>window.fixture.hardwareError=code,code);await mount('EditorDebugWorkspace',{game});
+      await page.locator('.debug-workspace-controls .error-line').waitFor();assert.equal(await page.locator('.debug-hardware-dialog').count(),0);
+      assert.match(await page.locator('.debug-workspace-controls .error-line').innerText(),/SDK 未启用|硬件配置错误/);
+    }
+    await page.evaluate(()=>window.fixture.hardwareError='');
+    await mount('EditorDebugWorkspace',{game});await button('启动游戏').click();await button('退出调试，返回编辑').click();
   });
   assert.deepEqual(errors,[]);
 }finally{await writeFile(path.join(output,'验证记录.json'),JSON.stringify({passed,errors},null,2));await browser.close();await server.close();}

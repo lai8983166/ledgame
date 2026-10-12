@@ -1421,6 +1421,7 @@ mergedMessages['en-US'].gameWiring = {
 };
 
 mergedMessages['zh-CN'].editorDebug = {
+  deviceNotConnected:'未连接设备',sdkDisabled:'SDK 未启用，当前仅能进行模拟调试。',hardwareConfigError:'硬件配置错误：',
   title:'游戏调试',exit:'退出调试，返回编辑',method:'启动方式',direct:'直接启动',wristband:'手环启动',players:'游戏人数',level:'起始关卡',
   failurePolicy:'关卡失败后',start:'启动游戏',pause:'暂停',resume:'继续',restart:'重新开始',scan:'请刷手环',scanHint:'将手环放到读卡器上，收到编号和回车后完成读取。',
   state:'运行状态',score:'游戏得分',life:'生命值',points:'累计奖励积分',time:'游戏剩余秒数',currentLevel:'当前关卡',unlimited:'无限',finished:'本局已结束',
@@ -1429,6 +1430,7 @@ mergedMessages['zh-CN'].editorDebug = {
   unsaved:'当前游戏有未保存修改',unsavedHint:'调试使用数据库中已保存的游戏；使用已保存版本不会丢弃当前编辑草稿。',saveEnter:'保存并进入调试',useSaved:'使用已保存版本',
 };
 mergedMessages['en-US'].editorDebug = {
+  deviceNotConnected:'No device connected',sdkDisabled:'SDK is disabled; only simulated debugging is available.',hardwareConfigError:'Hardware configuration error:',
   title:'Game debug',exit:'Exit debug and return to editor',method:'Launch method',direct:'Direct',wristband:'Wristband',players:'Players',level:'Starting level',
   failurePolicy:'On level failure',start:'Start game',pause:'Pause',resume:'Resume',restart:'Restart',scan:'Scan wristband',scanHint:'Scan a wristband; its UID and Enter complete the reading.',
   state:'Runtime state',score:'Game score',life:'Lives',points:'Awarded member points',time:'Game seconds remaining',currentLevel:'Current level',unlimited:'Unlimited',finished:'Game ended',

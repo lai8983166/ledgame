@@ -71,6 +71,7 @@ const fullLedGameApi = {
   stopTouchGame: () => ipcRenderer.invoke('game:stop'),
   createPreparation: () => ipcRenderer.invoke('game:preparation:create'),
   createEditorPreparation: (payload) => ipcRenderer.invoke('editor-debug:prepare', payload),
+  prepareEditorDebugHardware: () => ipcRenderer.invoke('editor-debug:hardware'),
   createWristbandPreparation: (sessionId, wristbandId) =>
     ipcRenderer.invoke('game:preparation:create-wristband', sessionId, wristbandId),
   selectPreparationGame: (sessionId, gameId) =>
