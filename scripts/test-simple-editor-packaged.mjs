@@ -65,6 +65,18 @@ try {
     assert.equal(await page.getByRole('button',{name:'右转90',exact:true}).count(),1);
     for(const name of ['全局配置','符号灯布局','地砖布线','特效'])assert.equal(await page.locator('.editor-toolbar').getByRole('button',{name,exact:true}).innerText(),'');
     await page.waitForFunction(()=>document.querySelector('.simple-editor-fit-shell')?.classList.contains('ready'));
+    assert.ok((await page.locator('.app-nav').boundingBox()).height<=56);
+    assert.equal(await page.locator('.editor-feedback').count(),0);
+    const toolbarNames=await page.locator('.editor-toolbar button').evaluateAll(nodes=>nodes.map(node=>node.getAttribute('aria-label')));
+    const deleteIndex=toolbarNames.indexOf('删除');
+    assert.equal(toolbarNames[deleteIndex-1],'保存');assert.equal(toolbarNames[deleteIndex+1],'右转90');
+    for(const [width,height] of [[1366,768],[1024,600]]){
+      await page.setViewportSize({width,height});await page.waitForTimeout(150);
+      const panel=await page.locator('.editor-center').boundingBox();
+      assert.ok(panel.height>=height*.55 && panel.y+panel.height<=height+1,JSON.stringify(panel));
+      await page.screenshot({path:path.join(app.runtime.directory,`compact-editor-${id}-${width}.png`)});
+    }
+    await page.setViewportSize({width:1366,height:768});
     assert.equal(await page.locator('.editor-side-rail').count(),0);
     assert.equal(await page.locator('.object-panel .object-actions').count(),0);
     assert.equal(await page.locator('.color-copy-button rect[fill="currentColor"]').count(),16);
@@ -95,7 +107,8 @@ try {
     await page.evaluate(()=>window.levelImportConfirmed=true);
     await page.getByRole('button',{name:'导入替换当前关卡',exact:true}).click();
     await expect.poll(()=>repeatInput.inputValue()).toBe('1');
-    assert.match(await page.locator('.editor-feedback').innerText(),/请保存/);
+    assert.equal(await page.locator('.editor-feedback').count(),0);
+    assert.equal(await page.getByRole('button',{name:'保存',exact:true}).isEnabled(),true);
     assert.equal((await api('getGameEditor',id)).data.levels[0].frameList[0].repeatTimes,1);
     await page.getByRole('button',{name:'保存',exact:true}).click();
     await expect.poll(async()=>JSON.stringify((await api('getGameEditor',id)).data.levels[0].frameList)).toBe(JSON.stringify(exported.frameList));

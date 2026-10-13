@@ -3216,16 +3216,6 @@ function formatRuntimeSummary(value) {
                 >
                   <EditorActionIcon name="rotate-left" />
                 </button>
-                <button
-                  class="soft-button compact-button object-icon-button"
-                  :disabled="!selectedObject"
-                  type="button"
-                  :aria-label="t('simple.rotateRight')"
-                  :title="t('simple.rotateRight')"
-                  @click="rotateSelectedObjectClockwise"
-                >
-                  <EditorActionIcon name="rotate-right" />
-                </button>
                 <button v-if="false"
                   class="soft-button compact-button object-icon-button"
                   :disabled="!selectedObject"
@@ -3306,6 +3296,7 @@ function formatRuntimeSummary(value) {
                 >
                   <EditorActionIcon name="copy-all" />
                 </button>
+                <button class="soft-button compact-button object-icon-button" type="button" :aria-label="t('simple.save')" :title="t('simple.save')" :disabled="Boolean(busyAction) || !document" @click="saveEditor"><EditorActionIcon name="save" /></button>
                 <button
                   class="soft-button compact-button object-icon-button object-danger-button"
                   :disabled="!selectedObject"
@@ -3315,6 +3306,16 @@ function formatRuntimeSummary(value) {
                   @click="deleteSelectedObject"
                 >
                   <EditorActionIcon name="trash" />
+                </button>
+                <button
+                  class="soft-button compact-button object-icon-button"
+                  :disabled="!selectedObject"
+                  type="button"
+                  :aria-label="t('simple.rotateRight')"
+                  :title="t('simple.rotateRight')"
+                  @click="rotateSelectedObjectClockwise"
+                >
+                  <EditorActionIcon name="rotate-right" />
                 </button>
               </template>
               <template v-if="!anchorEditMode">
@@ -3361,7 +3362,6 @@ function formatRuntimeSummary(value) {
               </template>
 <button class="soft-button compact-button object-icon-button" type="button" :aria-label="t('simple.startGame')" :title="t('simple.startGame')" :disabled="Boolean(busyAction) || !document?.id" @click="startGame"><EditorActionIcon name="play" /></button>
 <button class="soft-button compact-button object-icon-button" type="button" :aria-label="t('simple.openPreview')" :title="t('simple.openPreview')" :disabled="Boolean(busyAction) || !activeLevel" @click="openPreview"><EditorActionIcon name="preview" /></button>
-<button class="soft-button compact-button object-icon-button" type="button" :aria-label="t('simple.save')" :title="t('simple.save')" :disabled="Boolean(busyAction) || !document" @click="saveEditor"><EditorActionIcon name="save" /></button>
 <button class="soft-button compact-button object-icon-button" type="button" :aria-label="t('simple.exportGif')" :title="t('simple.exportGif')" :disabled="Boolean(busyAction) || !activeLevel?.frameList?.length" @click="exportCurrentLevelGif"><EditorActionIcon name="export" /></button>
 <button class="soft-button compact-button object-icon-button" type="button" :aria-label="t('simple.globalConfig')" :title="t('simple.globalConfig')" :disabled="Boolean(busyAction) || !document" @click="openGlobalConfig"><EditorActionIcon name="settings" /></button>
 <button class="soft-button compact-button object-icon-button" type="button" :aria-label="t('pixelLight.open')" :title="t('pixelLight.open')" :disabled="Boolean(busyAction) || !document" @click="openPixelLightLayout"><EditorActionIcon name="pixel-light" /></button>
@@ -3369,9 +3369,8 @@ function formatRuntimeSummary(value) {
 <button class="soft-button compact-button object-icon-button" type="button" :aria-label="t('effect.open')" :title="t('effect.open')" :disabled="Boolean(busyAction) || !activeFrame" @click="openEffectDialog"><EditorActionIcon name="effect" /></button>
             </div>
     </div>
-    <div class="editor-feedback" aria-live="polite">
+    <div class="editor-feedback" v-if="errorMessage || gifExportProgress || runtimeErrorMessage || validationErrors.length" aria-live="polite">
       <p v-if="errorMessage" class="error-line">{{ errorMessage }}</p>
-      <p v-if="statusMessage" class="status-line">{{ statusMessage }}</p>
       <p v-if="gifExportProgress" class="status-line">{{ gifExportProgress }}</p>
       <p v-if="runtimeErrorMessage" class="error-line">{{ runtimeErrorMessage }}</p>
       <div v-if="validationErrors.length" class="validation-list"><p v-for="error in validationErrors" :key="error.path + error.message">{{ error.path }}: {{ error.message }}</p></div>

@@ -24,7 +24,7 @@ await page.addInitScript(commonNames => {
     reset(){game.levels[0].frameList=[{repeatTimes:2,matrix:[p('red',1,1)]},{repeatTimes:4,matrix:[]}];}};
   window.confirm = message => {window.fixture.confirms.push(message);return window.fixture.confirmResult;};
   window.ledGame={getGameEditor:async()=>({data:structuredClone(game)}),listGameCategories:async()=>({data:[]}),
-    saveGameEditor:async(id,value)=>{if(window.fixture.failSave)throw Error('保存失败');Object.assign(game,structuredClone(value));window.fixture.saves++;return {data:{saved:true}};},
+    saveGameEditor:async(id,value)=>{if(window.fixture.failSave)throw Error('保存失败');Object.assign(game,structuredClone(value));window.fixture.saves++;return {data:{saved:true,gameId:id}};},
     gameState:async()=>({data:{engineState:'IDLE',queueSummary:{waiting:[]}}}),
     validateGameEditor:async()=>({data:{valid:true,errors:[]}}),restoreFocus:async()=>{},
     importFrameJson:async()=>{if(window.fixture.deferImport)await new Promise(resolve=>window.fixture.finishImport=resolve);return {canceled:window.fixture.cancelImport,content:window.fixture.importContent};},
@@ -56,6 +56,32 @@ try {
   await page.goto(`http://127.0.0.1:${server.httpServer.address().port}/tests/ui/catalog-library-harness.html`);
   await page.waitForFunction(()=>window.mountComponent);
   await mount();
+  await check('小屏编辑高度：压缩导航与帧序列、无常驻反馈、保存删除旋转顺序及错误不挤占面板',async()=>{
+    const measurements=[];
+    for(const [width,height] of [[1366,768],[1280,720],[1024,600],[1920,1080]]){
+      await page.setViewportSize({width,height});
+      await page.evaluate(()=>window.mountComponent('SimpleGameEditorView',{gameId:1},{applicationShell:true}));
+      await page.waitForFunction(()=>window.getComponentSetup()?.editorFitReady);await page.waitForTimeout(150);
+      const nav=await page.locator('.app-nav').boundingBox();
+      const frame=await page.locator('.frame-sequence-header').boundingBox();
+      const panel=await page.locator('.editor-center').boundingBox();
+      const matrix=await page.locator('.matrix-scroll').boundingBox();
+      measurements.push({width,height,navHeight:nav.height,frameHeight:frame.height,panelHeight:panel.height,matrixHeight:matrix.height});
+      await page.screenshot({path:path.join(output,`compact-${width}x${height}.png`)});
+    }
+    await writeFile(path.join(output,'compact-measurements.json'),JSON.stringify(measurements,null,2));
+    for(const m of measurements){assert.ok(m.navHeight<=56,JSON.stringify(m));assert.ok(m.frameHeight<80,JSON.stringify(m));assert.ok(m.panelHeight>=m.height*.58,JSON.stringify(m));}
+    assert.equal(await page.locator('.editor-feedback').count(),0);
+    const names=await page.locator('.editor-toolbar button').evaluateAll(nodes=>nodes.map(el=>el.getAttribute('aria-label')));
+    const index=names.indexOf('删除');assert.ok(index>0);assert.equal(names[index-1],'保存');assert.equal(names[index+1],'右转90');
+    const before=await page.locator('.editor-center').boundingBox();
+    await page.evaluate(()=>window.fixture.failSave=true);await button('保存').click();
+    await page.locator('.editor-feedback .error-line').waitFor();assert.match(await page.locator('.editor-feedback').innerText(),/保存失败/);
+    assert.deepEqual(await page.locator('.editor-center').boundingBox(),before);
+    await page.evaluate(()=>window.fixture.failSave=false);await button('保存').click();
+    await page.locator('.editor-feedback').waitFor({state:'hidden'});
+    await page.setViewportSize({width:1366,height:768});await mount();
+  });
   await check('单格/多格统一黄色细线，自动中心不高亮，悬停不加粗且不修改数据',async()=>{
     const before=await read(),bounds=await page.locator('.matrix-overlay-canvas').boundingBox();
     await page.evaluate(()=>{
@@ -220,7 +246,7 @@ try {
     await page.evaluate(()=>window.fixture.failSave=false);await button('保存').click();await mount();
     assert.deepEqual(await page.evaluate(()=>window.fixture.game.levels.map(level=>[level.option.countdownMin,level.option.countdownMax])),[[2,4],[7,9]]);
     assert.equal(await section.locator('input[type=checkbox]').isChecked(),true);
-    assert.equal(await section.getByText('需启用并保存符号灯布局才会生效',{exact:true}).count(),1);
+    assert.equal(await section.getByText('需启用并保存符号灯布局才会生效',{exact:true}).count(),0);
     await section.locator('input[type=checkbox]').uncheck();await button('保存').click();
     await page.evaluate(()=>window.fixture.game.levels.pop());await mount();
   });

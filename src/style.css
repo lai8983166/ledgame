@@ -156,9 +156,9 @@ button {
   align-items: center;
   justify-content: space-between;
   width: 100%;
-  min-height: clamp(68px, 8vh, 92px);
+  min-height: 54px;
   margin: 0 auto;
-  padding: 10px 12px 10px 18px;
+  padding: 4px 12px 4px 18px;
   border: 1px solid var(--ui-border);
   border-radius: 22px;
   background: var(--ui-surface);
@@ -181,7 +181,7 @@ button {
   display: inline-flex;
   min-width: 0;
   gap: 8px;
-  padding: 6px;
+  padding: 2px;
   border-radius: 18px;
   background: var(--ui-surface);
   box-shadow:
@@ -1527,7 +1527,7 @@ html[data-language-direction="rtl"] :is(input, textarea) {
 
 .simple-editor-workspace {
   display: grid;
-  grid-template-rows: auto auto auto minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(0, 1fr);
   width: 100%;
   height: 100%;
   min-width: 0;
@@ -1602,7 +1602,7 @@ html[data-language-direction="rtl"] :is(input, textarea) {
   grid-template-columns: auto minmax(0, 1fr);
   align-items: stretch;
   gap: 14px;
-  margin-bottom: 10px;
+  margin-bottom: 6px;
 }
 
 .editor-back-button {
@@ -1640,14 +1640,14 @@ html[data-language-direction="rtl"] :is(input, textarea) {
 .simple-editor-layout {
   display: grid;
   grid-template-columns: minmax(200px, 2fr) minmax(780px, 8fr) minmax(560px, 4fr);
-  grid-row: 4;
+  grid-row: 3;
   gap: 14px;
   align-items: stretch;
   min-height: 0;
 }
 
 .simple-editor-workspace > .editor-loading {
-  grid-row: 4;
+  grid-row: 3;
 }
 
 @media (min-width: 1181px) {
@@ -1858,8 +1858,8 @@ html[data-language-direction="rtl"] :is(input, textarea) {
 }
 
 .frame-sequence-header {
-  gap: 4px;
-  padding: 6px 10px 5px;
+  gap: 2px;
+  padding: 4px 10px;
   border-radius: 15px;
   background: var(--ui-surface);
   box-shadow:
@@ -1873,7 +1873,16 @@ html[data-language-direction="rtl"] :is(input, textarea) {
 
 .frame-sequence-header .frame-progress-shell {
   width: 100%;
+  padding: 3px 10px;
 }
+
+.frame-sequence-header .sequence-head h2 { font-size: 14px; line-height: 18px; }
+.frame-sequence-header .sequence-head p { font-size: 11px; line-height: 18px; }
+.frame-sequence-header .frame-progress-track { height: 8px; margin-top: 4px; margin-bottom: 6px; }
+.frame-sequence-header .frame-tick-row { height: 27px; }
+.frame-sequence-header .frame-tick-label { top: 5px; font-size: 10px; line-height: 1; }
+.frame-sequence-header .frame-tick.active .frame-tick-label { top: 16px; }
+.frame-sequence-header .frame-icon-actions .icon-add-button { width: 30px; height: 30px; font-size: 20px; }
 
 .frame-sequence-header .frame-progress-track,
 .frame-sequence-header .frame-tick-row {
@@ -1884,9 +1893,9 @@ html[data-language-direction="rtl"] :is(input, textarea) {
   position: relative;
   display: grid;
   grid-auto-flow: column;
-  grid-template-rows: repeat(2, 36px);
-  grid-auto-columns: 36px;
-  gap: 8px;
+  grid-template-rows: 30px;
+  grid-auto-columns: 30px;
+  gap: 5px;
   overflow: visible;
 }
 
@@ -3501,17 +3510,18 @@ html[data-language-direction="rtl"] :is(input, textarea) {
 }
 
 .simple-editor-fit-content.simple-editor-workspace {
+  position: relative;
   display: grid;
-  grid-template-rows: auto auto auto minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(0, 1fr);
   height: 100%;
   overflow: visible;
-  padding-top: 10px;
+  padding-top: 6px;
   padding-bottom: 0;
 }
 
 .simple-editor-fit-content .simple-editor-layout {
   grid-template-columns: minmax(200px, 2fr) minmax(780px, 8fr) minmax(560px, 4fr);
-  grid-row: 4;
+  grid-row: 3;
   height: 100%;
   min-height: 0;
   overflow: hidden;
@@ -3541,10 +3551,10 @@ html[data-language-direction="rtl"] :is(input, textarea) {
   justify-content: flex-start;
   gap: 12px;
   min-width: 0;
-  height: 78px;
+  height: 60px;
   overflow-x: auto;
   overflow-y: hidden;
-  padding: 6px 2px;
+  padding: 4px 2px;
 }
 .editor-toolbar .object-edit-controls { flex: 0 0 180px; }
 .editor-toolbar .object-actions { display: flex; flex-wrap: nowrap; flex: 0 0 auto; align-items: center; }
@@ -3553,11 +3563,24 @@ html[data-language-direction="rtl"] :is(input, textarea) {
 .object-panel .object-action-palette .palette-label { display: none; }
 .editor-toolbar .object-icon-button { flex: 0 0 52px; }
 .simple-editor-fit-content .editor-feedback {
-  grid-row: 3;
-  min-height: 26px;
-  max-height: 60px;
+  position: absolute;
+  z-index: 8;
+  top: 84px;
+  right: 16px;
+  max-width: min(560px, 80%);
+  max-height: 128px;
+  padding: 8px 12px;
+  border: 1px solid var(--ui-border);
+  border-radius: 6px;
+  background: var(--ui-elevated);
   overflow: auto;
 }
+.simple-editor-fit-content .editor-center { gap: 4px; padding-top: 12px; padding-bottom: 12px; }
+.simple-editor-fit-content .editor-center .sequence-list { padding-bottom: 3px; }
+.simple-editor-fit-content .matrix-status-bar { min-height: 40px; padding: 4px 8px; gap: 6px; }
+.simple-editor-fit-content .matrix-inline-fields label { gap: 4px; }
+.simple-editor-fit-content .matrix-status-actions { row-gap: 3px; }
+.simple-editor-fit-content .editor-center .matrix-scroll { height: auto; min-height: 0; }
 .editor-feedback :is(.status-line, .error-line) { margin: 0; }
 .simple-editor-fit-content .simple-editor-layout {
   grid-template-columns: minmax(200px, 2fr) minmax(780px, 8fr) minmax(330px, 3fr);
