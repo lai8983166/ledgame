@@ -96,8 +96,6 @@ onUnmounted(() => {
     <section class="database-refresh-panel" aria-labelledby="database-refresh-heading">
       <div class="database-refresh-copy">
         <h2 id="database-refresh-heading">{{ t("databaseRefresh.actionTitle") }}</h2>
-        <p>{{ t("databaseRefresh.description") }}</p>
-        <p class="database-refresh-warning">{{ t("databaseRefresh.warning") }}</p>
       </div>
 
       <button

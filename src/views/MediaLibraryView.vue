@@ -152,9 +152,6 @@ async function loadMedia() {
     mediaTree.value = Array.isArray(result?.items) ? result.items : [];
     rootExists.value = result?.exists !== false;
     if (targetFolder.value && !findFolder(mediaTree.value, targetFolder.value)) targetFolder.value = '';
-    if (mediaTree.value.length > 0) {
-      noticeMessage.value = t("media.refreshed");
-    }
   } catch (error) {
     mediaTree.value = [];
     rootExists.value = true;

@@ -304,7 +304,7 @@ async function dropCard(id, kind) {
   <section class="workspace game-list-view" :class="{ 'catalog-sorting': dragSource !== null || orderSaving }" :aria-busy="orderSaving">
     <div class="page-heading">
       <div>
-        <h1>{{ t("games.title") }}</h1>
+        <h1>{{ t(section === 'home' && !selectedCategory ? 'gameCategories.homeTitle' : 'games.title') }}</h1>
         <p v-if="selectedCategory">{{ selectedCategory.name }}</p>
       </div>
       <button v-if="section === 'list'" class="action-button primary" type="button" @click="beginCreateGame">{{ t('gameCreation.create') }}</button>
@@ -320,9 +320,6 @@ async function dropCard(id, kind) {
 
     <template v-if="section === 'home' && !selectedCategory">
       <div class="game-category-heading">
-        <div>
-          <h2>{{ t("gameCategories.homeTitle") }}</h2>
-        </div>
         <button class="action-button primary" type="button" @click="beginAddCategory">{{ t("gameCategories.add") }}</button>
       </div>
       <p v-if="categoryErrorMessage" class="error-line" role="alert">

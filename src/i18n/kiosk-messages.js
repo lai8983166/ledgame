@@ -51,7 +51,7 @@ export const kioskMessages = {
       memberPlatform: {
         title: "会员管理端连接",
         description: "配置这台游戏桌面端连接会员管理端的地址。",
-        host: "会员管理端 IP 或主机名",
+        host: "会员管理端 IP",
         port: "端口",
         test: "测试连接",
         testing: "测试中…",

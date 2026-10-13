@@ -86,7 +86,6 @@ async function loadSpirits() {
     const result = await spiritApi.value.list();
     spirits.value = Array.isArray(result?.data) ? result.data : [];
     if (!spirits.value.some(spirit => spirit.id === selectedSpiritId.value)) selectedSpiritId.value = sortedSpirits.value[0]?.id || '';
-    if (spirits.value.length) noticeMessage.value = t('spirits.refreshed');
   } catch (error) { errorMessage.value = error?.message || t('spirits.readFailed'); }
   finally { isLoading.value = false; }
 }

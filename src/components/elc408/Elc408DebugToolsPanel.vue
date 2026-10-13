@@ -63,7 +63,7 @@ const ownerLabel = computed(() => {
   }
   return state.value.owner === "DEBUG"
     ? t("elc408.debug.ownerDebug")
-    : t("elc408.debug.ownerUpstream");
+    : "";
 });
 
 onMounted(async () => {
@@ -533,7 +533,7 @@ function logHexPreview(entry) {
           {{ stopBusy ? t("elc408.debug.stopping") : t("elc408.debug.stop") }}
         </button>
       </div>
-      <p v-if="state" class="elc408-runtime-state">
+      <p v-if="ownerLabel" class="elc408-runtime-state">
         <strong>{{ ownerLabel }}</strong>
         <span v-if="isRunning"> · {{ t("elc408.debug.running") }}</span>
       </p>
