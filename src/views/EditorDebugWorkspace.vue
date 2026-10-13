@@ -14,6 +14,8 @@ function hardwareMessage(value){
   const message=String(value?.message || value || '');
   if(/ELC408_NO_CONTROLLERS|SEARCH_NO_CONTROLLERS/.test(message))return t('editorDebug.deviceNotConnected');
   if(/ELC408_RUNTIME_DISABLED|SDK_NOT_ENABLED/.test(message))return t('editorDebug.sdkDisabled');
+  if(/ELC408_NETWORK_INTERFACE_UNAVAILABLE/.test(message))return t('editorDebug.networkUnavailable');
+  if(/ELC408_UDP_BIND_FAILED/.test(message))return t('editorDebug.networkBindFailed');
   if(/ELC408_RUNTIME_FILES_UNAVAILABLE|ELC408_RUNTIME_LOAD_FAILED|ELC408_GAME_WIRING_LOAD_FAILED|ELC408_FRAME_SIZE_MISMATCH|ELC408_OUTPUT_PORT_MISMATCH/.test(message))return `${t('editorDebug.hardwareConfigError')} ${message}`;
   return message;
 }

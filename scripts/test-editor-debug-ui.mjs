@@ -256,10 +256,10 @@ try{
     await page.waitForFunction(()=>typeof window.fixture.resolveHardware==='function');
     await mount('GameWiringDialog',{width:8,height:8});await page.evaluate(()=>{window.fixture.deferHardware=false;window.fixture.resolveHardware();});
     await page.waitForTimeout(100);assert.equal(await page.locator('.debug-hardware-dialog').count(),0);
-    for(const code of ['ELC408_RUNTIME_DISABLED','ELC408_RUNTIME_FILES_UNAVAILABLE']){
+    for(const code of ['ELC408_RUNTIME_DISABLED','ELC408_RUNTIME_FILES_UNAVAILABLE','ELC408_NETWORK_INTERFACE_UNAVAILABLE','ELC408_UDP_BIND_FAILED']){
       await page.evaluate(code=>window.fixture.hardwareError=code,code);await mount('EditorDebugWorkspace',{game});
       await page.locator('.debug-workspace-controls .error-line').waitFor();assert.equal(await page.locator('.debug-hardware-dialog').count(),0);
-      assert.match(await page.locator('.debug-workspace-controls .error-line').innerText(),/SDK 未启用|硬件配置错误/);
+      assert.match(await page.locator('.debug-workspace-controls .error-line').innerText(),/SDK 未启用|硬件配置错误|无法找到可用的控制器通信网卡|无法打开控制器通信端口/);
     }
     await page.evaluate(()=>window.fixture.hardwareError='');
     await mount('EditorDebugWorkspace',{game});await button('启动游戏').click();await button('退出调试，返回编辑').click();
