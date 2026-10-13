@@ -22,7 +22,12 @@ export function debugPeripheralBoard(savedLayout, runtime, width, height) {
   const chain = start < 0 ? ordered : [...ordered.slice(start), ...ordered.slice(0,start)];
   preview.lights = preview.lights.map(light => {
     const state = runtime?.lights?.find(row => row.wall === light.wall && row.index === light.idx);
-    return {...light, sequenceIndex:state?.sequenceIndex ?? chain.findIndex(row => row.wall===light.wall && row.idx===light.idx),
+    const wall = preview.walls[light.wall];
+    const count = layout.form[PIXEL_LIGHT_WALLS[light.wall].formKey];
+    const spacing = count > 1 ? (light.wall % 2 ? wall.height : wall.width) / (count - 1) : Infinity;
+    const pairSpacing = Math.max(Math.abs(light.symbol.x-light.circle.x), Math.abs(light.symbol.y-light.circle.y));
+    const markerSize = Math.min(14, preview.cellSize * 1.2, spacing * .78, pairSpacing * .78);
+    return {...light, markerSize, sequenceIndex:state?.sequenceIndex ?? chain.findIndex(row => row.wall===light.wall && row.idx===light.idx),
       phase:state?.phase || 'OFF', remaining:state?.remaining ?? 0};
   });
   return preview;

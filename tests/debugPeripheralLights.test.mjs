@@ -26,3 +26,18 @@ test('circle countdown configuration rejects invalid integer ranges only when en
   assert.deepEqual(validateLevelOption({pixelLightType:1,countdownMin:1,countdownMax:99}),[]);
   assert.deepEqual(validateLevelOption({pixelLightType:'0',countdownMin:0,countdownMax:100}),[]);
 });
+
+test('dense horizontal and vertical walls size markers below their spacing',()=>{
+  for(const [width,height,countX,countY] of [[16,36,16,36],[8,8,64,64]]){
+    const board=debugPeripheralBoard({form:{open:1,topWallPixelLightNum:countX,bottomWallPixelLightNum:countX,rightWallPixelLightNum:countY,leftWallPixelLightNum:countY}},null,width,height);
+    for(const wall of [0,1,2,3]){
+      const lights=board.lights.filter(light=>light.wall===wall);
+      for(let i=0;i<lights.length-1;i++){
+        const a=lights[i],b=lights[i+1];
+        const distance=wall%2===0?Math.abs(a.symbol.x-b.symbol.x):Math.abs(a.symbol.y-b.symbol.y);
+        assert.ok(a.markerSize>0 && a.markerSize<=14);
+        assert.ok((a.markerSize+b.markerSize)/2<distance);
+      }
+    }
+  }
+});

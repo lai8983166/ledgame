@@ -134,6 +134,33 @@ try{
     await button('继续').click();await button('退出调试，返回编辑').click();
     assert.equal(await page.locator('.debug-circle-light[data-phase=OFF]').count(),4);
   });
+  await check('密集外围灯：横向16/纵向36及64灯、缩放无重叠，圆灯仍可正确点击',async()=>{
+    for(const [columns,rows,countX,countY] of [[16,36,16,36],[8,8,64,64]]){
+      await page.evaluate(()=>window.fixture.update({engineState:'IDLE',queueSummary:{waiting:[]}}));
+      const game=await page.evaluate(()=>structuredClone(window.fixture.simple));
+      game.siteSizeWidth=columns;game.siteSizeHeight=rows;
+      game.commonConfig={pixelLightWiring:{form:{open:1,order:1,topWallPixelLightNum:countX,bottomWallPixelLightNum:countX,rightWallPixelLightNum:countY,leftWallPixelLightNum:countY}}};
+      await page.evaluate(game=>window.mountComponent('EditorDebugWorkspace',{game},{applicationShell:true}),game);
+      for(const [width,height] of [[1366,768],[1920,1080],[1280,600]]){
+        await page.setViewportSize({width,height});await page.waitForTimeout(100);
+        for(const kind of ['symbol','circle'])for(const wall of [0,1,2,3]){
+          const boxes=await page.locator(`.debug-${kind}-light[data-wall="${wall}"]`).evaluateAll(nodes=>nodes.map(el=>{const r=el.getBoundingClientRect();return {x:r.x,y:r.y,width:r.width,height:r.height};}));
+          assert.equal(boxes.length,wall%2===0?countX:countY);
+          for(let i=0;i<boxes.length;i++){
+            const a=boxes[i];assert.ok(a.width<=18.1 && a.width>0 && Math.abs(a.width-a.height)<.1);
+            if(i){const b=boxes[i-1];assert.ok(wall%2===0?Math.abs(a.x-b.x)>(a.width+b.width)/2:Math.abs(a.y-b.y)>(a.height+b.height)/2,JSON.stringify({columns,rows,countX,countY,width,height,kind,wall,i,a,b}));}
+          }
+        }
+        await page.screenshot({path:path.join(output,`dense-lights-${columns}x${rows}-${width}.png`)});
+      }
+      await button('启动游戏').click();
+      await page.evaluate(async({countX,countY})=>window.fixture.update({...(await window.ledGame.gameState()).data,peripheralLights:{enabled:true,order:1,selectedRow:'0|0',lights:[countX,countY,countX,countY].flatMap((count,wall)=>Array.from({length:count},(_,index)=>({wall,index,sequenceIndex:[0,countX,countX+countY,2*countX+countY][wall]+index,phase:'BLUE',remaining:99})))}}),{countX,countY});
+      await page.locator('.debug-circle-light[data-wall="0"][data-index="1"]').click();
+      assert.equal((await page.evaluate(()=>window.fixture.requests)).at(-1)[1].circleIndex,1);
+      await button('退出调试，返回编辑').click();
+    }
+    await page.setViewportSize({width:1366,height:768});
+  });
   for(const [name,id] of [['SimpleGameEditorView',1],['RankGameEditorView',4]])await check(name+' 编辑入口和保存草稿保留，无旧窗口',async()=>{
     await mount(name,{gameId:id});await button('启动游戏').waitFor();
     await button('启动游戏').click();
