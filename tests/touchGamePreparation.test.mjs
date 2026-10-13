@@ -121,7 +121,7 @@ test("Touch countdown completes only after every tick and cancellation prevents 
   cancel();
 });
 
-test("Game presentation preparation times only the three interactive wizard steps", () => {
+test("Game presentation preparation times all four interactive wizard steps", () => {
   const active = (step, overrides = {}) =>
     isTouchPreparationStepTimeoutActive({
       presentationMode: "game",
@@ -133,6 +133,7 @@ test("Game presentation preparation times only the three interactive wizard step
 
   assert.equal(TOUCH_PREPARATION_STEP_TIMEOUT_SECONDS, 20);
   assert.equal(active("players"), true);
+  assert.equal(active("wristband"), true);
   assert.equal(active("game"), true);
   assert.equal(active("level"), true);
   assert.equal(active("countdown"), false);

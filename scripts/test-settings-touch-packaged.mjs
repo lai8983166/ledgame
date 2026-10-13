@@ -98,15 +98,18 @@ try {
     await window.ledGame.selectPreparationGame(prepared.preparation.sessionId, id);
   }, id);
   await touch.getByTestId('game-player-count-1').click();
-  await touch.getByTestId('game-player-next').click();
+  assert.equal(await touch.getByTestId('game-player-next').count(),0);
   await touch.getByTestId('game-carousel').waitFor();
+  const category=touch.locator(`[data-testid^="game-category-"][data-game-ids~="${id}"]`);
+  if(await category.count())await category.first().click();
   for (let attempts = 0; attempts < 20; attempts += 1) {
     if (Number(await touch.getByTestId('game-carousel').getAttribute('data-selected-game-id')) === id) break;
     await touch.getByTestId('game-carousel-next').click();
   }
   assert.equal(Number(await touch.getByTestId('game-carousel').getAttribute('data-selected-game-id')), id);
-  await touch.getByTestId('game-game-next').click();
+  await touch.locator('.touch-carousel-card.current').click();
   await touch.locator('.touch-level-step').waitFor();
+  await touch.screenshot({path:path.join(data,'touch-level-new-layout.png')});
   await page.locator(`.game-card[data-id="${id}"] .game-card-edit`).click();
   await page.locator('.game-info-name input').fill('不会保存的草稿');
   await page.locator('.game-info-visibility input').uncheck();

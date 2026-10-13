@@ -6,6 +6,7 @@ export const TOUCH_GAME_COUNTDOWN_SECONDS = 5;
 export const TOUCH_PREPARATION_STEP_TIMEOUT_SECONDS = 20;
 export const TOUCH_PREPARATION_TIMED_STEPS = Object.freeze([
   "players",
+  "wristband",
   "game",
   "level",
 ]);
@@ -100,6 +101,8 @@ export function normalizeTouchGameDocument(value, fallback = {}) {
     description: String(document.description || "").trim(),
     globalTimeLimit: Boolean(document.globalTimeLimit),
     globalTimeLimitValue: positiveInteger(document.globalTimeLimitValue),
+    globalLifeLimit: Boolean(document.globalLifeLimit),
+    globalLifeLimitValue: positiveInteger(document.globalLifeLimitValue),
     levels,
   };
 }

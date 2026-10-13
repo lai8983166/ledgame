@@ -12,6 +12,7 @@ import { useI18n } from "vue-i18n";
 import LanguageSelectionPanel from "../components/LanguageSelectionPanel.vue";
 import IdlePromptDisplay from "../components/IdlePromptDisplay.vue";
 import TouchMatrixCanvas from "../components/TouchMatrixCanvas.vue";
+import TouchCategoryRail from "../components/TouchCategoryRail.vue";
 import {
   extractErrorMessage,
   hasTermination,
@@ -20,6 +21,7 @@ import {
   touchViewForState,
 } from "../lib/gameFlowState.js";
 import { loadSupportedGames } from "../lib/gameCatalog.js";
+import { normalizeGameCategoryList, gamesInCategory } from "../lib/gameCategories.js";
 import {
   playerAccessRemainingSeconds,
   wristbandErrorMessageKey,
@@ -59,6 +61,10 @@ const TOUCH_GAME_BACKGROUND_ASSET = "touch/background.png";
 const runtimeState = ref(normalizeRuntimeState(null));
 const games = ref([]);
 const coverUrls = ref({});
+const categories = ref([]);
+const categoryCoverUrls = ref({});
+const categoryError = ref("");
+const selectedCategoryId = ref(null);
 const idleVideoUrl = ref("");
 const gameBackgroundUrl = ref("");
 const idleVideoElement = ref(null);
@@ -215,11 +221,23 @@ const playerAccessExpiryLabel = computed(() =>
   formatAccessExpiry(playerAccess.value?.access.expiresAt),
 );
 const carouselSlots = computed(() =>
-  touchCarouselSlots(games.value, gameCarouselIndex.value),
+  touchCarouselSlots(categoryGames.value, gameCarouselIndex.value),
 );
 const carouselGame = computed(
-  () => games.value[gameCarouselIndex.value] || null,
+  () => categoryGames.value[gameCarouselIndex.value] || null,
 );
+const categoryGames = computed(() => {
+  if (selectedCategoryId.value === null) return games.value;
+  if (selectedCategoryId.value === 'uncategorized') return uncategorizedGames.value;
+  return gamesInCategory(games.value, selectedCategoryId.value);
+});
+const uncategorizedGames = computed(() => games.value.filter(game =>
+  !categories.value.some(category => String(category.id) === String(game.firstCatalog))));
+const touchCategories = computed(() => {
+  if (!categories.value.length) return [];
+  return [...categories.value.map(category => ({...category, gameIds:gamesInCategory(games.value,category.id).map(game=>game.id)})), ...(uncategorizedGames.value.length
+    ? [{ id: 'uncategorized', name: t('touch.uncategorizedGames'), cover: '', gameIds:uncategorizedGames.value.map(game=>game.id) }] : [])];
+});
 const gameLevels = computed(() => gameDocument.value?.levels || []);
 const selectedWizardLevel = computed(
   () => gameLevels.value[draft.startLevelIndex] || gameLevels.value[0] || null,
@@ -646,7 +664,7 @@ function handleWristbandScanned(payload) {
     !isWristbandEntry.value ||
     view.value !== "PREPARING" ||
     !preparation.value?.sessionId ||
-    (isGamePresentation.value && gamePreparationStep.value !== "players") ||
+    (isGamePresentation.value && gamePreparationStep.value !== "wristband") ||
     hasRequiredPlayers.value ||
     busyAction.value ||
     wristbandRead.value
@@ -732,6 +750,11 @@ async function createWristbandPreparation(sessionId, wristbandId) {
     { refreshOnError: true },
   );
   wristbandRead.value = null;
+  if (result && isGamePresentation.value && view.value === 'PREPARING'
+      && preparation.value?.sessionId === sessionId
+      && gamePreparationStep.value === 'wristband' && hasRequiredPlayers.value) {
+    showGameSelection();
+  }
 }
 
 function localizedOperationError(error) {
@@ -792,7 +815,8 @@ async function fetchGames() {
       gameInitializationWarning.value = "";
     }
     await loadCoverUrls(games.value);
-    const currentGameIndex = games.value.findIndex(
+    await loadCategories();
+    const currentGameIndex = categoryGames.value.findIndex(
       (game) => game.id === selectedGameId.value,
     );
     gameCarouselIndex.value = currentGameIndex >= 0 ? currentGameIndex : 0;
@@ -820,6 +844,36 @@ async function loadCoverUrls(items) {
     }),
   );
   coverUrls.value = Object.fromEntries(entries);
+}
+
+async function loadCategories() {
+  if (!api?.listGameCategories) return;
+  categoryError.value = '';
+  try {
+    const result = normalizeGameCategoryList(await api.listGameCategories());
+    const covers = await Promise.all(result.map(async category => {
+      try {
+        const preview = category.cover && await mediaApi?.getPreviewUrl?.(category.cover);
+        return [category.id, preview?.url || preview || ''];
+      } catch { return [category.id, '']; }
+    }));
+    categories.value = result;
+    categoryCoverUrls.value = Object.fromEntries(covers);
+    if (!touchCategories.value.some(category => category.id === selectedCategoryId.value)) {
+      const current = games.value.find(game => game.id === selectedGameId.value);
+      selectedCategoryId.value = result.find(category => String(category.id) === current?.firstCatalog)?.id
+        ?? result.find(category => gamesInCategory(games.value, category.id).length)?.id ?? null;
+    }
+  } catch (error) {
+    categoryError.value = extractErrorMessage(error, t('gameCategories.loadFailed'));
+  }
+}
+
+function selectTouchCategory(category) {
+  if (busyAction.value) return;
+  selectedCategoryId.value = category.id;
+  gameCarouselIndex.value = 0;
+  gamePreparationStep.value = 'game';
 }
 
 async function chooseGame(game) {
@@ -852,7 +906,7 @@ function resetGamePreparationWizard(sessionId) {
     0,
     Math.floor(Number(preparation.value?.options?.startLevelIndex) || 0),
   );
-  const currentGameIndex = games.value.findIndex(
+  const currentGameIndex = categoryGames.value.findIndex(
     (game) => game.id === selectedGameId.value,
   );
   gameCarouselIndex.value = currentGameIndex >= 0 ? currentGameIndex : 0;
@@ -860,8 +914,14 @@ function resetGamePreparationWizard(sessionId) {
 
 async function selectPlayerCount(count) {
   if (busyAction.value || !canChangePlayerCount.value) return;
+  const sessionId = preparation.value?.sessionId;
   draft.userCount = normalizeTouchPlayerCount(count, draft.userCount);
-  await syncPlayerCount();
+  const saved = await syncPlayerCount();
+  if (isGamePresentation.value && view.value === 'PREPARING'
+      && preparation.value?.sessionId === sessionId && gamePreparationStep.value === 'players') {
+    if (isWristbandEntry.value && !saved) return;
+    gamePreparationStep.value = isWristbandEntry.value && !hasRequiredPlayers.value ? 'wristband' : 'game';
+  }
 }
 
 async function syncPlayerCount(event) {
@@ -872,7 +932,7 @@ async function syncPlayerCount(event) {
     busyAction.value
   ) return;
   const sessionId = preparation.value.sessionId;
-  await runAction(
+  const result = await runAction(
     "player-count",
     () => api.updatePreparation(sessionId, {
       userCount: normalizeTouchPlayerCount(draft.userCount, 1),
@@ -882,6 +942,7 @@ async function syncPlayerCount(event) {
     { refreshOnError: true },
   );
   event?.target?.blur?.();
+  return result;
 }
 
 function blurNumericInput(event) {
@@ -897,16 +958,17 @@ function showGameSelection() {
 }
 
 function moveGameCarousel(offset) {
-  if (!games.value.length || busyAction.value) return;
+  if (!categoryGames.value.length || busyAction.value) return;
   gameCarouselIndex.value = moveTouchCarousel(
     gameCarouselIndex.value,
     offset,
-    games.value.length,
+    categoryGames.value.length,
   );
 }
 
 function selectCarouselSlot(slot) {
-  if (suppressCarouselClick || !slot || slot.offset === 0) return;
+  if (suppressCarouselClick || !slot) return;
+  if (slot.offset === 0) { void showLevelSelection(); return; }
   moveGameCarousel(slot.offset);
 }
 
@@ -915,13 +977,13 @@ function handleCarouselPointerDown(event) {
   carouselGesture.pointerId = event.pointerId;
   carouselGesture.startX = event.clientX;
   carouselGesture.moved = false;
-  event.currentTarget.setPointerCapture?.(event.pointerId);
 }
 
 function handleCarouselPointerMove(event) {
   if (carouselGesture.pointerId !== event.pointerId) return;
   if (Math.abs(event.clientX - carouselGesture.startX) >= 12) {
     carouselGesture.moved = true;
+    event.currentTarget.setPointerCapture?.(event.pointerId);
   }
 }
 
@@ -1015,8 +1077,21 @@ function returnToPreviousGameStep() {
   } else if (gamePreparationStep.value === "level") {
     gamePreparationStep.value = "game";
   } else if (gamePreparationStep.value === "game") {
-    gamePreparationStep.value = "players";
+    if (isWristbandEntry.value && playerAccesses.value.length) {
+      void restartPlayerSelection();
+    } else {
+      gamePreparationStep.value = 'players';
+    }
+  } else if (gamePreparationStep.value === 'wristband') {
+    void restartPlayerSelection();
   }
+}
+
+async function restartPlayerSelection() {
+  const sessionId = preparation.value?.sessionId;
+  if (!sessionId) return;
+  const canceled = await runAction('cancel', () => api.cancelPreparation(sessionId), {refreshOnError:true});
+  if (canceled && view.value === 'IDLE') await wakeTouch();
 }
 
 function startGameCountdown() {
@@ -1069,21 +1144,20 @@ async function finishGameCountdown(sessionId) {
 
 function levelTimeText(level) {
   const option = level?.option || {};
+  if (gameDocument.value?.globalTimeLimit) {
+    return t('touch.secondsCount', {value: gameDocument.value.globalTimeLimitValue || 0});
+  }
   if (option.timeLimitMode === "CYCLE_COUNT") {
     return t("touch.cycleCount", { value: option.timeLimitValue || 0 });
   }
   if (option.timeLimitMode === "CYCLE_SECONDS") {
     return t("touch.secondsCount", { value: option.timeLimitValue || 0 });
   }
-  if (gameDocument.value?.globalTimeLimit) {
-    return t("touch.secondsCount", {
-      value: gameDocument.value.globalTimeLimitValue || 0,
-    });
-  }
   return t("touch.unlimited");
 }
 
 function levelLifeText(level) {
+  if (gameDocument.value?.globalLifeLimit) return String(gameDocument.value.globalLifeLimitValue || 0);
   const option = level?.option || {};
   return option.lifeLimitMode === "LIMITED"
     ? String(option.lifeLimitValue || 0)
@@ -1349,15 +1423,6 @@ async function confirmReturnToIdle() {
       >
         {{ t("touch.returnIdle") }}
       </button>
-      <div
-        v-if="needsMoreWristbands && gamePreparationStep === 'players'"
-        class="touch-wristband-scan-banner"
-        data-testid="game-wristband-prompt"
-        aria-live="polite"
-      >
-        <strong>{{ t("touch.scanWristband") }}</strong>
-        <span>{{ t("touch.scanWristbandHint") }}</span>
-      </div>
 
       <div
         v-if="gamePreparationStep === 'players'"
@@ -1367,36 +1432,6 @@ async function confirmReturnToIdle() {
           <span>{{ t("touch.playerSetup") }}</span>
           <h1>{{ t("touch.selectPlayerCount") }}</h1>
           <i aria-hidden="true"></i>
-          <div
-            v-if="isWristbandEntry"
-            class="touch-participant-progress"
-            data-testid="game-player-access"
-            :data-player-progress="`${playerAccesses.length}/${requiredPlayerCount}`"
-            aria-live="polite"
-          >
-            <strong>{{ playerAccesses.length }}/{{ requiredPlayerCount }}</strong>
-            <div class="touch-participant-slots">
-              <div
-                v-for="slot in requiredPlayerCount"
-                :key="slot"
-                class="touch-participant-slot"
-                :class="{ accepted: Boolean(playerAccesses[slot - 1]) }"
-                :data-testid="`game-player-slot-${slot}`"
-              >
-                <template v-if="playerAccesses[slot - 1]">
-                  <span>{{ playerAccesses[slot - 1].member.name || playerAccesses[slot - 1].member.phone }}</span>
-                  <small>{{ playerAccesses[slot - 1].access.uid }}</small>
-                </template>
-                <template v-else>
-                  <span>{{ slot }}P</span>
-                  <small>{{ t("touch.scanWristband") }}</small>
-                </template>
-              </div>
-            </div>
-          </div>
-          <p v-if="showPlayerAccess" class="touch-access-note">
-            {{ t("touch.activatedTimeContinues") }}
-          </p>
         </header>
 
         <div class="touch-player-grid" :aria-label="t('touch.selectPlayerCount')">
@@ -1416,28 +1451,38 @@ async function confirmReturnToIdle() {
           </button>
         </div>
 
-        <div class="touch-wizard-actions touch-wizard-actions-end">
-          <button
-            class="touch-wizard-next"
-            data-testid="game-player-next"
-            type="button"
-            :disabled="!TOUCH_PLAYER_COUNTS.includes(draft.userCount) || !hasRequiredPlayers || Boolean(busyAction)"
-            @click="showGameSelection"
-          >
-            {{ t("touch.nextStep") }}
-          </button>
+      </div>
+
+      <div v-else-if="gamePreparationStep === 'wristband'" class="touch-wizard-screen touch-scan-step">
+        <div class="touch-scan-frame" data-testid="game-wristband-prompt" aria-live="polite">
+          <svg class="touch-scan-border" viewBox="0 0 1200 500" preserveAspectRatio="none" aria-hidden="true">
+            <path d="M15 75 L60 18 300 50 340 83 860 83 900 50 1140 18 1185 75 1185 415 1140 480 900 450 865 417 335 417 300 450 60 480 15 415 Z" />
+            <path d="M35 85 L70 40 290 70 330 103 870 103 910 70 1130 40 1165 85 1165 405 1130 460 910 430 875 397 325 397 290 430 70 460 35 405 Z" />
+            <path d="M55 95 L82 62 282 88 322 120 878 120 918 88 1118 62 1145 95 1145 395 1118 440 918 412 883 379 317 379 282 412 82 440 55 395 Z" />
+          </svg>
+          <div class="touch-scan-core" aria-hidden="true"><i></i><i></i><i></i></div>
+          <h1>{{ busyAction === 'wristband' ? t('touch.validatingWristband') : t('touch.waitForPlayerScan') }}</h1>
+          <p v-if="requiredPlayerCount > 1">{{ playerAccesses.length }}/{{ requiredPlayerCount }}</p>
         </div>
+        <div class="touch-scan-players" data-testid="game-player-access" :data-player-progress="`${playerAccesses.length}/${requiredPlayerCount}`" aria-live="polite">
+          <div v-for="slot in requiredPlayerCount" :key="slot" class="touch-scan-player"
+            :class="{accepted:playerAccesses[slot-1]}" :data-testid="`game-player-slot-${slot}`">
+            <svg viewBox="0 0 100 100" aria-hidden="true"><circle cx="50" cy="50" r="46" /><circle cx="50" cy="32" r="18" /><path d="M21 87 V76 Q21 59 38 59 H62 Q79 59 79 76 V87" /></svg>
+            <strong>{{ playerAccesses[slot-1]?.member.name || playerAccesses[slot-1]?.member.phone || '--' }}</strong>
+            <small v-if="requiredPlayerCount > 1">{{ slot }}P</small>
+          </div>
+        </div>
+        <button class="touch-scan-back" type="button" :disabled="Boolean(busyAction)" @click="returnToPreviousGameStep">{{ t('touch.previousStep') }}</button>
       </div>
 
       <div
         v-else-if="gamePreparationStep === 'game'"
-        class="touch-wizard-screen touch-game-step"
+        class="touch-wizard-screen touch-game-step touch-catalog-layout"
       >
-        <header class="touch-wizard-heading">
-          <span>{{ t("touch.gameSetup") }}</span>
-          <h1>{{ t("touch.selectGameTitle") }}</h1>
-          <i aria-hidden="true"></i>
-        </header>
+        <TouchCategoryRail :categories="touchCategories" :cover-urls="categoryCoverUrls" :selected-id="selectedCategoryId" :disabled="Boolean(busyAction)" @select="selectTouchCategory" />
+        <div class="touch-catalog-panel touch-game-panel">
+        <header class="touch-wizard-heading"><h1>{{ carouselGame?.displayName || carouselGame?.name || t('touch.selectGameTitle') }}</h1></header>
+        <p v-if="categoryError" class="touch-category-error" data-testid="game-category-error">{{ categoryError }} <button data-testid="game-category-retry" type="button" @click="loadCategories">{{ t('touch.reload') }}</button></p>
 
         <p
           v-if="gameInitializationWarning"
@@ -1449,7 +1494,7 @@ async function confirmReturnToIdle() {
         <div v-if="loadingGames" class="touch-wizard-empty">
           {{ t("touch.loadingGames") }}...
         </div>
-        <div v-else-if="!games.length" class="touch-wizard-empty">
+        <div v-else-if="!categoryGames.length" class="touch-wizard-empty">
           <strong>{{ t("touch.noGames") }}</strong>
           <button type="button" @click="loadGames">{{ t("touch.reload") }}</button>
         </div>
@@ -1487,6 +1532,7 @@ async function confirmReturnToIdle() {
                 next: slot.offset > 0,
               }"
               type="button"
+              :disabled="Boolean(busyAction)"
               :aria-pressed="slot.offset === 0"
               @click="selectCarouselSlot(slot)"
             >
@@ -1532,19 +1578,17 @@ async function confirmReturnToIdle() {
             {{ busyAction === "wizard-game" ? t("touch.loadingGame") : t("touch.nextStep") }}
           </button>
         </div>
+        </div>
       </div>
 
       <div
         v-else-if="gamePreparationStep === 'level'"
-        class="touch-wizard-screen touch-level-step"
+        class="touch-wizard-screen touch-level-step touch-catalog-layout"
       >
-        <header class="touch-level-heading">
-          <span class="touch-level-help">? &nbsp; {{ t("touch.howToPlay") }}</span>
-          <h1>{{ gameDocument?.name || selectedGame?.displayName || selectedGame?.name }}</h1>
-        </header>
-
+        <TouchCategoryRail :categories="touchCategories" :cover-urls="categoryCoverUrls" :selected-id="selectedCategoryId" :disabled="Boolean(busyAction)" @select="selectTouchCategory" />
+        <div class="touch-catalog-panel touch-level-panel">
         <div class="touch-game-description">
-          <strong>{{ t("touch.gameDescription") }}</strong>
+          <strong>{{ t("touch.gameDescription") }} <span>{{ gameDocument?.name || selectedGame?.displayName || selectedGame?.name }}</span></strong>
           <p>{{ gameDocument?.description || t("touch.noGameDescription") }}</p>
         </div>
 
@@ -1594,6 +1638,7 @@ async function confirmReturnToIdle() {
           >
             {{ t("touch.startGameAction") }}
           </button>
+        </div>
         </div>
       </div>
 
@@ -3969,5 +4014,81 @@ fieldset:disabled {
 .touch-shell:not([data-state="IDLE"]) :is(button, input, select):focus-visible {
   outline: 2px solid var(--ui-accent);
   outline-offset: 3px;
+}
+</style>
+
+<style scoped>
+/* Customer preparation screens share a full-height, framed layout. */
+.touch-player-step{grid-template-rows:auto minmax(0,1fr);padding-top:clamp(76px,10vh,120px);}
+.touch-player-step .touch-wizard-heading>span{display:none;}
+.touch-catalog-layout{display:grid;grid-template-columns:minmax(0,30%) minmax(0,1fr);grid-template-rows:minmax(0,1fr);gap:clamp(20px,2.4vw,48px);padding:clamp(74px,9vh,100px) clamp(22px,2.4vw,48px) 22px;}
+.touch-catalog-layout:has(.touch-category-rail:empty){grid-template-columns:0 minmax(0,1fr);gap:0;}
+.touch-catalog-panel{position:relative;display:grid;min-width:0;min-height:0;border:2px solid #b3eef6cc;background:linear-gradient(125deg,#00506bd4,#062944c7);box-shadow:inset 12px 12px 0 #10a2c512,0 0 0 12px #0092bd18;padding:clamp(18px,2vw,36px);}
+.touch-catalog-panel:before{content:'';position:absolute;inset:10px;border-top:1px solid #3ce8fb55;pointer-events:none;}
+.touch-game-panel{grid-template-rows:auto minmax(0,1fr) auto;gap:12px;}
+.touch-game-panel .touch-wizard-heading{width:100%;}
+.touch-game-panel .touch-wizard-heading h1{font-size:clamp(28px,3.2vw,62px);margin:0;line-height:1.1;color:#e1ffff;}
+.touch-game-panel .touch-carousel-shell{width:100%;min-height:0;height:100%;grid-template-columns:40px minmax(0,1fr) 40px;}
+.touch-game-panel .touch-game-carousel{height:100%;min-height:0;padding:12px 16px;gap:8px;grid-template-columns:1.05fr .9fr .55fr;perspective:1000px;overflow:hidden;}
+.touch-game-panel .touch-carousel-card{max-width:100%;width:auto;height:min(100%,49vh);aspect-ratio:183/308;border-radius:0;clip-path:polygon(9% 0,92% 0,100% 5%,100% 95%,92% 100%,9% 100%,0 94%,0 6%);border-color:#844fbc;padding:7px;opacity:.9;}
+.touch-game-panel .touch-carousel-card.current{order:1;transform:scale(.96);filter:drop-shadow(0 0 14px #0af5ff66);border-color:#d866e5;background:#664c9f;}
+.touch-game-panel .touch-carousel-card.next{order:2;transform:scale(.88) rotateY(-24deg);}
+.touch-game-panel .touch-carousel-card.previous{order:3;transform:scale(.78) rotateY(-55deg);}
+.touch-game-panel .touch-carousel-card:only-child{grid-column:1 / -1;}
+.touch-game-panel .touch-carousel-card strong{bottom:8px;font-size:clamp(16px,1.8vw,32px);background:linear-gradient(0deg,#051225ef,#06172950);padding:14px 4px;}
+.touch-game-panel .touch-carousel-arrow{width:40px;height:70px;font-size:68px;color:#3285c9;text-shadow:none;}
+.touch-catalog-panel .touch-wizard-actions{min-height:44px;padding-top:0;gap:16px;}
+.touch-catalog-panel .touch-wizard-actions button{min-height:44px;font-size:clamp(16px,1.2vw,24px);min-width:132px;padding:0 24px;}
+.touch-category-error{position:absolute;z-index:3;top:70px;left:24px;right:24px;margin:0;padding:10px;color:#ffdb9e;background:#18222eea;}
+.touch-category-error button{margin-left:12px;padding:4px 10px;border:1px solid #87eaf7;color:#fff;background:#124b69;cursor:pointer;}
+.touch-game-panel .touch-wizard-warning{top:80px;right:20px;left:20px;z-index:3;}
+.touch-level-panel{grid-template-rows:minmax(70px,.6fr) auto minmax(0,1fr) auto;gap:clamp(12px,2vh,24px);}
+.touch-level-panel .touch-game-description{padding:0;min-height:0;border:0;background:none;overflow:hidden;}
+.touch-level-panel .touch-game-description strong{padding:12px 24px;background:linear-gradient(105deg,#d12bca,#733fbab0,#32629700);clip-path:polygon(1% 0,100% 0,99% 100%,0 100%);font-size:clamp(20px,1.7vw,34px);font-style:italic;}
+.touch-level-panel .touch-game-description strong span{float:right;font-style:normal;font-size:.7em;opacity:.85;}
+.touch-level-panel .touch-game-description p{padding:0 22px;font-size:clamp(14px,1.2vw,22px);line-height:1.5;-webkit-line-clamp:3;}
+.touch-level-panel .touch-level-summary{gap:clamp(16px,3vw,52px);}
+.touch-level-panel .touch-level-summary>div{min-height:clamp(46px,7vh,78px);font-size:clamp(20px,1.8vw,34px);color:#c979e0;background:#042338c4;clip-path:polygon(2% 0,100% 0,98% 100%,0 100%);}
+.touch-level-panel .touch-level-picker{border:0;background:none;padding:0;display:flex;flex-direction:column;overflow:hidden;min-height:0;}
+.touch-level-panel .touch-level-picker h2{color:#c779df;font-size:clamp(20px,1.8vw,34px);margin:0 0 10px;font-weight:500;}
+.touch-level-panel .touch-level-grid{min-height:0;overflow:auto;background:#88b5d328;gap:0;scrollbar-width:thin;grid-template-columns:repeat(3,minmax(0,1fr));}
+.touch-level-panel .touch-level-grid button{min-height:clamp(42px,6vh,70px);font-size:clamp(16px,1.45vw,28px);padding:6px 18px;}
+.touch-level-panel .touch-level-grid button.selected{background:#5bc5d7db;color:#062f46;border-color:#b7f2fb;box-shadow:none;}
+.touch-scan-step{margin:clamp(76px,9vh,110px) 4vw 3vh;width:92vw;height:calc(100% - clamp(76px,9vh,110px) - 3vh);padding:20px 3vw;grid-template-rows:minmax(0,1fr) auto;gap:12px;border:2px solid #b3f4ff;background:linear-gradient(130deg,#00627aaa,#06395b99);box-shadow:12px 12px 0 #0184ae24;}
+.touch-scan-frame{position:relative;display:grid;place-content:center;min-height:0;text-align:center;}
+.touch-scan-border{position:absolute;inset:0;width:100%;height:100%;fill:none;stroke:#19cfdb;stroke-width:9;opacity:.68;}
+.touch-scan-border path:nth-child(2){stroke:#168fe0;stroke-width:3;}
+.touch-scan-border path:nth-child(3){stroke:#d7cc9144;stroke-width:2;}
+.touch-scan-core{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(30vw,35vh);aspect-ratio:1;background:radial-gradient(circle,#43f3ff77,transparent 70%);filter:drop-shadow(0 0 24px #27e4fe);}
+.touch-scan-core i{position:absolute;inset:5%;border:7px solid #25bcf5;clip-path:polygon(25% 0,75% 0,100% 50%,75% 100%,25% 100%,0 50%);background:#058bd826;}
+.touch-scan-core i:nth-child(2){inset:14%;border-color:#57ecff;background:#23baff22;}
+.touch-scan-core i:nth-child(3){inset:28%;border:3px solid #fab8b766;background:transparent;border-radius:50%;clip-path:none;}
+.touch-scan-frame h1{z-index:1;margin:0;color:#ffdc83;font-weight:950;font-style:italic;font-size:clamp(34px,5.5vw,100px);text-shadow:0 3px 0 #bd8745,0 0 20px #ffb766aa;}
+.touch-scan-frame p{position:relative;z-index:1;margin:20px 0 0;font-size:clamp(18px,2vw,32px);color:#c2f8ff;}
+.touch-scan-players{display:flex;justify-content:center;align-items:flex-end;gap:clamp(16px,3vw,50px);min-width:0;padding-bottom:10px;}
+.touch-scan-player{display:grid;justify-items:center;gap:8px;min-width:0;width:min(15vw,180px);color:#d9edfc;}
+.touch-scan-player svg{width:min(10vw,16vh,140px);aspect-ratio:1;fill:none;stroke:#fff;stroke-width:5;}
+.touch-scan-player svg circle:first-child{stroke:#559cf5;}
+.touch-scan-player.accepted svg circle:first-child{stroke:#5ef3cd;filter:drop-shadow(0 0 3px #52ffd4);}
+.touch-scan-player strong{max-width:100%;font-size:clamp(16px,1.6vw,26px);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.touch-scan-player small{font-size:14px;color:#64e6f9;}
+.touch-scan-back{position:absolute;bottom:18px;left:20px;border:1px solid #7be0ea70;background:#05334cb8;color:#bdf5ff;padding:10px 20px;cursor:pointer;}
+.touch-preparation-step-timeout{clip-path:polygon(25% 0,75% 0,100% 20%,100% 80%,75% 100%,25% 100%,0 80%,0 20%);min-width:64px;min-height:60px;justify-content:center;align-items:center;padding:10px;background:linear-gradient(130deg,#6bd3f5dd,#2f7bbedd);border:0;box-shadow:none;color:white;}
+.touch-preparation-step-timeout strong{font-size:30px;color:#fff;text-align:center;}
+.touch-preparation-step-timeout small{font-size:12px;}
+@media(max-width:760px){
+ .touch-catalog-layout{grid-template-columns:minmax(0,26%) minmax(0,1fr);gap:12px;padding:72px 12px 12px;}
+ .touch-catalog-panel{padding:12px;}
+ .touch-game-panel .touch-game-carousel{gap:4px;padding:4px;grid-template-columns:1fr .7fr;}
+ .touch-game-panel .touch-carousel-card.previous{display:none;}
+ .touch-game-panel .touch-carousel-shell{grid-template-columns:26px minmax(0,1fr) 26px;}
+ .touch-game-panel .touch-carousel-arrow{width:26px;font-size:48px;}
+ .touch-game-panel .touch-wizard-heading h1{font-size:25px;max-width:none;}
+ .touch-level-panel{grid-template-rows:minmax(65px,.4fr) auto minmax(0,1fr) auto;}
+ .touch-level-panel .touch-level-summary{grid-template-columns:1fr;gap:5px;}
+ .touch-level-panel .touch-level-grid{grid-template-columns:repeat(2,minmax(0,1fr));}
+ .touch-catalog-panel .touch-wizard-actions button{min-width:0;padding:0 14px;}
+ .touch-level-panel .touch-level-picker{min-height:0;}
+ .touch-scan-back{bottom:8px;left:8px;padding:7px;}
 }
 </style>
