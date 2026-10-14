@@ -1540,6 +1540,7 @@ html[data-language-direction="rtl"] :is(input, textarea) {
 
 .simple-editor-fit-viewport {
   position: relative;
+  position: relative;
   display: block;
   width: 100%;
   height: 100%;
@@ -1590,6 +1591,30 @@ html[data-language-direction="rtl"] :is(input, textarea) {
 
 .simple-editor-fit-shell.ready {
   visibility: visible;
+}
+
+.simple-editor-loading {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  background: var(--ui-base, #101626);
+}
+
+.simple-editor-loading-spinner {
+  width: 24px;
+  height: 24px;
+  border: 2px solid rgba(83, 223, 240, .2);
+  border-top-color: #53dff0;
+  border-radius: 50%;
+  animation: simple-editor-loading-spin .8s linear infinite;
+}
+
+@keyframes simple-editor-loading-spin {
+  to { transform: rotate(360deg); }
 }
 
 .simple-editor-fit-content {

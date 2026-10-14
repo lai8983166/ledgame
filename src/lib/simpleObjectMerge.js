@@ -24,14 +24,19 @@ export function getAbsoluteObjectCells(object) {
 // Rebase only: even bounds use the upper/left integer center, including negatives.
 export function centerObjectAnchor(object) {
   if (Array.isArray(object?.points) && !object.points.length) return { ...object, points: [] };
-  const cells = getAbsoluteObjectCells(object);
+  const baseX = toInteger(object?.x, 0), baseY = toInteger(object?.y, 0);
+  const points = normalizePoints(object?.points);
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-  for (const { x, y } of cells) {
+  for (const [dx, dy] of points) {
+    const x = baseX + dx, y = baseY + dy;
     minX = Math.min(minX, x); minY = Math.min(minY, y);
     maxX = Math.max(maxX, x); maxY = Math.max(maxY, y);
   }
   const x = Math.floor((minX + maxX) / 2), y = Math.floor((minY + maxY) / 2);
-  return { ...object, x, y, points: cells.map(cell => [cell.x - x, cell.y - y]) };
+  // Already centered objects still get independent normalized points, without
+  // allocating an absolute-cell object and a second point array for every cell.
+  return { ...object, x, y, points: x === baseX && y === baseY
+    ? points : points.map(([dx, dy]) => [baseX + dx - x, baseY + dy - y]) };
 }
 
 export function canSelectObjectForMerge(matrix, selectedIds, candidateId) {

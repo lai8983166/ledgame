@@ -587,8 +587,10 @@ async function loadEditor() {
     if (!loaded || (gameId ? Number(loaded.id) !== gameId : loaded.id != null || loaded.type !== 'default')) {
       throw new Error(t("simple.editorGameMismatch", { game: currentGameName.value }));
     }
-    document.value = ensureEditableShape({ ...loaded, id: gameId });
-    savedFingerprint.value = gameId ? JSON.stringify(createEditorPayload()) : '';
+    const prepared = await prepareEditorDocument({ ...loaded, id: gameId }, loadTicket);
+    if (!prepared || !isCurrentEditorLoad(loadTicket)) return;
+    savedFingerprint.value = gameId ? createEditorFingerprint(prepared) : '';
+    document.value = prepared;
     resetMatrixFrameCache();
     activeLevelIndex.value = 0;
     activeFrameIndex.value = 0;
@@ -620,6 +622,37 @@ async function loadEditor() {
 
 function isCurrentEditorLoad(ticket) {
   return editorMounted && editorLoadGuard.isCurrent(ticket, currentGameId.value);
+}
+
+async function prepareEditorDocument(value, ticket) {
+  // The API owns this detached document. Do not expose partially prepared frames
+  // to Vue, or mutate the persisted database during preparation.
+  const count = (value.levels || []).reduce((n, level) => n + (level.frameList || []).length, 0);
+  let objects = 0;
+  const large = count >= 32 || (value.levels || []).some(level =>
+    (level.frameList || []).some(frame => (objects += (frame.matrix || []).length) >= 2000));
+  if (!large) return ensureEditableShape(value);
+  value.levels ||= [];
+  let batchStarted = performance.now();
+  await new Promise(resolve => window.setTimeout(resolve, 0));
+  if (!isCurrentEditorLoad(ticket)) return null;
+  for (const [index, level] of value.levels.entries()) {
+    prepareEditableLevel(level, index);
+    for (const [frameIndex, frame] of level.frameList.entries()) {
+      frame.repeatTimes ||= 1;
+      frame.matrix ||= [];
+      for (let i = 0; i < frame.matrix.length; i += 1) {
+        frame.matrix[i] = normalizeMatrixObject(frame.matrix[i], frame, frameIndex);
+        if (i % 256 === 0 && performance.now() - batchStarted >= 8) {
+          await new Promise(resolve => window.setTimeout(resolve, 0));
+          if (!isCurrentEditorLoad(ticket)) return null;
+          batchStarted = performance.now();
+        }
+      }
+      setMatrixFrameVersion(frame, getMatrixFrameVersion(frame));
+    }
+  }
+  return value;
 }
 
 async function waitForEditorFonts(loadTicket) {
@@ -962,7 +995,8 @@ async function saveEditor() {
       throw new Error(result?.message || t('gameWiring.saveFailed'));
     }
     document.value.id = saved.gameId;
-    savedFingerprint.value = JSON.stringify(createEditorPayload());
+    payload.id = saved.gameId;
+    savedFingerprint.value = JSON.stringify(payload);
     statusMessage.value = t("simple.saveSuccess");
     validationErrors.value = [];
   });
@@ -1163,7 +1197,7 @@ async function exportCurrentLevelGif() {
 
 async function startGame() {
   if (!document.value || !currentGameId.value || busyAction.value) return;
-  if (JSON.stringify(createEditorPayload()) !== savedFingerprint.value) debugEntryOpen.value = true;
+  if (createEditorFingerprint() !== savedFingerprint.value) debugEntryOpen.value = true;
   else await enterDebug('saved');
 }
 
@@ -1266,6 +1300,7 @@ async function runEditorAction(name, action, shouldCommit = () => true) {
   } catch (error) {
     if (shouldCommit()) {
       errorMessage.value = error.message || String(error);
+      if (name === 'load') nextTick(scheduleEditorFitMeasurement);
     }
   } finally {
     if (shouldCommit()) {
@@ -2565,6 +2600,13 @@ function closeContextMenu() {
   }
 }
 
+function prepareEditableLevel(level, index) {
+  level.label ||= "Level " + (index + 1);
+  level.option = normalizeLevelOption(level.option);
+  level.frameList ||= [];
+  if (!level.frameList[0]) level.frameList[0] = { repeatTimes: 1, matrix: [] };
+}
+
 function ensureEditableShape(value) {
   const next = value || {};
   next.levels ||= [];
@@ -2572,12 +2614,7 @@ function ensureEditableShape(value) {
     next.levels[0] = { label: "Level 1", frameList: [] };
   }
   next.levels.forEach((level, index) => {
-    level.label ||= "Level " + (index + 1);
-    level.option = normalizeLevelOption(level.option);
-    level.frameList ||= [];
-    if (!level.frameList[0]) {
-      level.frameList[0] = { repeatTimes: 1, matrix: [] };
-    }
+    prepareEditableLevel(level, index);
     level.frameList.forEach((frame, frameIndex) => {
       frame.repeatTimes ||= 1;
       frame.matrix ||= [];
@@ -2610,32 +2647,54 @@ function createBlankFrame() {
   };
 }
 
-function cleanFrameMatrix(frame) {
-  return (frame?.matrix || [])
-    .filter((object) => isObjectInsideRealMatrix(object))
-    .map((object) => ({
+function cleanFrameMatrix(frame, width = matrixWidth.value, height = matrixHeight.value) {
+  const cleaned = [];
+  for (const object of frame?.matrix || []) {
+    // Serialization does not mutate these points; canonical loaded coordinates
+    // can be reused here. createEditorPayload's final JSON parse detaches them.
+    const points = Array.isArray(object.points) && object.points.length && object.points.every(point =>
+      Array.isArray(point) && point.length === 2 && Number.isInteger(point[0]) && Number.isInteger(point[1]))
+      ? object.points : getObjectPoints(object);
+    const baseX = toInteger(object.x, 0), baseY = toInteger(object.y, 0);
+    if (!points.every(([dx, dy]) => baseX + dx >= 0 && baseX + dx < width && baseY + dy >= 0 && baseY + dy < height)) continue;
+    const x = typeof object.x === 'number' && !Number.isFinite(object.x) ? 0 : Number(object.x || 0);
+    const y = typeof object.y === 'number' && !Number.isFinite(object.y) ? 0 : Number(object.y || 0);
+    const color = clampColorIndex(object.color);
+    cleaned.push(Object.is(x, object.x) && Object.is(y, object.y) && color === object.color && points === object.points
+      ? object : {
       ...object,
-      x: Number(object.x || 0),
-      y: Number(object.y || 0),
+      x,
+      y,
       id: object.id,
-      color: clampColorIndex(object.color),
-      points: getObjectPoints(object),
-    }));
+      color,
+      points,
+    });
+  }
+  return cleaned;
 }
 
-function createEditorPayload() {
-  const payload = JSON.parse(JSON.stringify(toRaw(document.value)));
+function createEditorFingerprint(value = document.value) {
+  const payload = { ...toRaw(value) };
+  const width = clampDimension(payload.siteSizeWidth), height = clampDimension(payload.siteSizeHeight);
   if (currentGameId.value) {
     payload.id = currentGameId.value;
   }
-  payload.levels?.forEach((level) => {
-    level.option = normalizeLevelOption(level.option);
-    level.frameList?.forEach((frame) => {
-      frame.matrix = cleanFrameMatrix(frame);
-      delete frame.__matrixVersion;
-    });
-  });
-  return payload;
+  payload.levels = payload.levels?.map(level => ({
+    ...level,
+    option: normalizeLevelOption(level.option),
+    frameList: level.frameList?.map(frame => {
+      const next = { ...frame, matrix: cleanFrameMatrix(frame, width, height) };
+      delete next.__matrixVersion;
+      return next;
+    }),
+  }));
+  return JSON.stringify(payload);
+}
+
+function createEditorPayload() {
+  // One serialization produces both the comparable representation and a fully
+  // detached JSON payload; no second whole-document clone before cleaning.
+  return JSON.parse(createEditorFingerprint());
 }
 
 function serializeActiveLevel() {
@@ -2764,13 +2823,23 @@ function createUniqueObjectId(frame, frameIndex) {
 }
 
 function normalizeMatrixObject(value, frame, frameIndex) {
+  // Most persisted frames contain canonical single-cell objects. The detached
+  // API document already owns them: no new center, point array or object clone
+  // is needed. Legacy tuples, missing IDs and noncanonical shapes take the full
+  // normalization path below.
+  if (!Array.isArray(value) && value?.id && Number.isInteger(value.x) && Number.isInteger(value.y)
+    && Number.isInteger(value.color) && value.color >= 0 && value.color <= 3
+    && value.points?.length === 1 && Array.isArray(value.points[0])
+    && value.points[0].length === 2 && value.points[0][0] === 0 && value.points[0][1] === 0) return value;
   const object = Array.isArray(value)
     ? createObjectFromTuple(value)
     : { ...value };
   object.x = toInteger(object.x, 0);
   object.y = toInteger(object.y, 0);
   object.color = clampColorIndex(object.color);
-  object.points = getObjectPoints(object);
+  // centerObjectAnchor normalizes points once. Preserve this loader's legacy
+  // empty-object fallback; explicit empty frames themselves remain empty.
+  if (!Array.isArray(object.points) || !object.points.length) object.points = [[0, 0]];
   if (!object.id) {
     object.id = createUniqueObjectId(frame, frameIndex);
   }
@@ -3058,6 +3127,11 @@ function formatRuntimeSummary(value) {
   <EditorDebugWorkspace v-if="debugGame" ref="debugWorkspaceRef" :game="debugGame" :start-level-index="activeLevelIndex" @exit="exitDebug" />
   <EditorDebugEntryDialog v-if="debugEntryOpen" :saving="Boolean(busyAction)" :error="errorMessage" @choose="enterDebug" />
   <div v-show="!debugGame" ref="fitViewportRef" class="simple-editor-fit-viewport">
+    <div v-if="!editorFitReady && !errorMessage" class="simple-editor-loading" role="status" aria-live="polite">
+      <span class="simple-editor-loading-spinner" aria-hidden="true"></span>
+      <span>{{ t('common.loading') }}</span>
+      <button class="soft-button" type="button" @click="$emit('back')">{{ t('simple.backToList') }}</button>
+    </div>
     <div class="simple-editor-fit-shell" :class="{ ready: editorFitReady }" :style="editorFitShellStyle">
       <section
         ref="fitContentRef"

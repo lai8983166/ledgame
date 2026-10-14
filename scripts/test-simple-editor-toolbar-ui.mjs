@@ -112,10 +112,14 @@ try {
     const after=await read();assert.deepEqual(after.matrix,before.matrix);assert.equal(after.undo,before.undo);
     assert.deepEqual(await page.locator('.matrix-overlay-canvas').boundingBox(),bounds);
     await page.locator('.matrix-overlay-canvas').screenshot({path:path.join(output,'selected-thin-outline.png')});
+    // Flush pointer-leave and its queued overlay frame before recording the
+    // next fixture. Otherwise the recorder also contains a legitimate hover
+    // outline from the previous hovered cell while the fixture is replaced.
+    await page.mouse.move(0,0);
+    await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
     await page.evaluate(()=>{
       const s=window.getComponentSetup();s.activeFrame.matrix=[{id:'hollow',x:5,y:5,color:2,points:[[-1,-1],[1,1]]}];s.invalidateMatrixFrame();s.selectedObjectId='hollow';window.selectionStrokes=[];
     });
-    await page.mouse.move(0,0);
     await page.waitForFunction(()=>window.selectionStrokes.some(s=>s.color==='#f7d56f'));
     assert.deepEqual(await page.evaluate(()=>window.getComponentSetup().matrixOverlayHighlights),[{x:4,y:4,type:'selected'},{x:6,y:6,type:'selected'}]);
     assert.ok(await page.evaluate(()=>window.selectionStrokes.every(s=>s.width===1.25&&s.color==='#f7d56f')));
