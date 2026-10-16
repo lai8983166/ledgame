@@ -153,7 +153,8 @@ function handleKeydown(event) {
   if (event.key !== "Tab") {
     return;
   }
-  const focusable = [...(dialogRef.value?.querySelectorAll("button:not(:disabled), input:not(:disabled), select:not(:disabled)") || [])];
+  const focusable = [...(dialogRef.value?.querySelectorAll("button:not(:disabled), input:not(:disabled), select:not(:disabled)") || [])]
+    .filter((element) => element.getClientRects().length > 0);
   if (!focusable.length) {
     event.preventDefault();
     dialogRef.value?.focus();
@@ -209,7 +210,7 @@ onBeforeUnmount(() => {
             </label>
           </div>
 
-          <div class="pixel-layout-fields">
+          <div v-show="draft.form.open" class="pixel-layout-fields">
             <label>
               <span>{{ t("pixelLight.controller") }}</span>
               <select :value="draft.form.controlIdx" :disabled="saving" @change="setController">
@@ -241,13 +242,13 @@ onBeforeUnmount(() => {
             </label>
           </div>
 
-          <p v-if="wallError('circlePort')" class="pixel-layout-error">{{ t("pixelLight.channelConflict") }}</p>
+          <p v-if="draft.form.open && wallError('circlePort')" class="pixel-layout-error">{{ t("pixelLight.channelConflict") }}</p>
 
-          <div class="pixel-layout-section-head pixel-layout-wall-head">
+          <div v-show="draft.form.open" class="pixel-layout-section-head pixel-layout-wall-head">
             <h3>{{ t("pixelLight.wallCounts") }}</h3>
             <span class="pixel-layout-hint">{{ t("pixelLight.gridSize", { width: preview.width, height: preview.height }) }}</span>
           </div>
-          <div class="pixel-layout-wall-counts">
+          <div v-show="draft.form.open" class="pixel-layout-wall-counts">
             <label v-for="wall in wallDefinitions" :key="wall.wall">
               <span>{{ wall.label }}</span>
               <input
@@ -261,11 +262,11 @@ onBeforeUnmount(() => {
             </label>
           </div>
 
-          <div class="pixel-layout-rows-head">
+          <div v-show="draft.form.open" class="pixel-layout-rows-head">
             <h3>{{ t("pixelLight.rows") }}</h3>
             <p>{{ t("pixelLight.rowsHint") }}</p>
           </div>
-          <div class="pixel-layout-rows">
+          <div v-show="draft.form.open" class="pixel-layout-rows">
             <div class="pixel-layout-row pixel-layout-row-header">
               <span>{{ t("pixelLight.start") }}</span>
               <span>{{ t("pixelLight.wall") }}</span>
@@ -394,7 +395,7 @@ onBeforeUnmount(() => {
         </section>
       </div>
 
-      <p v-if="validationErrors.length" class="pixel-layout-error">{{ t("pixelLight.validationFailed") }}</p>
+      <p v-if="draft.form.open && validationErrors.length" class="pixel-layout-error">{{ t("pixelLight.validationFailed") }}</p>
       <p v-if="error" class="pixel-layout-error">{{ error }}</p>
 
       <footer class="pixel-layout-actions">

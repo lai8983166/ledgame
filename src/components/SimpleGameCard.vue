@@ -15,20 +15,26 @@ const props = defineProps({
 });
 const emit = defineEmits(["open-game", "play-game", "export-game", "delete-game", "reorder-start", "reorder-over", "reorder-drop", "reorder-end"]);
 const coverFailed = ref(false);
+const coverRatio = ref(3 / 4);
 const coverUrl = computed(() =>
   coverFailed.value ? "" : buildMediaPreviewUrl(props.game.cover),
 );
+
+function onCoverLoaded({ target: { naturalWidth, naturalHeight } }) {
+  if (naturalWidth > 0 && naturalHeight > 0) coverRatio.value = naturalWidth / naturalHeight;
+}
 
 watch(
   () => props.game.cover,
   () => {
     coverFailed.value = false;
+    coverRatio.value = 3 / 4;
   },
 );
 </script>
 
 <template>
-  <article class="game-card" :data-id="game.id" :class="{ 'catalog-dragging': dragging, 'catalog-drop-target': dropTarget }"
+  <article class="game-card" :data-id="game.id" :style="{ '--game-cover-ratio': coverRatio }" :class="{ 'catalog-dragging': dragging, 'catalog-drop-target': dropTarget }"
     @dragover.prevent="emit('reorder-over', game.id)" @drop.prevent.stop="emit('reorder-drop', game.id)">
     <button class="catalog-drag-handle" type="button" :draggable="!orderBlocked" :disabled="orderBlocked"
       v-bind="{ title: t('management.reorder'), 'aria-label': t('management.reorder') }"
@@ -36,34 +42,35 @@ watch(
       <svg viewBox="0 0 24 24" aria-hidden="true"><circle v-for="n in 6" :key="n" :cx="n % 2 ? 8 : 16" :cy="4 + Math.floor((n - 1) / 2) * 8" r="2" fill="currentColor" /></svg>
     </button>
     <div class="game-card-main" @dragstart.prevent>
-      <span class="game-card-cover">
+      <div class="game-card-cover">
         <img
           v-if="coverUrl"
           :src="coverUrl"
           :alt="t('games.coverAlt', { game: game.displayName || game.name })"
-          @error="coverFailed = true"
+          @load="onCoverLoaded"
+          @error="coverFailed = true; coverRatio = 3 / 4"
         />
         <span v-else class="game-card-cover-placeholder">
           <span class="game-card-mark" aria-hidden="true"></span>
           <span>{{ t(coverFailed ? "games.coverUnavailable" : "games.noCover") }}</span>
         </span>
-      </span>
-      <span class="game-card-copy">
+        <div class="game-card-actions" @click.stop>
+          <button class="game-card-play" type="button" :disabled="dragging || orderBlocked" :aria-label="t('catalogMaintenance.play')" @click.stop="emit('play-game', game)">
+            <svg viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="28" fill="none" stroke="currentColor" stroke-width="4"/><path d="M25 18 46 32 25 46Z" fill="none" stroke="currentColor" stroke-width="4" stroke-linejoin="round"/></svg>
+          </button>
+          <div class="game-card-action-footer">
+            <button type="button" :disabled="dragging || orderBlocked" @click.stop="emit('open-game', game)">{{ t('catalogMaintenance.edit') }}</button>
+            <button type="button" :disabled="dragging || orderBlocked" @click.stop="emit('export-game', game)">{{ t('catalogMaintenance.export') }}</button>
+            <button type="button" :disabled="dragging || orderBlocked" @click.stop="emit('delete-game', game)">{{ t('catalogMaintenance.delete') }}</button>
+          </div>
+        </div>
+      </div>
+      <div class="game-card-copy">
         <h2>{{ game.displayName || game.name }}</h2>
         <small class="game-card-badge">{{ t(game.type === 'rank' ? 'gameCreation.ranked' : 'gameCreation.entertainment') }}</small>
         <small v-if="game.name === 'simple-demo'" class="game-card-badge">
           {{ t("games.testOnly") }}
         </small>
-      </span>
-    </div>
-    <div class="game-card-actions" @click.stop>
-      <button class="game-card-play" type="button" :disabled="dragging || orderBlocked" :aria-label="t('catalogMaintenance.play')" @click.stop="emit('play-game', game)">
-        <svg viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="28" fill="none" stroke="currentColor" stroke-width="4"/><path d="M25 18 46 32 25 46Z" fill="none" stroke="currentColor" stroke-width="4" stroke-linejoin="round"/></svg>
-      </button>
-      <div class="game-card-action-footer">
-        <button type="button" :disabled="dragging || orderBlocked" @click.stop="emit('open-game', game)">{{ t('catalogMaintenance.edit') }}</button>
-        <button type="button" :disabled="dragging || orderBlocked" @click.stop="emit('export-game', game)">{{ t('catalogMaintenance.export') }}</button>
-        <button type="button" :disabled="dragging || orderBlocked" @click.stop="emit('delete-game', game)">{{ t('catalogMaintenance.delete') }}</button>
       </div>
     </div>
   </article>

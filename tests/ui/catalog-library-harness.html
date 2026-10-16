@@ -14,6 +14,14 @@ import GameWiringDialog from '../../src/components/GameWiringDialog.vue';
 import SimpleGameEditorView from '../../src/views/SimpleGameEditorView.vue';
 import RankGameEditorView from '../../src/views/RankGameEditorView.vue';
 import EditorDebugWorkspace from '../../src/views/EditorDebugWorkspace.vue';
+import PixelLightLayoutDialog from '../../src/components/PixelLightLayoutDialog.vue';
+import GameEffectDialog from '../../src/components/GameEffectDialog.vue';
+import SpiritPointEditorDialog from '../../src/components/SpiritPointEditorDialog.vue';
+import SecondaryDisplayPickerDialog from '../../src/components/SecondaryDisplayPickerDialog.vue';
+import LanguageSelectionDialog from '../../src/components/LanguageSelectionDialog.vue';
+import GameCreationDialog from '../../src/components/GameCreationDialog.vue';
+import GameCategoryEditDialog from '../../src/components/GameCategoryEditDialog.vue';
+import CatalogDeleteDialog from '../../src/components/CatalogDeleteDialog.vue';
 import App from '../../src/App.vue';
 import '../../src/style.css';
 let app;
@@ -27,7 +35,9 @@ window.mountComponent = (component, props, { applicationShell = false } = {}) =>
   app = createApp({ render: () => {
     const view = h({ MediaPickerDialog, GameGlobalConfigDialog, ApplicationSettingsView,
     Elc408DebugAssistantView, GameListView, LedGameTouchView, MediaLibraryView, SpiritLibraryView,
-    GameWiringDialog, SimpleGameEditorView, RankGameEditorView, EditorDebugWorkspace, App }[component], {
+    GameWiringDialog, SimpleGameEditorView, RankGameEditorView, EditorDebugWorkspace, PixelLightLayoutDialog,
+    GameEffectDialog, SpiritPointEditorDialog, SecondaryDisplayPickerDialog, LanguageSelectionDialog,
+    GameCreationDialog, GameCategoryEditDialog, CatalogDeleteDialog, App }[component], {
     ...props,
     onSelect: path => window.componentEvents.push(['select', path]),
     onCancel: () => window.componentEvents.push(['cancel']),

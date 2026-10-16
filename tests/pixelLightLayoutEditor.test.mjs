@@ -23,5 +23,9 @@ test("layout dialog keeps drawing local and exposes the required controls", asyn
   assert.match(source, /pixelLight\.alignPlaceholder/);
   assert.match(source, /rowErrorMessage/);
   assert.match(source, /alignOutOfRange/);
+  assert.match(source, /v-show="draft.form.open" class="pixel-layout-fields"/);
+  assert.match(source, /<section class="pixel-layout-preview-section">/);
+  assert.doesNotMatch(source, /pixel-layout-dialog--disabled/);
+  assert.match(source, /element.getClientRects\(\).length > 0/);
   assert.doesNotMatch(source, /window\.ledGame|fetch\(/);
 });

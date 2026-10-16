@@ -9,11 +9,12 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const { _electron, expect } = createRequire(path.join(root, '../ledGame-platform/package.json'))('@playwright/test');
 await mkdir(path.join(root, '.build'), { recursive: true });
 const data = await mkdtemp(path.join(root, '.build/game-catalog-packaged-'));
+const media = path.join(data, 'media'); await mkdir(media);
 const file = path.join(data, 'roundtrip.game.json');
 async function freePort() { const server = net.createServer(); await new Promise(r => server.listen(0, '127.0.0.1', r)); const port = server.address().port; await new Promise(r => server.close(r)); return port; }
 const port = await freePort(), framePort = await freePort();
 const env = { ...process.env, LED_USER_DATA_DIR: data, LED_PORTABLE_BACKEND_PORT: String(port), LED_DEBUG_TCP_PORT: String(framePort),
-  LED_ROOM_CONNECTION_ENABLED: 'false', ELC408_ENABLED: 'false', LED_DISABLE_DEVTOOLS: '1' };
+  LED_ROOM_CONNECTION_ENABLED: 'false', ELC408_ENABLED: 'false', LED_DISABLE_DEVTOOLS: '1', LED_MEDIA_DIR: media };
 delete env.ELECTRON_RUN_AS_NODE;
 let app, page, importedId; const passed = [], errors = [];
 const request = async (route, method = 'GET', body, ok = true) => {
@@ -54,6 +55,25 @@ try {
   await page.locator('.nav-tab').filter({ hasText: /^媒体库$/ }).click(); await select('首页');
   await page.locator(`.game-category-card[data-id="${category.id}"] .game-category-card-main`).click();
   let card = page.locator(`.game-card[data-id="${simple}"]`);
+  await check('分类标题、新建弹窗白底黑字及导航白字', async () => {
+    await expect(page.locator('.page-heading h1')).toHaveText('维护验收分类');
+    await expect(page.locator('.page-heading p, .game-category-breadcrumb span')).toHaveCount(0);
+    await expect(page.getByTestId('game-menu-button')).toHaveCSS('color', 'rgb(255, 255, 255)');
+    await button('新建游戏').click();
+    await expect(page.locator('.game-creation-dialog')).toHaveCSS('background-color', 'rgb(255, 255, 255)');
+    await expect(page.locator('.game-creation-dialog')).toHaveCSS('color', 'rgb(17, 17, 17)');
+    await button('取消').click(); await expect(card).toBeVisible();
+    await expect(card.locator('h2')).toHaveCSS('font-size', '16px');
+    await expect(card.locator('h2')).toHaveCSS('font-weight', '400');
+    await expect(card).toHaveCSS('width', '215px');
+    assert.ok(await card.evaluate(card => {
+      const cover = card.querySelector('.game-card-cover').getBoundingClientRect();
+      const copy = card.querySelector('.game-card-copy').getBoundingClientRect();
+      const actions = card.querySelector('.game-card-actions').getBoundingClientRect();
+      const grid = card.parentElement.getBoundingClientRect();
+      return card.getBoundingClientRect().left - grid.left <= 3 && copy.top >= cover.bottom - 1 && actions.bottom <= cover.bottom + 1;
+    }), 'packaged card is left-aligned with a separate cover and title');
+  });
   await check('分类内卡片直接调试并返回原分类，无 Touch/DebugPanel 窗口', async () => {
     await card.hover(); await card.getByRole('button', { name: '调试游戏', exact: true }).click();
     await expect(page.locator('.editor-debug-workspace')).toBeVisible();
@@ -67,7 +87,24 @@ try {
     await request(`/game/${simple}`, 'DELETE', undefined, false);
     await button('继续').click(); await page.locator('.editor-debug-workspace canvas').click({ position: { x: 20, y: 20 } });
     await button('退出调试，返回游戏列表').click();
-    await expect(page.locator('.game-category-breadcrumb')).toContainText('维护验收分类'); await expect(card).toBeVisible();
+    await expect(page.locator('.page-heading h1')).toHaveText('维护验收分类'); await expect(card).toBeVisible();
+  });
+  await check('真实PNG封面按自身比例收窄卡片，无容器黑边且不裁切', async () => {
+    const png = await page.evaluate(() => {
+      const canvas = document.createElement('canvas'); canvas.width = 420; canvas.height = 800;
+      const context = canvas.getContext('2d'); context.fillStyle = '#124e78'; context.fillRect(0, 0, 420, 800);
+      return canvas.toDataURL('image/png').split(',')[1];
+    });
+    await writeFile(path.join(media, 'cover.png'), Buffer.from(png, 'base64'));
+    await request(`/games/${simple}/metadata`, 'PATCH', { cover: 'cover.png' });
+    await button('返回首页').click(); await page.locator('.nav-tab').filter({ hasText: /^媒体库$/ }).click(); await select('首页');
+    await page.locator(`.game-category-card[data-id="${category.id}"] .game-category-card-main`).click();
+    await expect.poll(() => card.locator('img').evaluate(image => image.naturalWidth)).toBe(420);
+    await expect.poll(() => card.locator('.game-card-cover').evaluate(element => Math.abs(element.getBoundingClientRect().height - 284) < 1)).toBe(true);
+    const cover = await card.locator('.game-card-cover').boundingBox();
+    assert.ok(Math.abs(cover.width / cover.height - 420 / 800) < .005);
+    // Windows display scaling can quantize a 1px border to 0.8 CSS px.
+    assert.ok(Math.abs(cover.height - 284) < 1, JSON.stringify(cover)); assert.ok(Math.abs((await card.boundingBox()).width - 151.1) < .5);
   });
   await check('完整游戏导出、取消、按类型导入与同名新增，保留原记录', async () => {
     const original = (await request(`/game/${simple}`)).data;
@@ -114,7 +151,12 @@ try {
     await button('全局配置').click();
     const visibility = page.locator('.global-config-field').filter({ hasText: '触屏显示' }).locator('input'); await visibility.uncheck();
     await page.locator('.global-config-actions .primary').click(); await expect(page.locator('.global-config-dialog')).toHaveCount(0);
-    assert.equal((await request(`/game/${simple}`)).data.childModeVisible, false); await button('返回列表').click();
+    assert.equal((await request(`/game/${simple}`)).data.childModeVisible, false);
+    await button('符号灯布局').click();
+    await expect(page.locator('.pixel-layout-fields')).toBeHidden(); await expect(page.locator('.pixel-layout-preview-section')).toBeVisible();
+    await expect(page.locator('.pixel-layout-floor-grid line')).toHaveCount(54);
+    await expect(page.locator('.pixel-layout-dialog')).toHaveCSS('background-color', 'rgb(255, 255, 255)');
+    await page.locator('.pixel-layout-dialog').getByRole('button', { name: '取消', exact: true }).click(); await button('返回列表').click();
     await expect(card).toBeVisible(); assert.equal(await button('启动游戏').count(), 0);
   });
   await check('Rank 卡片进入同一调试页，编辑器保留触屏显示配置', async () => {

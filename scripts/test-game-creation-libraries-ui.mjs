@@ -78,7 +78,7 @@ async function check(name, fn) { await fn(); passed.push(name); console.log(`通
 try {
   await page.goto(`http://127.0.0.1:${server.httpServer.address().port}/tests/ui/catalog-library-harness.html`);
   await page.waitForFunction(()=>window.mountComponent);
-  await check('新建入口仅在游戏列表，多维竞技禁用，取消不创建', async()=>{
+  await check('游戏列表新建入口，多维竞技禁用，取消不创建', async()=>{
     await mount('GameListView'); await page.locator('.game-category-heading').waitFor();
     assert.equal(await page.getByRole('button',{name:'新建游戏',exact:true}).count(),0);
     await mount('GameListView',{section:'list'});await page.locator('.game-card').first().waitFor();

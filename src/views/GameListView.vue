@@ -266,11 +266,10 @@ async function dropCard(id, kind) {
   <section class="workspace game-list-view" :class="{ 'catalog-sorting': dragSource !== null || orderSaving }" :aria-busy="orderSaving">
     <div class="page-heading">
       <div>
-        <h1>{{ t(section === 'home' && !selectedCategory ? 'gameCategories.homeTitle' : 'games.title') }}</h1>
-        <p v-if="selectedCategory">{{ selectedCategory.name }}</p>
+        <h1>{{ selectedCategory ? selectedCategory.name : t(section === 'home' ? 'gameCategories.homeTitle' : 'games.title') }}</h1>
       </div>
-      <div v-if="section === 'list'" class="catalog-toolbar">
-        <button class="soft-button" type="button" @click="beginCreateGame('import')">{{ t('catalogMaintenance.import') }}</button>
+      <div v-if="section === 'list' || selectedCategory" class="catalog-toolbar">
+        <button v-if="section === 'list'" class="soft-button" type="button" @click="beginCreateGame('import')">{{ t('catalogMaintenance.import') }}</button>
         <button class="action-button primary" type="button" @click="beginCreateGame()">{{ t('gameCreation.create') }}</button>
       </div>
     </div>
@@ -318,7 +317,6 @@ async function dropCard(id, kind) {
     <template v-else>
       <div v-if="selectedCategory" class="game-category-breadcrumb">
         <button class="soft-button" type="button" @click="selectedCategory = null">{{ t("gameCategories.backHome") }}</button>
-        <span>{{ selectedCategory.name }}</span>
       </div>
       <div v-if="loading" class="editor-loading">{{ t("games.loading") }}</div>
       <div v-else-if="!displayGames.length && !errorMessage" class="editor-loading">

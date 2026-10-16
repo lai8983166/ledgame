@@ -1441,7 +1441,8 @@ html[data-language-direction="rtl"] :is(input, textarea) {
 }
 
 .game-card-main {
-  display: grid;
+  display: flex;
+  flex-direction: column;
   width: 100%;
   padding: 0;
   overflow: hidden;
@@ -1455,23 +1456,28 @@ html[data-language-direction="rtl"] :is(input, textarea) {
 .game-card h2 {
   margin: 0;
   color: var(--ui-text);
-  font-size: 18px;
-  font-weight: 700;
+  font-size: 16px;
+  font-weight: 400;
   letter-spacing: 0;
   overflow-wrap: anywhere;
 }
 
 .game-card-cover {
-  display: grid;
-  place-items: center;
-  width: 183px;
-  height: 308px;
+  position: relative;
+  display: block;
+  flex: 0 0 auto;
+  width: 100%;
+  height: auto;
+  aspect-ratio: var(--game-cover-ratio, 3 / 4);
   overflow: hidden;
   color: var(--ui-text-secondary);
   background: var(--ui-surface);
 }
 
 .game-card-cover img {
+  position: absolute;
+  inset: 0;
+  display: block;
   width: 100%;
   height: 100%;
   object-fit: cover;
@@ -1487,10 +1493,15 @@ html[data-language-direction="rtl"] :is(input, textarea) {
   text-align: center;
 }
 
+.game-card-cover > .game-card-cover-placeholder {
+  height: 100%;
+  align-content: center;
+}
+
 .game-card-copy {
   display: block;
   min-height: 68px;
-  padding: 14px 44px 14px 14px;
+  padding: 12px;
 }
 
 .game-card-badge {
@@ -3710,17 +3721,18 @@ body:has(.debug-shell) {
 .nav-game-tab,
 .nav-game-tab-shell {
   border-radius: 999px;
+  color: #fff;
 }
 
 .nav-tab:hover,
 .nav-game-tab:hover {
-  color: var(--ui-accent);
+  color: #fff;
   background: var(--ui-hover);
 }
 
 .nav-tab.active,
 .nav-game-tab.active {
-  color: var(--ui-accent);
+  color: #fff;
   background: var(--ui-active);
   box-shadow: var(--ui-selected-shadow);
 }
@@ -3824,6 +3836,19 @@ body:has(.debug-shell) {
   padding: 6px 2px 22px;
 }
 
+.game-card-grid {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: flex-start;
+  gap: 36px;
+}
+
+.game-card-grid > .game-card {
+  flex: 0 0 auto;
+  width: min(100%, calc(284px * var(--game-cover-ratio, .75) + 2px));
+}
+
 .game-card,
 .game-category-card {
   width: auto;
@@ -3848,7 +3873,7 @@ body:has(.debug-shell) {
 .game-category-card-cover {
   width: 100%;
   height: auto;
-  aspect-ratio: 3 / 4;
+  aspect-ratio: var(--game-cover-ratio, 3 / 4);
   background: var(--ui-deep);
 }
 
@@ -3958,4 +3983,48 @@ body:has(.debug-shell) {
   .action-button {
     transition: none;
   }
+}
+
+/* All in-app modal surfaces share a light palette, including nested dialogs.
+   Preview pixels, media and canvases deliberately retain their own colors. */
+[role="dialog"][aria-modal="true"] {
+  --ui-base: #fff;
+  --ui-deep: #fff;
+  --ui-elevated: #fff;
+  --ui-surface: #f6f7f9;
+  --ui-panel: #f6f7f9;
+  --ui-input: #fff;
+  --ui-card: #f6f7f9;
+  --ui-hover: #eef0f3;
+  --ui-active: #e8ebf0;
+  --ui-accent: #111;
+  --ui-text: #111;
+  --ui-text-secondary: #111;
+  --ui-muted: #4b5563;
+  --ui-text-disabled: #6b7280;
+  --ui-border: #d1d5db;
+  --ui-border-strong: #374151;
+  --ui-error: #b42318;
+  --ui-error-border: #dc2626;
+  --ui-gradient: linear-gradient(#eef0f3, #eef0f3);
+  --ui-selected-shadow: inset 0 0 0 1px #374151;
+  color-scheme: light;
+  color: #111 !important;
+  background: #fff !important;
+}
+
+[role="dialog"][aria-modal="true"] :is(button, input, select, textarea, option, .language-option) {
+  color: #111 !important;
+  border-color: var(--ui-border);
+  background: var(--ui-input) !important;
+  text-shadow: none;
+}
+
+[role="dialog"][aria-modal="true"] :is(button:hover, button:focus-visible, button[aria-pressed="true"], .selected, .language-option:has(input:checked)) {
+  border-color: var(--ui-border-strong);
+  background: var(--ui-active) !important;
+}
+
+[role="dialog"][aria-modal="true"] :is(.touch-kicker, .touch-return-idle-dialog > p, .touch-exit-code, .language-option) {
+  color: #111 !important;
 }

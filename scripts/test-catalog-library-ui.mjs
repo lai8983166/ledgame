@@ -67,10 +67,12 @@ async function gameSection(section) {await page.getByTestId('game-menu-button').
 const cardIds=selector=>page.locator(selector).evaluateAll(nodes=>nodes.map(node=>Number(node.dataset.id)));
 async function drag(source,target) {
   await source.hover(); await page.waitForTimeout(300);
-  const from = await source.boundingBox(), to = await target.boundingBox();
+  const from = await source.boundingBox();
   await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
   await page.mouse.down();
   await page.mouse.move(from.x + from.width / 2 - 12, from.y + from.height / 2 + 12, {steps:4});
+  await target.scrollIntoViewIfNeeded();
+  const to = await target.boundingBox();
   await page.mouse.move(to.x + to.width / 2, to.y + Math.min(to.height / 2, 80), {steps:20});
   await page.mouse.move(to.x + to.width / 2, to.y + Math.min(to.height / 2, 80) + 2);
   await page.mouse.up();
