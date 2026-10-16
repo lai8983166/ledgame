@@ -27,11 +27,11 @@ try {
       frameList:[{repeatTimes:1,matrix:[{id:'target',x:8,y:18,color:1,points:[[0,0]]}]}]}];
     assert.equal((await api('saveGameEditor',id,doc)).data.saved,true);
     await page.reload();await page.locator('.app-nav').waitFor();await page.getByTestId('game-menu-button').click();await page.getByRole('menuitem',{name:'游戏列表',exact:true}).click();
-    await page.locator('.game-card[data-id="'+id+'"] .game-card-main').click();await page.locator('.editor-toolbar').waitFor();
+    const card = page.locator('.game-card[data-id="'+id+'"]');
+    await card.hover(); await card.getByRole('button',{name:'编辑',exact:true}).click();await page.locator('.editor-toolbar').waitFor();
     assert.equal(await page.locator('.editor-circle-countdown input[type=checkbox]').isChecked(),true);
     assert.equal(await page.locator('.editor-circle-countdown input[type=number]').first().inputValue(),'2');
-    await button('启动游戏').click();
-    if(await button('使用已保存版本').count())await button('使用已保存版本').click();
+    await button('返回列表').click(); await card.hover(); await card.getByRole('button',{name:'调试游戏',exact:true}).click();
     await page.locator('.editor-debug-workspace').waitFor();
     assert.equal(await page.locator('.debug-circle-light[data-phase=OFF]').count(),1);
     await button('启动游戏').click();
@@ -48,7 +48,7 @@ try {
     await page.screenshot({path:path.join(app.runtime.directory,'timeout-'+id+'.png')});
     await button('重新开始').click();await expect.poll(async()=>(await state()).engineState,{timeout:30_000}).toBe('RUNNING');
     assert.equal((await state()).gameplay.life,5);await expect(circle).toHaveAttribute('data-phase','BLUE');
-    await button('退出调试，返回编辑').click();await page.locator('.editor-toolbar').waitFor();
+    await button('退出调试，返回游戏列表').click();await card.waitFor();
     assert.ok(['IDLE','STOPPED'].includes((await state()).engineState));
     passed.push({name:game.name,id,saveReopen:true,clickNoScore:true,pauseFrozen:true,timeoutLife:true,restartCleanup:true});
   }

@@ -2,19 +2,15 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
-test("Simple editor quick start enters setup without immediately starting or opening other windows", async () => {
+test("card play enters setup directly and editors no longer expose play buttons", async () => {
   const source = await readFile(new URL("../src/views/SimpleGameEditorView.vue", import.meta.url), "utf8");
-  const startFunction = source.slice(
-    source.indexOf("async function startGame()"),
-    source.indexOf("function openPreview()"),
-  );
-
-  assert.match(startFunction, /debugEntryOpen\.value = true/);
-  assert.match(startFunction, /enterDebug\('saved'\)/);
-  assert.match(source, /:start-level-index="activeLevelIndex"/);
-  assert.doesNotMatch(startFunction, /api\.startGame|enterGameFlow/);
-  assert.doesNotMatch(startFunction, /saveGameEditor/);
-  assert.doesNotMatch(startFunction, /createPreparation/);
+  const app = await readFile(new URL('../src/App.vue', import.meta.url), 'utf8');
+  const startFunction = app.slice(app.indexOf('async function openGameDebug'), app.indexOf('function openGameEditor'));
+  assert.match(startFunction, /api\.getGameEditor/);
+  assert.match(startFunction, /api\.getRankGameEditor/);
+  assert.match(startFunction, /activeView\.value = 'game-debug'/);
+  assert.doesNotMatch(source, /@click="startGame"|EditorDebugEntryDialog/);
+  assert.doesNotMatch(startFunction, /api\.startGame|enterGameFlow|createPreparation|saveGameEditor/);
 });
 
 test("Touch view does not create audio playback or consume legacy audio actions", async () => {

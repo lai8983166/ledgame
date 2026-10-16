@@ -3,6 +3,7 @@ const childProcess = require('node:child_process')
 const nodeNet = require('node:net')
 const nodeFs = require('node:fs')
 const fs = require('node:fs/promises')
+const { gameId: normalizeGameRecordId, exportGameRecord, importGameRecord } = require('./game-transfer.cjs')
 const { createLibraryFolder, importMediaFiles, resolveLibraryFolder } = require('./media-library-import.cjs')
 const { pathToFileURL } = require('node:url')
 const { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, protocol, shell, net: electronNet, screen } = require('electron')
@@ -1251,7 +1252,8 @@ async function startEmbeddedBackend() {
       SERVER_PORT: String(backendPort),
       // Allow the packaged app to start before the first conf/wiring files are generated.
       ELC408_ENABLED: process.env.ELC408_ENABLED ?? String(hasElc408Config),
-      SPRING_DATASOURCE_URL: `jdbc:h2:file:${getUserDatabaseBasePath()};MODE=MySQL;DATABASE_TO_LOWER=TRUE`,
+      // Windows termination cannot run Java's shutdown hook: acknowledge commits only after the H2 log is flushed.
+      SPRING_DATASOURCE_URL: `jdbc:h2:file:${getUserDatabaseBasePath()};MODE=MySQL;DATABASE_TO_LOWER=TRUE;WRITE_DELAY=0`,
       LED_MEDIA_ROOT: mediaRoot,
       LED_BRIDGE_ENABLED: process.env.LED_BRIDGE_ENABLED || 'false',
       MEMBER_PLATFORM_BASE_URL: `http://${savedApplicationSettings.memberPlatformHost}:${savedApplicationSettings.memberPlatformPort}`,
@@ -1880,6 +1882,38 @@ ipcMain.handle('engine:state', () => engineStateRequest('/engine/demo/state'))
 ipcMain.handle('game:list', () => backendRequest('/game'))
 ipcMain.handle('game:playable-list', () => backendRequest('/games/playable'))
 ipcMain.handle('game:manageable-list', () => backendRequest('/games/manageable'))
+function requireCatalogWindow(event) {
+  if (!mainWindow || mainWindow.isDestroyed() || event.sender !== mainWindow.webContents) throw new Error('仅允许主窗口维护游戏')
+}
+function notifyGameCatalogChanged() {
+  for (const window of BrowserWindow.getAllWindows()) {
+    if (!window.isDestroyed()) window.webContents.send('game-catalog-changed', {})
+  }
+}
+ipcMain.handle('game:export', async (event, id) => {
+  requireCatalogWindow(event)
+  return exportGameRecord({ id, request: backendRequest, chooseFile: (options) =>
+    showNativeDialogWithFocusRestore({ BrowserWindow, dialog, event, method: 'showSaveDialog', options }) })
+})
+ipcMain.handle('game:import', async (event, family) => {
+  requireCatalogWindow(event)
+  const result = await importGameRecord({ family, request: backendRequest, chooseFile: (options) =>
+    showNativeDialogWithFocusRestore({ BrowserWindow, dialog, event, method: 'showOpenDialog', options }) })
+  if (!result.canceled) notifyGameCatalogChanged()
+  return result
+})
+ipcMain.handle('game:delete', async (event, id) => {
+  requireCatalogWindow(event)
+  const result = await backendRequest(`/game/${normalizeGameRecordId(id)}`, { method: 'DELETE' })
+  notifyGameCatalogChanged()
+  return result
+})
+ipcMain.handle('game-categories:delete', async (event, id) => {
+  requireCatalogWindow(event)
+  const result = await backendRequest(`/game-categories/${normalizeGameRecordId(id)}`, { method: 'DELETE' })
+  notifyGameCatalogChanged()
+  return result
+})
 ipcMain.handle('game:new-draft', async (_event, family) => {
   if (!['entertainment', 'ranked'].includes(family)) throw new Error('不支持的游戏类型')
   return backendRequest('/games/draft', { method: 'POST', body: JSON.stringify({ family }) })
@@ -2006,12 +2040,14 @@ ipcMain.handle('game-editor:validate', (_event, document) =>
     body: JSON.stringify(document),
   }),
 )
-ipcMain.handle('game-editor:save', (_event, gameId, document) =>
-  backendRequest(`/game-editor/${gameId}`, {
+ipcMain.handle('game-editor:save', async (_event, gameId, document) => {
+  const result = await backendRequest(`/game-editor/${gameId}`, {
     method: 'PUT',
     body: JSON.stringify(document),
-  }),
-)
+  })
+  if (result?.data?.saved === true) notifyGameCatalogChanged()
+  return result
+})
 ipcMain.handle('game-editor:create', async (_event, document) => {
   const result = await backendRequest('/game-editor', { method: 'POST', body: JSON.stringify(document) })
   if (result?.data?.saved === true) {
@@ -2200,12 +2236,14 @@ ipcMain.handle('rank-game-editor:validate', (_event, document) =>
     body: JSON.stringify(document),
   }),
 )
-ipcMain.handle('rank-game-editor:save', (_event, gameId, document) =>
-  backendRequest(`/rank-game-editor/${gameId}`, {
+ipcMain.handle('rank-game-editor:save', async (_event, gameId, document) => {
+  const result = await backendRequest(`/rank-game-editor/${gameId}`, {
     method: 'PUT',
     body: JSON.stringify(document),
-  }),
-)
+  })
+  if (result?.data?.saved === true) notifyGameCatalogChanged()
+  return result
+})
 ipcMain.handle('rank-game-editor:create', async (_event, document) => {
   const result = await backendRequest('/rank-game-editor', { method: 'POST', body: JSON.stringify(document) })
   if (result?.data?.saved === true) {

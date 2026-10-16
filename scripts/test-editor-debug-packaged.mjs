@@ -44,9 +44,11 @@ try{
       await request(`/rank-game-editor/${game.gameId}`,'PUT',rankDoc);
     }
     await page.getByTestId('game-menu-button').click();await page.getByRole('menuitem',{name:'游戏列表',exact:true}).click();
-    await page.locator(`.game-card[data-id="${game.gameId}"] .game-card-main`).click();
+    const card=page.locator(`.game-card[data-id="${game.gameId}"]`);
+    await card.hover();await card.getByRole('button',{name:'编辑',exact:true}).click();
     await button('地砖布线').click();await button('取消').click();
-    await button('启动游戏').click();if(await page.getByRole('dialog').count())await button('使用已保存版本').click();
+    if(game.type==='rank')await page.locator('.rank-title .icon-action').click();else await button('返回列表').click();
+    await card.hover();await card.getByRole('button',{name:'调试游戏',exact:true}).click();
     await page.locator('.editor-debug-workspace').waitFor();
     await expect(page.locator('.debug-workspace-controls .error-line')).toContainText('SDK 未启用');
     assert.equal(await page.locator('.debug-hardware-dialog').count(),0);
@@ -81,13 +83,10 @@ try{
     await expect(page.locator('.editor-debug-workspace')).toHaveCount(0);
     await expect.poll(async()=>(await state()).engineState).toBe('STOPPED');
     await page.getByTestId('game-menu-button').click();await page.getByRole('menuitem',{name:'游戏列表',exact:true}).click();
-    await page.locator(`.game-card[data-id="${game.gameId}"] .game-card-main`).click();await button('启动游戏').click();
-    if(await page.getByRole('dialog').count())await button('使用已保存版本').click();
-    await button('退出调试，返回编辑').click();await expect(page.locator('.editor-debug-workspace')).toHaveCount(0);
-    await button('启动游戏').waitFor();
-    passed.push(`${game.name} ${dimensions.join('×')}：真实 EXE 完整矩阵、直接启动、RGB、暂停恢复、重开、导航语言不中断、媒体切换结束调试、返回编辑器`);
-    if(game===simple)await button('返回列表').click();
-    else await page.locator('.rank-title .icon-action').click();
+    await card.hover();await card.getByRole('button',{name:'调试游戏',exact:true}).click();
+    await button('退出调试，返回游戏列表').click();await expect(page.locator('.editor-debug-workspace')).toHaveCount(0);
+    await card.waitFor();
+    passed.push(`${game.name} ${dimensions.join('×')}：真实 EXE 完整矩阵、直接启动、RGB、暂停恢复、重开、导航语言不中断、媒体切换结束调试、返回游戏列表`);
   }
   await app.close();app=null;
   await expect.poll(async()=>{try{await state();return false;}catch{return true;}},{timeout:15000}).toBe(true);

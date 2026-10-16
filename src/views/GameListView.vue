@@ -1,6 +1,6 @@
 <script setup>
-import { computed, onMounted, ref, watch } from "vue";
-import GameInfoEditDialog from "../components/GameInfoEditDialog.vue";
+import { computed, onActivated, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import CatalogDeleteDialog from "../components/CatalogDeleteDialog.vue";
 import GameCreationDialog from "../components/GameCreationDialog.vue";
 import GameCategoryCard from "../components/GameCategoryCard.vue";
 import GameCategoryEditDialog from "../components/GameCategoryEditDialog.vue";
@@ -16,7 +16,7 @@ const api = window.ledGame;
 const props = defineProps({
   section: { type: String, default: "home" },
 });
-const emit = defineEmits(["open-game", "update:section"]);
+const emit = defineEmits(["open-game", "play-game", "update:section"]);
 const section = computed({
   get: () => props.section === "list" ? "list" : "home",
   set: (value) => emit("update:section", value === "list" ? "list" : "home"),
@@ -29,17 +29,41 @@ const errorMessage = ref("");
 const categoryErrorMessage = ref("");
 const warningMessage = ref("");
 const creationOpen = ref(false);
+const creationMode = ref('create');
+const deleting = ref(null);
+const deletionBusy = ref(false);
+const deletionError = ref('');
+const exportBusy = ref(false);
+let removeCatalogListener;
+onMounted(() => { removeCatalogListener = api?.onCatalogChanged?.(() => void Promise.all([loadGames(), loadCategories()])); });
+onActivated(() => void Promise.all([loadGames(), loadCategories()]));
+onBeforeUnmount(() => removeCatalogListener?.());
+function beginDelete(kind, value) {
+  if (deletionBusy.value || orderSaving.value) return;
+  deletionError.value = '';
+  deleting.value = { kind, value };
+}
+async function confirmDelete() {
+  if (!deleting.value || deletionBusy.value) return;
+  deletionBusy.value = true; deletionError.value = '';
+  try {
+    const {kind, value} = deleting.value;
+    if (kind === 'category') await api.deleteGameCategory(value.id);
+    else await api.deleteGame(value.id);
+    deleting.value = null;
+    await Promise.all([loadGames(), loadCategories()]);
+  } catch (error) { deletionError.value = extractErrorMessage(error, t('catalogMaintenance.failed')); }
+  finally { deletionBusy.value = false; }
+}
+async function exportGame(game) {
+  if (exportBusy.value) return;
+  exportBusy.value = true; errorMessage.value = '';
+  try { await api.exportGame(game.id); }
+  catch (error) { errorMessage.value = extractErrorMessage(error, t('catalogMaintenance.failed')); }
+  finally { exportBusy.value = false; }
+}
 const creationSaving = ref(false);
 const creationError = ref("");
-const editingGame = ref(null);
-const editCover = ref("");
-const editName = ref("");
-const editChildModeVisible = ref(true);
-const editFirstCatalog = ref("");
-const editLoading = ref(false);
-const editSaving = ref(false);
-const visibilitySaving = ref(false);
-const editError = ref("");
 const orderSaving = ref(false);
 const dragSource = ref(null);
 const dragKind = ref('');
@@ -94,7 +118,8 @@ async function loadGames() {
   }
 }
 
-function beginCreateGame() {
+function beginCreateGame(mode = 'create') {
+  creationMode.value = mode;
   creationError.value = "";
   creationOpen.value = true;
 }
@@ -104,6 +129,12 @@ async function createGame(family) {
   creationSaving.value = true;
   creationError.value = "";
   try {
+    if (creationMode.value === 'import') {
+      const result = await api.importGame(family);
+      creationOpen.value = false;
+      if (!result.canceled) await loadGames();
+      return;
+    }
     if (!api?.newGameDraft) throw new Error(t('gameCreation.unavailable'));
     const game = unwrapBackendData(await api.newGameDraft(family));
     if (!game || game.id != null || !['default', 'rank'].includes(game.type)) throw new Error(t('gameCreation.invalidResponse'));
@@ -196,75 +227,6 @@ function openGame(game) {
   emit("open-game", game);
 }
 
-function editGame(game) {
-  editingGame.value = game;
-  editCover.value = game.cover || "";
-  editName.value = game.name || "";
-  editChildModeVisible.value = game.childModeVisible !== false;
-  editFirstCatalog.value = game.firstCatalog || "";
-  editError.value = "";
-}
-
-function closeGameInfo() {
-  if (editLoading.value || editSaving.value || visibilitySaving.value) {
-    return;
-  }
-  editingGame.value = null;
-  editCover.value = "";
-  editName.value = "";
-  editChildModeVisible.value = true;
-  editFirstCatalog.value = "";
-  editError.value = "";
-}
-
-async function saveTouchVisibility(value) {
-  const game = editingGame.value;
-  if (!game || editLoading.value || editSaving.value || visibilitySaving.value) return;
-  const previous = editChildModeVisible.value;
-  editChildModeVisible.value = value;
-  visibilitySaving.value = true;
-  editError.value = "";
-  try {
-    await api.updateGameMetadata(game.id, { childModeVisible: value });
-    games.value = games.value.map((item) => Number(item.id) === Number(game.id)
-      ? { ...item, childModeVisible: value } : item);
-    editingGame.value = { ...game, childModeVisible: value };
-  } catch (error) {
-    editChildModeVisible.value = previous;
-    editError.value = extractErrorMessage(error, t("games.saveGameInfoFailed"));
-  } finally {
-    visibilitySaving.value = false;
-  }
-}
-
-async function saveGameInfo() {
-  const game = editingGame.value;
-  if (!game || editLoading.value || editSaving.value || visibilitySaving.value) {
-    return;
-  }
-  editSaving.value = true;
-  editError.value = "";
-  try {
-    const cover = editCover.value || "";
-    const name = editName.value.trim();
-    if (!name) throw new Error(t("management.nameRequired"));
-    const firstCatalog = editFirstCatalog.value || "";
-    await api.updateGameMetadata(game.id, { cover, name, firstCatalog });
-    games.value = games.value.map((item) =>
-      Number(item.id) === Number(game.id)
-        ? { ...item, cover, name, displayName: name, firstCatalog }
-        : item,
-    );
-    editingGame.value = null;
-    editCover.value = "";
-    editError.value = "";
-  } catch (error) {
-    editError.value = extractErrorMessage(error, t("games.saveGameInfoFailed"));
-  } finally {
-    editSaving.value = false;
-  }
-}
-
 function startDrag(event, id, kind) {
   if (orderSaving.value) { event.preventDefault(); return; }
   dragSource.value = id; dragKind.value = kind;
@@ -307,7 +269,10 @@ async function dropCard(id, kind) {
         <h1>{{ t(section === 'home' && !selectedCategory ? 'gameCategories.homeTitle' : 'games.title') }}</h1>
         <p v-if="selectedCategory">{{ selectedCategory.name }}</p>
       </div>
-      <button v-if="section === 'list'" class="action-button primary" type="button" @click="beginCreateGame">{{ t('gameCreation.create') }}</button>
+      <div v-if="section === 'list'" class="catalog-toolbar">
+        <button class="soft-button" type="button" @click="beginCreateGame('import')">{{ t('catalogMaintenance.import') }}</button>
+        <button class="action-button primary" type="button" @click="beginCreateGame()">{{ t('gameCreation.create') }}</button>
+      </div>
     </div>
 
     <p v-if="warningMessage" class="status-line" role="status">{{ warningMessage }}</p>
@@ -345,6 +310,7 @@ async function dropCard(id, kind) {
           @reorder-end="endDrag"
           @open="openCategory"
           @edit="editCategory"
+          @delete="beginDelete('category', $event)"
         />
       </div>
     </template>
@@ -372,33 +338,20 @@ async function dropCard(id, kind) {
             @reorder-drop="dropCard($event, 'game')"
             @reorder-end="endDrag"
             @open-game="openGame"
-            @edit-game="editGame"
+            @play-game="emit('play-game', $event)"
+            @export-game="exportGame"
+            @delete-game="beginDelete('game', $event)"
           />
       </div>
     </template>
 
-    <GameCreationDialog v-if="creationOpen" :saving="creationSaving" :error="creationError"
+    <GameCreationDialog v-if="creationOpen" :mode="creationMode" :saving="creationSaving" :error="creationError"
       @cancel="creationOpen = false" @create="createGame" />
 
-    <GameInfoEditDialog
-      v-if="editingGame"
-      :game="editingGame"
-      :cover="editCover"
-      :name="editName"
-      :child-mode-visible="editChildModeVisible"
-      :first-catalog="editFirstCatalog"
-      :categories="categories"
-      :loading="editLoading"
-      :saving="editSaving"
-      :visibility-saving="visibilitySaving"
-      :error="editError"
-      @update:cover="editCover = $event"
-      @update:name="editName = $event"
-      @update:child-mode-visible="saveTouchVisibility"
-      @update:first-catalog="editFirstCatalog = $event"
-      @cancel="closeGameInfo"
-      @save="saveGameInfo"
-    />
+
+    <CatalogDeleteDialog v-if="deleting"
+      :message="t(deleting.kind === 'category' ? 'catalogMaintenance.deleteCategory' : 'catalogMaintenance.deleteGame', { name: deleting.value.name })"
+      :busy="deletionBusy" :error="deletionError" @cancel="deleting = null" @confirm="confirmDelete" />
 
     <GameCategoryEditDialog
       v-if="categoryDialogOpen"
@@ -414,3 +367,7 @@ async function dropCard(id, kind) {
     />
   </section>
 </template>
+
+<style scoped>
+.catalog-toolbar { display:flex; gap:12px; }
+</style>

@@ -91,13 +91,21 @@ try {
   after=await page.evaluate(async()=> (await window.ledGame.listManageableGames()).data.map(item=>item.gameId));
   assert.deepEqual(after,fullExpected);
   passed.push('打包版完整游戏列表拖动排序保留隐藏项槽位');
-  await page.locator(`.game-card[data-id="${seeded.games[0]}"] .game-card-edit`).click();
-  await page.getByRole('button',{name:'选择图片',exact:true}).click();await page.locator('.media-picker-row[data-path="C"]').click();
-  await page.locator('.media-picker-row[data-path="C/cover.svg"]').dblclick();await page.locator('.game-info-actions .primary').click();
-  await page.locator('.game-info-dialog').waitFor({state:'hidden'});
+  const editedCard=page.locator(`.game-card[data-id="${seeded.games[0]}"]`);
+  await editedCard.hover();await editedCard.getByRole('button',{name:'编辑',exact:true}).click();
+  const isRank=await page.locator('.rank-editor').count()>0;
+  if(isRank)await page.locator('.rank-cover-picker button').click();
+  else {
+    await page.getByRole('button',{name:'全局配置',exact:true}).click();
+    await page.locator('.global-config-field').filter({has:page.locator('.global-config-label').filter({hasText:/^封面/})}).getByRole('button').click();
+  }
+  await page.locator('.media-picker-row[data-path="C"]').click();
+  await page.locator('.media-picker-row[data-path="C/cover.svg"]').dblclick();
+  if(isRank){await page.locator('.rank-actions .primary').click();await page.locator('.rank-title .icon-action').click();}
+  else {await page.locator('.global-config-actions .primary').click();await page.locator('.global-config-dialog').waitFor({state:'hidden'});await page.getByRole('button',{name:'返回列表',exact:true}).click();}
   passed.push('打包版游戏分层封面保存');
   if(seeded.rank){
-    await page.locator(`.game-card[data-id="${seeded.rank}"] .game-card-main`).click();
+    const rankCard=page.locator(`.game-card[data-id="${seeded.rank}"]`);await rankCard.hover();await rankCard.getByRole('button',{name:'编辑',exact:true}).click();
     await page.locator('.rank-editor input[data-rank-field="name"]').fill('未保存的验收草稿');
     await page.getByTestId('language-menu-button').click();await page.locator('.language-dialog input[value="en-US"]').click();
     await page.locator('.language-dialog').waitFor({state:'hidden'});

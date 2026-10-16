@@ -17,7 +17,7 @@ test("playable catalog preserves Simple order, includes Rank, and rejects unknow
   ]);
 });
 
-test("playable catalog reports seed failure but still loads existing games", async () => {
+test("reading a catalog never seeds, rewrites or resurrects deleted games", async () => {
   const calls = [];
   const result = await loadSupportedGames({
     seedSimpleVariants: async () => calls.push("simple-seed"),
@@ -31,8 +31,8 @@ test("playable catalog reports seed failure but still loads existing games", asy
     },
   });
 
-  assert.deepEqual(calls, ["simple-seed", "rank-seed", "list"]);
-  assert.equal(result.initializationError.message, "rank seed unavailable");
+  assert.deepEqual(calls, ["list"]);
+  assert.equal(result.initializationError, null);
   assert.deepEqual(result.games.map((game) => game.name), ["simple"]);
 });
 

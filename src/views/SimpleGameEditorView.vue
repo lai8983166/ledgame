@@ -11,9 +11,6 @@ import MediaPickerDialog from "../components/MediaPickerDialog.vue";
 import PixelLightLayoutDialog from "../components/PixelLightLayoutDialog.vue";
 import GameEffectDialog from "../components/GameEffectDialog.vue";
 import GameWiringDialog from "../components/GameWiringDialog.vue";
-import EditorDebugWorkspace from './EditorDebugWorkspace.vue';
-import EditorDebugEntryDialog from '../components/EditorDebugEntryDialog.vue';
-import { isDebugRuntimeAvailable } from '../lib/editorDebugSession.js';
 import { saveGameWiring } from "../lib/gameWiring.js";
 import { encodeSimpleGifInWorker } from "../lib/encodeSimpleGif.js";
 import { prepareSimpleLevelGif, selectSimpleTopItem } from "../lib/simpleLevelGif.js";
@@ -59,34 +56,7 @@ const props = defineProps({
     default: "",
   },
 });
-const emit = defineEmits(["back", "debug-active"]);
-const debugGame = ref(null);
-const debugWorkspaceRef = ref(null);
-const debugEntryOpen = ref(false);
-const savedFingerprint = ref('');
-function exitDebug() { debugGame.value = null; emit('debug-active',false); nextTick(scheduleEditorFitMeasurement); }
-async function exitDebugForNavigation() { return !debugGame.value || Boolean(await debugWorkspaceRef.value?.exit()); }
-defineExpose({exitDebugForNavigation});
-async function enterDebug(choice) {
-  if (choice === 'cancel') { debugEntryOpen.value = false; return; }
-  if (busyAction.value) return;
-  busyAction.value = 'start'; errorMessage.value = '';
-  try {
-    if (!isDebugRuntimeAvailable((await api.gameState())?.data)) throw new Error(t('editorDebug.busy'));
-    if (choice === 'save') {
-      const payload = createEditorPayload();
-      const result = await api.saveGameEditor(currentGameId.value,payload);
-      if (result?.data?.saved !== true) throw new Error(result?.message || t('gameWiring.saveFailed'));
-      savedFingerprint.value = JSON.stringify(payload);
-    }
-    debugGame.value = (await api.getGameEditor(currentGameId.value))?.data;
-    if (!debugGame.value) throw new Error(t('gameWiring.missing'));
-    debugEntryOpen.value = false;
-    emit('debug-active',true);
-  } catch(error) { errorMessage.value = error.message; }
-  finally { busyAction.value = ''; }
-}
-
+const emit = defineEmits(["back"]);
 const api = window.ledGame;
 const busyAction = ref("");
 const errorMessage = ref("");
@@ -589,7 +559,6 @@ async function loadEditor() {
     }
     const prepared = await prepareEditorDocument({ ...loaded, id: gameId }, loadTicket);
     if (!prepared || !isCurrentEditorLoad(loadTicket)) return;
-    savedFingerprint.value = gameId ? createEditorFingerprint(prepared) : '';
     document.value = prepared;
     resetMatrixFrameCache();
     activeLevelIndex.value = 0;
@@ -996,7 +965,6 @@ async function saveEditor() {
     }
     document.value.id = saved.gameId;
     payload.id = saved.gameId;
-    savedFingerprint.value = JSON.stringify(payload);
     statusMessage.value = t("simple.saveSuccess");
     validationErrors.value = [];
   });
@@ -1013,6 +981,7 @@ function openGlobalConfig() {
     mode: doc.mode ?? "",
     name: doc.name ?? "",
     firstCatalog: doc.firstCatalog ?? "",
+    childModeVisible: doc.childModeVisible !== false,
     globalTimeLimit: Boolean(doc.globalTimeLimit),
     globalTimeLimitValue: doc.globalTimeLimitValue ?? 0,
     globalLifeLimit: Boolean(doc.globalLifeLimit),
@@ -1195,11 +1164,6 @@ async function exportCurrentLevelGif() {
   }
 }
 
-async function startGame() {
-  if (!document.value || !currentGameId.value || busyAction.value) return;
-  if (createEditorFingerprint() !== savedFingerprint.value) debugEntryOpen.value = true;
-  else await enterDebug('saved');
-}
 
 function openPreview() {
   levelPreviewSnapshot.value = createLevelPreviewSnapshot(activeLevel.value, {
@@ -3013,7 +2977,7 @@ function canTriggerGlobalShortcut(event) {
 }
 
 function handleGlobalKeydown(event) {
-  if (debugGame.value || debugEntryOpen.value || levelMediaPicker.value) return;
+  if (levelMediaPicker.value) return;
   const tagName = event.target?.tagName?.toLowerCase();
   if (["input", "textarea", "select", "audio"].includes(tagName) || event.target?.isContentEditable) {
     return;
@@ -3124,9 +3088,7 @@ function formatRuntimeSummary(value) {
 </script>
 
 <template>
-  <EditorDebugWorkspace v-if="debugGame" ref="debugWorkspaceRef" :game="debugGame" :start-level-index="activeLevelIndex" @exit="exitDebug" />
-  <EditorDebugEntryDialog v-if="debugEntryOpen" :saving="Boolean(busyAction)" :error="errorMessage" @choose="enterDebug" />
-  <div v-show="!debugGame" ref="fitViewportRef" class="simple-editor-fit-viewport">
+  <div ref="fitViewportRef" class="simple-editor-fit-viewport">
     <div v-if="!editorFitReady && !errorMessage" class="simple-editor-loading" role="status" aria-live="polite">
       <span class="simple-editor-loading-spinner" aria-hidden="true"></span>
       <span>{{ t('common.loading') }}</span>
@@ -3434,7 +3396,6 @@ function formatRuntimeSummary(value) {
                 <EditorActionIcon name="copy-color" />
               </button>
               </template>
-<button class="soft-button compact-button object-icon-button" type="button" :aria-label="t('simple.startGame')" :title="t('simple.startGame')" :disabled="Boolean(busyAction) || !document?.id" @click="startGame"><EditorActionIcon name="play" /></button>
 <button class="soft-button compact-button object-icon-button" type="button" :aria-label="t('simple.openPreview')" :title="t('simple.openPreview')" :disabled="Boolean(busyAction) || !activeLevel" @click="openPreview"><EditorActionIcon name="preview" /></button>
 <button class="soft-button compact-button object-icon-button" type="button" :aria-label="t('simple.exportGif')" :title="t('simple.exportGif')" :disabled="Boolean(busyAction) || !activeLevel?.frameList?.length" @click="exportCurrentLevelGif"><EditorActionIcon name="export" /></button>
 <button class="soft-button compact-button object-icon-button" type="button" :aria-label="t('simple.globalConfig')" :title="t('simple.globalConfig')" :disabled="Boolean(busyAction) || !document" @click="openGlobalConfig"><EditorActionIcon name="settings" /></button>

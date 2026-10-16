@@ -2,7 +2,7 @@
 import { nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 
-const props = defineProps({ saving: Boolean, error: { type: String, default: '' } });
+const props = defineProps({ mode: { type: String, default: 'create' }, saving: Boolean, error: { type: String, default: '' } });
 const emit = defineEmits(['cancel', 'create']);
 const { t } = useI18n();
 const family = ref('entertainment');
@@ -27,7 +27,7 @@ onBeforeUnmount(() => previousFocus?.focus?.());
 <template>
   <div class="game-creation-backdrop" @mousedown.self="close">
     <section ref="dialogRef" class="game-creation-dialog" role="dialog" aria-modal="true" :aria-label="t('gameCreation.title')" @keydown="onKey">
-      <h2>{{ t('gameCreation.title') }}</h2>
+      <h2>{{ t(mode === 'import' ? 'catalogMaintenance.importTitle' : 'gameCreation.title') }}</h2>
       <div class="game-family-options" role="group" :aria-label="t('gameCreation.family')">
         <button v-for="option in ['entertainment', 'ranked', 'multidimensional']" :key="option"
           class="game-family-option" :class="{ selected: family === option }" type="button"
@@ -40,7 +40,7 @@ onBeforeUnmount(() => previousFocus?.focus?.());
       <p v-if="error" class="error-line" role="alert">{{ error }}</p>
       <footer>
         <button class="soft-button" type="button" :disabled="saving" @click="close">{{ t('common.cancel') }}</button>
-        <button class="action-button primary" type="button" :disabled="saving" @click="emit('create', family)">{{ t(saving ? 'common.loading' : 'gameCreation.create') }}</button>
+        <button class="action-button primary" type="button" :disabled="saving" @click="emit('create', family)">{{ t(saving ? 'common.loading' : mode === 'import' ? 'catalogMaintenance.import' : 'gameCreation.create') }}</button>
       </footer>
     </section>
   </div>

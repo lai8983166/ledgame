@@ -1,4 +1,5 @@
 export function applySimpleGlobalConfigPatch(target, patch) {
+  if (Object.hasOwn(patch, 'childModeVisible')) target.childModeVisible = Boolean(patch.childModeVisible);
   for (const field of ['cover', 'type', 'mode', 'name', 'firstCatalog']) {
     if (Object.hasOwn(patch, field)) target[field] = patch[field] ?? "";
   }

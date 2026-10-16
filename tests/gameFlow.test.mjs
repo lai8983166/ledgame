@@ -518,8 +518,11 @@ test("editor debug is a main-window workspace while customer/soak window IPC sta
   assert.match(mainSource, /ipcMain\.handle\('game-flow:enter', \(_event, options\) => enterGameFlow\(options\)\)/);
   assert.match(preloadSource, /createEditorPreparation/);
   assert.match(mainSource, /editor-debug:prepare/);
+  const appSource = await readFile(new URL('../src/App.vue', import.meta.url), 'utf8');
+  assert.match(appSource, /<EditorDebugWorkspace/);
+  assert.match(appSource, /debugWorkspaceRef\.value\?\.exit\(\)/);
   for (const source of [simpleSource,rankSource]) {
-    assert.match(source, /<EditorDebugWorkspace/);
+    assert.doesNotMatch(source, /<EditorDebugWorkspace/);
     assert.doesNotMatch(source, /enterGameFlow/);
   }
 });

@@ -110,7 +110,7 @@ try {
     await mount(rank?'RankGameEditorView':'SimpleGameEditorView',{gameId:null,initialDocument:draft});
     const input=rank?page.locator('input[data-rank-field="name"]'):page.locator('.simple-editor-layout .editor-left input').first();
     await input.waitFor();assert.equal(await input.inputValue(),'Draft');
-    const debug=page.getByRole('button',{name:'启动游戏',exact:true});assert.equal(await debug.isDisabled(),true);
+    const debug=page.getByRole('button',{name:'启动游戏',exact:true});assert.equal(await debug.count(),0);
     assert.deepEqual(await page.evaluate(()=>window.fixture.reads),[]);
     const previousCount=await page.evaluate(()=>window.fixture.firstSaves.length);
     if (!rank) {
@@ -128,11 +128,10 @@ try {
     const save=rank?page.locator('.rank-actions .primary'):page.locator('.editor-toolbar').getByRole('button',{name:'保存',exact:true});
     await input.fill(`保存-${family}`);await page.evaluate(()=>window.fixture.failSave=true);await save.click();
     await page.locator('.error-line').filter({hasText:'首次保存失败'}).waitFor();
-    assert.equal(await debug.isDisabled(),true);
+    assert.equal(await debug.count(),0);
     const previous=await page.evaluate(()=>window.fixture.firstSaves.length);
     await page.evaluate(()=>window.fixture.failSave=false);await save.click();
     await page.waitForFunction(previous=>window.fixture.firstSaves.length===previous+1,previous);
-    await page.waitForFunction(()=>!document.querySelector('button[title="启动游戏"]')?.disabled);
     const id=await page.evaluate(()=>window.fixture.firstSaves.at(-1));
     const payload=await page.evaluate(()=>window.fixture.firstPayloads.at(-1));
     assert.equal(payload.id,null);assert.equal(payload.wiringData.runtimeEnabled,true);
@@ -140,7 +139,7 @@ try {
     await input.fill(`更新-${family}`);await save.click();
     await page.waitForFunction(id=>window.fixture.updates.includes(id),id);
     assert.equal(await page.evaluate(()=>window.fixture.firstSaves.length),previous+1);
-    assert.equal(await debug.isDisabled(),false);
+    assert.equal(await debug.count(),0);
     await page.screenshot({path:path.join(output,`首次保存-${family}.png`)});
   });
   await check('精灵缩略图真实颜色、正方形格子、等比例且首尾点不裁切', async()=>{

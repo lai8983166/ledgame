@@ -161,11 +161,9 @@ try{
     }
     await page.setViewportSize({width:1366,height:768});
   });
-  for(const [name,id] of [['SimpleGameEditorView',1],['RankGameEditorView',4]])await check(name+' 编辑入口和保存草稿保留，无旧窗口',async()=>{
-    await mount(name,{gameId:id});await button('启动游戏').waitFor();
-    await button('启动游戏').click();
-    if(await page.getByRole('dialog').count())await button('使用已保存版本').click();
-    await button('退出调试，返回编辑').waitFor();await button('退出调试，返回编辑').click();assert.equal(await button('启动游戏').count(),1);
+  for(const [name,id] of [['SimpleGameEditorView',1],['RankGameEditorView',4]])await check(name+' 编辑器无启动入口，仍可配置布线',async()=>{
+    await mount(name,{gameId:id});await button('地砖布线').waitFor();
+    assert.equal(await button('启动游戏').count(),0);
   });
   await check('8×8 Rank：玩家颜色与得分、无生命值、三种视口完整显示',async()=>{
     const game=await page.evaluate(()=>window.fixture.rank);await mount('EditorDebugWorkspace',{game});await button('启动游戏').click();
@@ -181,13 +179,10 @@ try{
       await page.screenshot({path:path.join(output,`rank-${width}.png`)});}
     await button('退出调试，返回编辑').click();await page.setViewportSize({width:1366,height:768});
   });
-  await check('编辑草稿三选项：取消保留、保存失败不离开、已保存版本返回后草稿仍在',async()=>{
+  await check('编辑草稿尺寸和布线校验保留，启动入口已移到卡片',async()=>{
     await mount('SimpleGameEditorView',{gameId:1});
     const number=page.locator('input[type=number]').filter({visible:true}).first();
-    await number.fill('7');await button('启动游戏').click();await button('取消').click();assert.equal(await number.inputValue(),'7');
-    await button('启动游戏').click();await page.evaluate(()=>window.fixture.failSave=true);await button('保存并进入调试').click();
-    await page.getByRole('dialog').waitFor();assert.equal(await button('退出调试，返回编辑').count(),0);
-    await page.evaluate(()=>window.fixture.failSave=false);await button('使用已保存版本').click();await button('退出调试，返回编辑').click();assert.equal(await number.inputValue(),'7');
+    await number.fill('7');assert.equal(await number.inputValue(),'7');assert.equal(await button('启动游戏').count(),0);
     await button('地砖布线').click();await button('保存此游戏布线').click();
     assert.match(await page.locator('.game-wiring-dialog .error-line').innerText(),/先保存游戏的场地尺寸/);
     await button('取消').click();await number.fill('16');
@@ -228,8 +223,7 @@ try{
     const nav=name=>page.locator('.nav-tab').filter({hasText:new RegExp(`^${name}$`)});
     async function enter(id){
       await page.getByTestId('game-menu-button').click();await page.getByRole('menuitem',{name:'游戏列表',exact:true}).click();
-      await page.locator(`.game-card[data-id="${id}"] .game-card-main`).click();await button('启动游戏').click();
-      if(await page.getByRole('dialog').count())await button('使用已保存版本').click();
+      const card=page.locator(`.game-card[data-id="${id}"]`);await card.hover();await card.getByRole('button',{name:'调试游戏',exact:true}).click();
       await page.locator('.editor-debug-workspace').waitFor();
     }
     for(const id of [1,4]){

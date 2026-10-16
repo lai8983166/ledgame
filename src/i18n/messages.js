@@ -1462,6 +1462,19 @@ mergedMessages['en-US'].mediaImport = {
   uploaded:'Uploaded {count} files', folderCreated:'Folder created', failed:'Upload failed', folderFailed:'Folder creation failed', nameRequired:'Enter a folder name',
 };
 
+mergedMessages['zh-CN'].catalogMaintenance = {
+  import: '导入游戏', export: '导出', edit: '编辑', delete: '删除', play: '调试游戏',
+  deleteTitle: '确认删除？', deleteGame: '删除“{name}”？此操作不能撤销。',
+  deleteCategory: '删除分类“{name}”？所属游戏将变为未分类，不会删除游戏。',
+  failed: '操作失败，请重试', importTitle: '选择导入游戏类型', back: '退出调试，返回游戏列表',
+};
+mergedMessages['en-US'].catalogMaintenance = {
+  import: 'Import game', export: 'Export', edit: 'Edit', delete: 'Delete', play: 'Debug game',
+  deleteTitle: 'Confirm deletion?', deleteGame: 'Delete “{name}”? This cannot be undone.',
+  deleteCategory: 'Delete category “{name}”? Its games will become uncategorized, not deleted.',
+  failed: 'Operation failed. Please retry.', importTitle: 'Choose game type to import', back: 'Exit debug and return to games',
+};
+
 export const authoredMessages = Object.fromEntries(
   canonicalLocales.map((locale) => [locale, mergedMessages[locale] || {}]),
 );

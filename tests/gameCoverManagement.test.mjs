@@ -17,10 +17,14 @@ const listSource = await readFile(
 );
 const styleSource = await readFile(new URL("../src/style.css", import.meta.url), "utf8");
 
-test("game card keeps open and edit as independent accessible buttons", () => {
+test("game card exposes independent hover actions without nesting buttons", () => {
   assert.match(cardSource, /<article class="game-card"\s/);
   assert.match(cardSource, /class="game-card-main"[\s\S]*emit\('open-game'/);
-  assert.match(cardSource, /class="game-card-edit"[\s\S]*aria-label[\s\S]*emit\('edit-game'/);
+  assert.match(cardSource, /class="game-card-play"[\s\S]*aria-label[\s\S]*emit\('play-game'/);
+  assert.match(cardSource, /emit\('export-game'/);
+  assert.match(cardSource, /emit\('delete-game'/);
+  assert.match(cardSource, /:focus-within/);
+  assert.doesNotMatch(cardSource, /class="game-card-edit"/);
   assert.doesNotMatch(cardSource, /<button class="game-card"[\s\S]*<button/);
   assert.doesNotMatch(cardSource, /simpleDescription|normalDescription|diffcultDescription/);
   assert.match(cardSource, /game\.name === 'simple-demo'[\s\S]*games\.testOnly/);
@@ -51,16 +55,10 @@ test("game information dialog uses the image-only media picker", () => {
   assert.match(dialogSource, /emit\("update:cover"/);
 });
 
-test("cover save uses metadata-only API and changes only the local cover summary", () => {
-  const saveFunction = listSource.slice(
-    listSource.indexOf("async function saveGameInfo()"),
-    listSource.indexOf("</script>"),
-  );
-  assert.match(saveFunction, /api\.updateGameMetadata\(game\.id, \{ cover, name, firstCatalog \}\)/);
-  assert.doesNotMatch(saveFunction, /getGameEditor|saveGameEditor|saveRankGameEditor/);
-  assert.match(saveFunction, /games\.value = games\.value\.map/);
-  assert.match(saveFunction, /catch \(error\)[\s\S]*editError\.value/);
-  assert.match(listSource, /v-if="editingGame"/);
+test("card edit opens the editor rather than the removed information popup", () => {
+  assert.match(listSource, /emit\("open-game", game\)/);
+  assert.doesNotMatch(listSource, /GameInfoEditDialog|editingGame|saveGameInfo/);
+  assert.match(listSource, /@open-game="openGame"/);
 });
 
 test("game information dialog exposes child-mode visibility", () => {

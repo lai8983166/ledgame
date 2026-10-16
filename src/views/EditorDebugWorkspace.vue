@@ -4,7 +4,7 @@ import {useI18n} from 'vue-i18n';
 import DebugLightBoard from '../components/DebugLightBoard.vue';
 import {isDebugRuntimeAvailable,debugLaunchPayload,appendDebugWristband,pixelsFromDebugFrame} from '../lib/editorDebugSession.js';
 import {wristbandErrorMessageKey,playerAccessRemainingSeconds} from '../lib/playerAccess.js';
-const props=defineProps({game:{type:Object,required:true},startLevelIndex:{type:Number,default:0}});
+const props=defineProps({game:{type:Object,required:true},startLevelIndex:{type:Number,default:0},exitLabel:{type:String,default:''}});
 const emit=defineEmits(['exit']);
 const {t}=useI18n({useScope:'global'}), api=window.ledGame;
 const state=ref({}),sessionId=ref(null),busy=ref(false),error=ref(''),scanOpen=ref(false),scanPrompt=ref(null),hover=ref(null);
@@ -116,7 +116,7 @@ onBeforeUnmount(()=>{alive=false;clearTimeout(hardwareNoticeTimer);clearInterval
 </script>
 <template>
   <section class="workspace editor-debug-workspace">
-    <header><button class="soft-button" :disabled="busy" @click="exit">{{t('editorDebug.exit')}}</button><h1>{{game.displayName || game.name}}</h1><span>{{t('editorDebug.title')}}</span></header>
+    <header><button class="soft-button" :disabled="busy" @click="exit">{{exitLabel || t('editorDebug.exit')}}</button><h1>{{game.displayName || game.name}}</h1><span>{{t('editorDebug.title')}}</span></header>
     <div class="debug-workspace-columns">
       <aside class="debug-workspace-controls">
         <label><span>{{t('editorDebug.method')}}</span><select v-model="options.launchMethod" :disabled="busy || active || !!preparation"><option value="debug">{{t('editorDebug.direct')}}</option><option value="wristband">{{t('editorDebug.wristband')}}</option></select></label>

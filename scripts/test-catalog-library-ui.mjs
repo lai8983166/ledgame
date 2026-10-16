@@ -38,7 +38,9 @@ await context.addInitScript(() => {
     updateGameCategory:async(id,payload)=>{categories=categories.map(item=>item.id===id?{...item,...payload}:item);save('ui.categories',categories);return {data:categories.find(item=>item.id===id)};},
     createGameCategory:async payload=>{const item={id:Date.now(),displayOrder:categories.length,...payload};categories.push(item);save('ui.categories',categories);return {data:item};},
     updateGameMetadata:async(id,payload)=>{games=games.map(item=>item.id===id?{...item,...payload}:item);save('ui.games',games);return {data:true};},
-    getRankGameEditor:async()=>({data:{id:8,name:'Rank Draft',siteSizeWidth:16,siteSizeHeight:36,minPlayers:1,maxPlayers:4,levels:[{id:81,type:1,bounds:{minX:0,maxX:15,minY:0,maxY:35},gameTime:30}],audio:{scoreSound:'A/music.mp3'},gif:{standby:'A/B/same.png'}}}),
+    getRankGameEditor:async()=>({data:{id:8,name:'Rank Draft',cover:games.find(g=>g.id===8).cover||'',siteSizeWidth:16,siteSizeHeight:36,minPlayers:1,maxPlayers:4,levels:[{id:81,type:1,bounds:{minX:0,maxX:15,minY:0,maxY:35},gameTime:30}],audio:{scoreSound:'A/music.mp3'},gif:{standby:'A/B/same.png'}}}),
+    validateRankGameEditor:async()=>({data:{valid:true}}),
+    saveRankGameEditor:async(id,doc)=>{games=games.map(g=>g.id===id?{...g,cover:doc.cover}:g);save('ui.games',games);return{data:{saved:true,gameId:id}};},
   };
   window.appSettings = {get:async()=>({applicationTitle:'LED Game',entryMethod:'touch',mode:'debug',memberPlatformHost:'127.0.0.1',memberPlatformPort:8090,secondaryDisplayBackgroundPath:'old.png',secondaryIdleMediaPath:'old.mp4'}),getIconData:async()=>({}),onChanged:()=>()=>{},chooseIcon:async()=>({canceled:true}),chooseSecondaryBackground:async()=>({canceled:true}),chooseSecondaryIdleMedia:async()=>({canceled:true})};
   window.secondaryDisplay = {list:async()=>({displays:[],selectedAvailable:false}),onChanged:()=>()=>{}};
@@ -136,20 +138,19 @@ try {
     assert.deepEqual(await cardIds('.game-card'),[2,1]);
   });
   await check('封面目录选择、取消和保存不清空原资源',async()=>{
-    await page.locator('.game-card[data-id="1"] .game-card-edit').click();
+    await gameSection('游戏列表');const card=page.locator('.game-card[data-id="8"]');await card.hover();await card.getByRole('button',{name:'编辑',exact:true}).click();
     assert.equal(await page.getByRole('button',{name:'清除封面',exact:true}).count(),0);
-    await page.getByRole('button',{name:'选择图片',exact:true}).click();
+    await page.locator('.rank-cover-picker button').click();
     await page.locator('.media-picker-row[data-path="A"]').click(); await page.locator('.media-picker-row[data-path="A/B"]').click();
     await page.locator('.media-picker-row[data-path="A/B/same.png"]').dblclick();
     await page.locator('.media-picker-dialog').waitFor({state:'hidden'});
-    assert.match(await page.locator('.game-info-cover-path').innerText(),/A\/B\/same.png/);
-    await page.locator('.game-info-actions .primary').click();await page.locator('.game-info-dialog').waitFor({state:'hidden'});
-    await page.locator('.game-card[data-id="1"] .game-card-edit').click();await page.getByRole('button',{name:'选择图片',exact:true}).click();
+    assert.match(await page.locator('.rank-cover-picker input').inputValue(),/A\/B\/same.png/);
+    await page.locator('.rank-actions .primary').click();await page.locator('.rank-cover-picker button').click();
     assert.equal(await page.locator('.media-picker-row[data-path="A/B/same.png"]').count(),1);
     await page.locator('.media-picker-actions .soft-button').click();
-    assert.match(await page.locator('.game-info-cover-path').innerText(),/A\/B\/same.png/);
-    const input=page.locator('.game-info-dialog input[type="text"]').first();await input.fill('Still editable');assert.equal(await input.inputValue(),'Still editable');
-    await page.locator('.game-info-actions .soft-button').click();
+    assert.match(await page.locator('.rank-cover-picker input').inputValue(),/A\/B\/same.png/);
+    const input=page.locator('.rank-editor input').first();await input.fill('Still editable');assert.equal(await input.inputValue(),'Still editable');
+    page.once('dialog',dialog=>dialog.accept());await page.locator('.rank-title .icon-action').click();
   });
   await check('完整游戏列表拖动后重新加载仍保持顺序',async()=>{
     await gameSection('游戏列表');
@@ -159,7 +160,7 @@ try {
     await page.reload();await gameSection('游戏列表');assert.deepEqual(await cardIds('.game-card'),[2,1,6,8,5]);
   });
   await check('语言弹窗保留真正编辑器草稿、错误重试、当前语言、焦点和持久化',async()=>{
-    await gameSection('游戏列表');await page.locator('.game-card[data-id="8"] .game-card-main').click();
+    await gameSection('游戏列表');const card=page.locator('.game-card[data-id="8"]');await card.hover();await card.getByRole('button',{name:'编辑',exact:true}).click();
     const input=page.locator('.rank-editor input').first();await input.fill('Unsaved rank draft');
     await page.getByTestId('language-menu-button').click();assert.equal(await page.locator('.language-option-flag').count(),14);
     await page.evaluate(()=>window.uiTest.failLanguage=true);await page.locator('.language-dialog input[value="en-US"]').click();

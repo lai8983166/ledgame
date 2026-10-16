@@ -27,6 +27,7 @@ const sections = computed(() => [
       { label: t("globalConfig.mode"), path: "mode", kind: "text" },
       { label: t("globalConfig.name"), path: "name", kind: "text" },
       { label: t("globalConfig.firstCatalog"), path: "firstCatalog", kind: "category", marked: true },
+      { label: t("management.childModeVisible"), path: "childModeVisible", kind: "checkbox" },
     ],
   },
   {
@@ -103,6 +104,7 @@ function resetDraft() {
     mode: source.mode ?? "",
     name: source.name ?? "",
     firstCatalog: source.firstCatalog ?? "",
+    childModeVisible: source.childModeVisible !== false,
     globalTimeLimit: Boolean(source.globalTimeLimit),
     globalTimeLimitValue: source.globalTimeLimitValue ?? 0,
     globalLifeLimit: Boolean(source.globalLifeLimit),

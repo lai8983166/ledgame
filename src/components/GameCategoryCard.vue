@@ -9,7 +9,7 @@ const props = defineProps({
   dragging: { type: Boolean, default: false },
   dropTarget: { type: Boolean, default: false },
 });
-const emit = defineEmits(["open", "edit", "reorder-start", "reorder-over", "reorder-drop", "reorder-end"]);
+const emit = defineEmits(["open", "edit", "delete", "reorder-start", "reorder-over", "reorder-drop", "reorder-end"]);
 const { t } = useI18n({ useScope: "global" });
 const coverFailed = ref(false);
 const coverUrl = computed(() => coverFailed.value ? "" : buildMediaPreviewUrl(props.category.cover));
@@ -41,9 +41,16 @@ watch(() => props.category.cover, () => { coverFailed.value = false; });
       class="game-category-card-edit"
       type="button"
       v-bind="{ title: t('gameCategories.edit'), 'aria-label': t('gameCategories.editFor', { name: category.name }) }"
-      @click="emit('edit', category)"
+      @click.stop="emit('edit', category)"
     >
       &#9998;
     </button>
+    <button class="game-category-card-delete" type="button" :disabled="orderBlocked" :aria-label="t('catalogMaintenance.delete')" @click.stop="emit('delete', category)">{{ t('catalogMaintenance.delete') }}</button>
   </article>
 </template>
+
+<style scoped>
+.game-category-card-delete { position:absolute; left:12px; bottom:12px; z-index:2; border:1px solid var(--ui-border); border-radius:var(--ui-radius-control); padding:6px 10px; background:var(--ui-elevated); color:var(--ui-text); cursor:pointer; opacity:0; }
+.game-category-card:hover .game-category-card-delete, .game-category-card:focus-within .game-category-card-delete { opacity:1; }
+@media (hover:none) { .game-category-card-delete { opacity:1; } }
+</style>

@@ -2,6 +2,8 @@
 import { computed, nextTick, onMounted, onUnmounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import DemoView from "./views/DemoView.vue";
+import EditorDebugWorkspace from "./views/EditorDebugWorkspace.vue";
+import { isDebugRuntimeAvailable } from "./lib/editorDebugSession.js";
 import { sendFloorClick } from "./lib/floorInput.js";
 import GameListView from "./views/GameListView.vue";
 import MediaLibraryView from "./views/MediaLibraryView.vue";
@@ -38,8 +40,9 @@ const gameMenuRef = ref(null);
 const languageDialogOpen = ref(false);
 const languageButtonRef = ref(null);
 const selectedEditorGame = ref(null);
-const editorDebugActive = ref(false);
-const editorRef = ref(null);
+const editorDebugActive = computed(() => activeView.value === 'game-debug');
+const debugWorkspaceRef = ref(null);
+const debugGame = ref(null);
 const navigationBusy = ref(false);
 const helpMenuOpen = ref(false);
 const helpDocument = ref(null);
@@ -246,7 +249,7 @@ async function leaveEditorDebug() {
   if (!editorDebugActive.value) return true;
   navigationBusy.value = true;
   try {
-    return Boolean(await editorRef.value?.exitDebugForNavigation());
+    return Boolean(await debugWorkspaceRef.value?.exit());
   } finally {
     navigationBusy.value = false;
   }
@@ -326,6 +329,24 @@ async function enterGameFlow() {
     return;
   }
   return runAction("game-flow", () => api.enterGameFlow());
+}
+
+async function openGameDebug(game) {
+  if (navigationBusy.value || busyAction.value) return;
+  if (!await leaveEditorDebug()) return;
+  busyAction.value = 'game-debug'; secondaryErrorMessage.value = '';
+  try {
+    if (!isDebugRuntimeAvailable((await api.gameState())?.data)) throw new Error(t('editorDebug.busy'));
+    const response = game.type === 'rank' ? await api.getRankGameEditor(game.id) : await api.getGameEditor(game.id);
+    if (!response?.data) throw new Error(t('gameWiring.missing'));
+    debugGame.value = response.data;
+    activeView.value = 'game-debug';
+  } catch (error) { secondaryErrorMessage.value = error.message; }
+  finally { busyAction.value = ''; }
+}
+function exitGameDebug() {
+  debugGame.value = null;
+  activeView.value = 'games';
 }
 
 function openGameEditor(game) {
@@ -800,6 +821,18 @@ function formatRuntimeValue(value, fallback = "-") {
       </section>
     </div>
 
+    <KeepAlive>
+    <GameListView
+      v-if="activeView === 'games'"
+      :section="gameSection"
+      @update:section="selectGameSection"
+      @open-game="openGameEditor"
+      @play-game="openGameDebug"
+    />
+    </KeepAlive>
+    <EditorDebugWorkspace v-if="activeView === 'game-debug' && debugGame" ref="debugWorkspaceRef" :game="debugGame"
+      :exit-label="t('catalogMaintenance.back')" @exit="exitGameDebug" />
+
     <DemoView
       v-if="activeView === 'demo'"
       :busy-action="busyAction"
@@ -813,30 +846,21 @@ function formatRuntimeValue(value, fallback = "-") {
       @stop-engine="stopEngine"
     />
 
-    <GameListView
-      v-else-if="activeView === 'games'"
-      :section="gameSection"
-      @update:section="selectGameSection"
-      @open-game="openGameEditor"
-    />
+
 
     <SimpleGameEditorView
       v-else-if="activeView === 'simple-editor'"
-      ref="editorRef"
       :game-id="selectedEditorGame?.id"
       :game-name="selectedEditorGame?.name"
       :initial-document="selectedEditorGame?.draft"
-      @debug-active="editorDebugActive = $event"
       @back="backToGameList"
     />
 
     <RankGameEditorView
       v-else-if="activeView === 'rank-editor'"
-      ref="editorRef"
       :game-id="selectedEditorGame?.id"
       :game-name="selectedEditorGame?.displayName || selectedEditorGame?.name"
       :initial-document="selectedEditorGame?.draft"
-      @debug-active="editorDebugActive = $event"
       @back="backToGameList"
     />
 

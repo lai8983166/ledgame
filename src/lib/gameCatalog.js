@@ -22,17 +22,8 @@ export async function loadSupportedGames(api, options = {}) {
   const includeHidden = Boolean(options.includeHidden);
   const listGames = includeHidden ? api?.listManageableGames : api?.listPlayableGames;
   if (!listGames) throw new Error("Playable game list API is unavailable");
-  const initializationErrors = [];
-  for (const seed of [api.seedSimpleVariants, api.seedRankType1]) {
-    if (!seed) continue;
-    try {
-      await seed();
-    } catch (error) {
-      initializationErrors.push(error);
-    }
-  }
   return {
     games: normalizeSupportedGames(await listGames()),
-    initializationError: initializationErrors[0] || null,
+    initializationError: null,
   };
 }

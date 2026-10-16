@@ -60,7 +60,7 @@ try {
     const countBefore=before.length+createdIds.length;
     assert.equal((await api('listManageableGames')).data.length,countBefore);
     const debugButton=rank?page.locator('.rank-actions').getByRole('button',{name:'启动游戏',exact:true}):page.locator('.editor-toolbar').getByRole('button',{name:'启动游戏',exact:true});
-    assert.equal(await debugButton.isDisabled(),true);
+    assert.equal(await debugButton.count(),0);
     if (!rank) {
       await page.locator('.editor-toolbar').getByRole('button',{name:'全局配置',exact:true}).click();
       await page.locator('.global-config-field').filter({has:page.locator('.global-config-label').filter({hasText:/^名称$/})}).locator('input').fill('配置草稿');
@@ -85,7 +85,7 @@ try {
       return Boolean(game);
     }).toBe(true);
     createdIds.push(game.gameId);
-    assert.equal(await debugButton.isDisabled(),false);
+    assert.equal(await debugButton.count(),0);
     const firstSaved=(await api(rank?'getRankGameEditor':'getGameEditor',game.gameId)).data;
     assert.equal(firstSaved.wiringData.runtimeEnabled,true);
     if (!rank) {

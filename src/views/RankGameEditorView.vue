@@ -8,9 +8,6 @@ import { normalizeGameCategoryList } from "../lib/gameCategories.js";
 import { buildMediaPreviewUrl } from "../lib/mediaPreview.js";
 import MediaPickerDialog from "../components/MediaPickerDialog.vue";
 import GameWiringDialog from "../components/GameWiringDialog.vue";
-import EditorDebugWorkspace from './EditorDebugWorkspace.vue';
-import EditorDebugEntryDialog from '../components/EditorDebugEntryDialog.vue';
-import { isDebugRuntimeAvailable } from '../lib/editorDebugSession.js';
 import { saveGameWiring } from "../lib/gameWiring.js";
 
 const props = defineProps({
@@ -18,26 +15,7 @@ const props = defineProps({
   initialDocument: { type: Object, default: null },
   gameName: { type: String, default: "" },
 });
-const emit = defineEmits(["back", "debug-active"]);
-const debugGame = ref(null);
-const debugWorkspaceRef = ref(null);
-const debugEntryOpen = ref(false);
-function exitDebug() { debugGame.value = null; emit('debug-active',false); }
-async function exitDebugForNavigation() { return !debugGame.value || Boolean(await debugWorkspaceRef.value?.exit()); }
-defineExpose({exitDebugForNavigation});
-async function enterDebug(choice) {
-  if (choice === 'cancel') { debugEntryOpen.value = false; return; }
-  if (busy.value) return;
-  busy.value = 'start'; errorMessage.value = '';
-  try {
-    if (!isDebugRuntimeAvailable((await api.gameState())?.data)) throw new Error(t('editorDebug.busy'));
-    if (choice === 'save') await saveBeforeStart();
-    debugGame.value = (await api.getRankGameEditor(currentGameId.value))?.data;
-    if (!debugGame.value) throw new Error(t('gameWiring.missing'));
-    debugEntryOpen.value = false; emit('debug-active',true);
-  } catch(error) { errorMessage.value = error.message; }
-  finally { busy.value = null; }
-}
+const emit = defineEmits(["back"]);
 const { t } = useI18n({ useScope: "global" });
 const api = window.ledGame;
 const document = ref(null);
@@ -169,12 +147,14 @@ function normalizeDocument(value) {
 }
 
 function mediaValue(path) {
+  if (path === 'cover') return document.value?.cover || '';
   const [scope, field] = String(path || "").split(".");
   if (scope === "level") return type1Config.value?.[field] || "";
   return document.value?.[scope]?.[field] || "";
 }
 
 function setMediaValue(path, value) {
+  if (path === 'cover') { if (document.value) document.value.cover = value || ''; return; }
   const [scope, field] = String(path || "").split(".");
   if (scope === "level") {
     if (type1Config.value) type1Config.value[field] = value || "";
@@ -269,21 +249,6 @@ async function save() {
   }
 }
 
-async function saveBeforeStart() {
-  const payload = createRankEditorPayload(document.value, currentGameId.value);
-  const validationResult = await api.validateRankGameEditor(payload);
-  const validation = validationResult?.data ?? validationResult;
-  if (!validation?.valid) {
-    validationErrors.value = validation?.errors || [];
-    const first = validation?.errors?.[0];
-    await focusValidationError(first);
-    throw new Error(first ? `${first.path}: ${first.message}` : t("rank.validationFailed"));
-  }
-  validationErrors.value = [];
-  const saved = await api.saveRankGameEditor(currentGameId.value, payload);
-  if (saved?.data?.saved !== true) throw new Error(saved?.message || t('rank.saveFailed'));
-  dirty.value = false;
-}
 
 async function focusValidationError(error) {
   const path = error?.path || "";
@@ -330,11 +295,6 @@ async function importJson() {
   }
 }
 
-async function startTest() {
-  if (!document.value || !currentGameId.value || busy.value) return;
-  if (dirty.value) debugEntryOpen.value = true;
-  else await enterDebug('saved');
-}
 
 function goBack() {
   if (dirty.value && !confirmWithRendererFocus(t("rank.confirmLeave"))) return;
@@ -343,9 +303,7 @@ function goBack() {
 </script>
 
 <template>
-  <EditorDebugWorkspace v-if="debugGame" ref="debugWorkspaceRef" :game="debugGame" @exit="exitDebug" />
-  <EditorDebugEntryDialog v-if="debugEntryOpen" :saving="Boolean(busy)" :error="errorMessage" @choose="enterDebug" />
-  <section v-show="!debugGame" class="rank-editor workspace">
+  <section class="rank-editor workspace">
     <header class="rank-toolbar">
       <div class="rank-title">
         <button class="icon-action" type="button" v-bind="{ title: t('rank.back') }" @click="goBack">←</button>
@@ -355,7 +313,6 @@ function goBack() {
         <button class="soft-button" type="button" :disabled="!document || Boolean(busy)" @click="gameWiringError = ''; gameWiringOpen = true">{{ t('gameWiring.title') }}</button>
         <button class="soft-button" type="button" :disabled="!document || Boolean(busy)" @click="importJson">{{ t("rank.import") }}</button>
         <button class="soft-button" type="button" :disabled="!document || Boolean(busy)" @click="exportJson">{{ t("rank.export") }}</button>
-        <button class="soft-button" type="button" :disabled="!document || !currentGameId || Boolean(busy) || invalidConfiguration" @click="startTest">{{ t("rank.startTest") }}</button>
         <button class="action-button primary" type="button" :disabled="!canSave" @click="save">{{ saveLabel }}</button>
       </div>
     </header>
@@ -376,7 +333,8 @@ function goBack() {
           <label><span>{{ t("rank.internalName") }}</span><input v-model.trim="document.name" data-rank-field="name" /></label>
           <label><span>{{ t("rank.displayName") }}</span><input v-model.trim="document.displayName" /></label>
           <label><span>{{ t("rank.description") }}</span><textarea v-model="document.description" rows="3"></textarea></label>
-          <label><span>{{ t("rank.cover") }}</span><input v-model.trim="document.cover" /></label>
+          <label><span>{{ t("rank.cover") }}</span><div class="rank-cover-picker"><input v-model.trim="document.cover" /><button class="soft-button compact-button" type="button" :disabled="Boolean(busy)" @click="openMediaPicker({path:'cover',accept:'image',label:t('rank.cover')})">{{ t('globalConfig.choose') }}</button></div></label>
+          <label class="check-field"><input v-model="document.childModeVisible" type="checkbox" /><span>{{ t('management.childModeVisible') }}</span></label>
           <label><span>{{ t("gameCategories.firstCatalog") }}</span>
             <select v-model="document.firstCatalog">
               <option value="">{{ t("gameCategories.unassigned") }}</option>
@@ -499,6 +457,9 @@ function goBack() {
 </template>
 
 <style scoped>
+.rank-cover-picker { display:flex; gap:8px; min-width:0; }
+.rank-cover-picker input { flex:1; min-width:0; }
+.rank-cover-picker button { flex-shrink:0; }
 .rank-editor { display: flex; flex-direction: column; gap: 10px; height: 100%; min-height: 0; padding-bottom: 18px; }
 .rank-validation-errors { max-height: 92px; margin: 0; padding: 8px 12px; overflow-y: auto; border: 1px solid var(--ui-error-border); border-radius: 5px; background: var(--ui-error-bg); list-style: none; }
 .rank-validation-errors button { width: 100%; padding: 3px 0; border: 0; color: var(--ui-error); background: transparent; text-align: left; cursor: pointer; }
