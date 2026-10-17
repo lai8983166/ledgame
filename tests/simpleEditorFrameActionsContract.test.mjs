@@ -78,7 +78,7 @@ test("copying a frame remounts repeat input and selects a newly created next fra
   assert.match(editorSource, /:key="`repeat-\$\{activeLevelIndex\}-\$\{activeFrameIndex\}`"/);
 });
 
-test("destructive confirmation restores renderer focus after Electron dialogs", () => {
+test("native confirmations restore focus once, not again after ordinary edits", () => {
   assert.match(editorSource, /import \{ confirmWithRendererFocus, restoreRendererFocus \}/);
   assert.match(rendererFocusSource, /targetWindow\.confirm\(message\)/);
   assert.match(rendererFocusSource, /targetWindow\?\.ledGame\?\.restoreFocus\?\.\(\)/);
@@ -91,13 +91,15 @@ test("destructive confirmation restores renderer focus after Electron dialogs", 
   for (const [name, nextName] of [
     ["deleteCurrentLevel", "addFrame"],
     ["deleteCurrentFrame", "applyCurrentRepeatTimesToAllFrames"],
-    ["deleteSelectedObject", "moveSelectedObjectLayerUp"],
   ]) {
     assert.match(
       functionSource(name, nextName),
-      /nextTick\(restoreRendererFocus\)/,
-      `${name} must restore renderer focus after Vue updates`,
+      /confirmWithRendererFocus\(/,
+      `${name} retains focus recovery at the native confirmation boundary`,
     );
+  }
+  for (const [name,next] of [['deleteCurrentLevel','addFrame'],['deleteCurrentFrame','applyCurrentRepeatTimesToAllFrames'],['deleteSelectedObject','moveSelectedObjectLayerUp'],['executeWholeFrameCopy','replaceFrameObjects']]) {
+    assert.doesNotMatch(functionSource(name,next), /nextTick\(restoreRendererFocus\)/, `${name} must not restack the window after ordinary Vue edits`);
   }
 });
 

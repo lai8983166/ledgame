@@ -1441,6 +1441,8 @@ mergedMessages['en-US'].editorDebug = {
   unsaved:'Unsaved game changes',unsavedHint:'Debug uses the saved game. Using the saved version preserves your editor draft.',saveEnter:'Save and enter debug',useSaved:'Use saved version',
 };
 
+mergedMessages['zh-CN'].editorSave = { failed: '保存失败', required: '请填写以下必填项后再保存：', invalid: '请检查以下配置后再保存：' };
+mergedMessages['en-US'].editorSave = { failed: 'Save failed', required: 'Complete these required fields before saving:', invalid: 'Check these settings before saving:' };
 mergedMessages['zh-CN'].gameCreation = {
   draftHint:'新游戏尚未保存，首次保存后才会生成游戏卡片。',
   create:'新建游戏', title:'选择游戏类型', family:'游戏类型', entertainment:'娱乐挑战', ranked:'排位赛', multidimensional:'多维竞技',

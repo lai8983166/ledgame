@@ -2,6 +2,8 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import MediaPickerDialog from "./MediaPickerDialog.vue";
+import EditorSaveDialog from './EditorSaveDialog.vue';
+import { requiredGlobalConfigFields } from '../lib/editorRequiredFields.js';
 
 const props = defineProps({
   config: { type: Object, required: true },
@@ -14,6 +16,7 @@ const { t } = useI18n();
 
 const dialogRef = ref(null);
 const draft = ref({});
+const saveError = ref('');
 const picker = ref(null); // { path, accept, title } when a media picker is open
 const audioPlayer = ref(null); // { name, url } when the audio player modal is open
 
@@ -23,8 +26,7 @@ const sections = computed(() => [
     columns: 1,
     fields: [
       { label: t("globalConfig.cover"), path: "cover", kind: "media", accept: "image", marked: true },
-      { label: t("globalConfig.type"), path: "type", kind: "text" },
-      { label: t("globalConfig.mode"), path: "mode", kind: "text" },
+      { label: t("globalConfig.type"), path: "type", kind: "game-type" },
       { label: t("globalConfig.name"), path: "name", kind: "text" },
       { label: t("globalConfig.firstCatalog"), path: "firstCatalog", kind: "category", marked: true },
       { label: t("management.childModeVisible"), path: "childModeVisible", kind: "checkbox" },
@@ -39,6 +41,7 @@ const sections = computed(() => [
   },
   {
     title: t("globalConfig.lifeMode"),
+    hideTitle: true,
     fields: [
       { label: t("globalConfig.lifeMode"), path: "globalLifeLimit", kind: "life-mode" },
       ...(draft.value.globalLifeLimit ? [{ label: t("globalConfig.totalLife"), path: "globalLifeLimitValue", kind: "number", min: 1 }] : []),
@@ -153,17 +156,27 @@ function openAudioPlayer(field) {
 
 function handleSave() {
   if (!canSave.value) return;
+  const missing = requiredGlobalConfigFields(draft.value);
+  if (missing.length) {
+    saveError.value = t('editorSave.required') + '\n' + missing.map(field => t(field.label)).join('\n');
+    return;
+  }
+  if (lifeError.value || (draft.value.globalTimeLimit && (!Number.isInteger(draft.value.globalTimeLimitValue) || draft.value.globalTimeLimitValue <= 0))) {
+    saveError.value = t('editorSave.invalid') + '\n' + t('simple.levelLimitPositive');
+    return;
+  }
   emit("save", JSON.parse(JSON.stringify(draft.value)));
 }
 
 const lifeError = computed(() => draft.value.globalLifeLimit &&
   (!Number.isInteger(draft.value.globalLifeLimitValue) || draft.value.globalLifeLimitValue <= 0));
-const canSave = computed(() => !props.saving && !lifeError.value);
+const canSave = computed(() => !props.saving);
 
 function handleKeydown(event) {
   if (picker.value) {
     return;
   }
+  if (saveError.value) return;
   if (event.key === "Escape") {
     if (audioPlayer.value) {
       audioPlayer.value = null;
@@ -225,7 +238,7 @@ onBeforeUnmount(() => {
 
       <div class="global-config-body">
         <section v-for="section in sections" :key="section.title" class="global-config-section">
-          <h3>{{ section.title }}</h3>
+          <h3 v-if="!section.hideTitle">{{ section.title }}</h3>
           <div class="global-config-fields" :style="gridStyle(section)">
             <label
               v-for="field in section.fields"
@@ -234,8 +247,9 @@ onBeforeUnmount(() => {
             >
               <span class="global-config-label" :class="{ 'editor-required-label': field.marked }">{{ field.label }}</span>
 
+              <input v-if="field.kind === 'game-type'" type="text" readonly :value="t(draft.type === 'rank' ? 'gameCreation.ranked' : 'gameCreation.entertainment')" />
               <input
-                v-if="field.kind === 'text'"
+                v-else-if="field.kind === 'text'"
                 type="text"
                 :value="getPath(field.path)"
                 :disabled="saving"
@@ -337,6 +351,7 @@ onBeforeUnmount(() => {
       </footer>
     </section>
 
+    <EditorSaveDialog v-if="saveError" :message="saveError" failed @close="saveError = ''" />
     <MediaPickerDialog
       v-if="picker"
       :accept="picker.accept"
@@ -469,6 +484,11 @@ onBeforeUnmount(() => {
   color: var(--ui-text-secondary);
   font-size: 12px;
   box-shadow: var(--ui-shadow);
+}
+
+.global-config-media input.global-config-media-value {
+  width: 100%;
+  min-width: 0;
 }
 
 .global-config-checkbox {

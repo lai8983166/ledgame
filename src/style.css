@@ -1530,6 +1530,11 @@ html[data-language-direction="rtl"] :is(input, textarea) {
   color: var(--ui-text-secondary);
 }
 
+html.editor-saving,
+html.editor-saving * {
+  cursor: wait !important;
+}
+
 .simple-editor {
   display: grid;
   gap: 18px;
@@ -2080,7 +2085,7 @@ html[data-language-direction="rtl"] :is(input, textarea) {
 
 .level-sequence-row {
   display: grid;
-  grid-template-columns: auto auto minmax(0, 1fr);
+  grid-template-columns: auto minmax(0, 1fr);
   align-items: start;
   gap: 8px;
   min-width: 0;

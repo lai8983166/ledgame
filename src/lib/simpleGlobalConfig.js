@@ -1,6 +1,6 @@
 export function applySimpleGlobalConfigPatch(target, patch) {
   if (Object.hasOwn(patch, 'childModeVisible')) target.childModeVisible = Boolean(patch.childModeVisible);
-  for (const field of ['cover', 'type', 'mode', 'name', 'firstCatalog']) {
+  for (const field of ['cover', 'name', 'firstCatalog']) {
     if (Object.hasOwn(patch, field)) target[field] = patch[field] ?? "";
   }
   if (Object.hasOwn(patch, 'globalTimeLimit')) target.globalTimeLimit = Boolean(patch.globalTimeLimit);
@@ -28,6 +28,9 @@ export async function saveSimpleGlobalConfigDocument({
 
   applySimpleGlobalConfigPatch(persistedDocument, patch);
   const result = await api.saveGameEditor(gameId, persistedDocument);
+  if ((result?.data ?? result)?.saved !== true) {
+    throw new Error(result?.message || 'SAVE_NOT_CONFIRMED');
+  }
   if (liveDocument) {
     applySimpleGlobalConfigPatch(liveDocument, patch);
   }

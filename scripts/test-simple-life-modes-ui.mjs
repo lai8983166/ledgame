@@ -19,7 +19,8 @@ page.on('pageerror', error => errors.push(error.message));
 await page.addInitScript(() => {
   window.appLanguage = {get:async()=>'zh-CN',set:async v=>v,onChanged:()=>()=>{}};
   window.fixture = {game:{id:1,name:'simple',type:'default',mode:'[1]',globalLifeLimit:false,
-    siteSizeWidth:16,siteSizeHeight:36,commonConfig:{},gif:{},
+    siteSizeWidth:16,siteSizeHeight:36,cover:'cover.png',firstCatalog:'娱乐挑战',audio:{scoreSound:'score.mp3',injurySound:'injury.mp3',purpleSound:'double.mp3'},
+    commonConfig:{gameStartAudio:'start.mp3',gameEndSuccessAudio:'success.mp3',gameEndFailAudio:'fail.mp3',levelPassAudio:'pass.mp3',levelRestartAudio:'restart.mp3'},gif:{standby:'idle.gif',gameFailure:'fail.gif',gameOver:'over.gif'},
     levels:[{label:'第一关',option:{lifeLimitMode:'LIMITED',lifeLimitValue:10},frameList:[{repeatTimes:2,matrix:[]}]}]}};
   window.ledGame = {getGameEditor:async()=>({data:structuredClone(window.fixture.game)}),listGameCategories:async()=>({data:[]}),
     saveGameEditor:async(_id,doc)=>{window.fixture.game=structuredClone(doc);return{data:{saved:true}};},
@@ -43,12 +44,15 @@ try {
     const total = dialog.locator('label.global-config-field').filter({has:page.locator('.global-config-label',{hasText:'整局生命值'})}).locator('input');
     for (const value of ['0','-1','1.5']) {
       await total.fill(value);
-      assert.equal(await dialog.getByRole('button',{name:'保存',exact:true}).isDisabled(),true);
+      await dialog.getByRole('button',{name:'保存',exact:true}).click();
+      await page.locator('.editor-save-dialog').getByText(/请检查以下配置/).waitFor();
+      await page.locator('.editor-save-dialog button').click();
       await dialog.getByText('整局生命值必须为正整数',{exact:true}).waitFor();
     }
     await total.fill('20');
     await dialog.getByRole('button',{name:'保存',exact:true}).click();
     await dialog.waitFor({state:'hidden'});
+    await page.locator('.editor-save-dialog button').click();
     assert.equal(await page.locator('select').filter({has:page.locator('option[value="LIMITED"]')}).count(),0);
     await mount();
     await page.getByRole('button',{name:'全局配置',exact:true}).click();
@@ -57,6 +61,7 @@ try {
     await mode.selectOption('false');
     await dialog.getByRole('button',{name:'保存',exact:true}).click();
     await dialog.waitFor({state:'hidden'});
+    await page.locator('.editor-save-dialog button').click();
     await page.locator('select').filter({has:page.locator('option[value="LIMITED"]')}).waitFor();
     assert.equal(await page.evaluate(()=>window.fixture.game.levels[0].option.lifeLimitValue),10);
     await page.screenshot({path:path.join(output,name+'.png')});

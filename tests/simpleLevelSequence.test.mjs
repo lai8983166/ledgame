@@ -1,7 +1,19 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { deleteLevelAt } from "../src/lib/simpleLevelSequence.js";
+import { deleteLevelAt, moveLevelAt } from "../src/lib/simpleLevelSequence.js";
+
+test('dragging reorders whole levels and keeps the active level even when crossed', () => {
+  const levels = ['A','B','C'].map(label => ({label,option:{rewardPoints:10,bgVoice:label+'.mp3'},frameList:[{matrix:[label]}]}));
+  const before = structuredClone(levels);
+  const result = moveLevelAt(levels, 0, 2, 1);
+  assert.deepEqual(result.levels.map(level => level.label), ['B','C','A']);
+  assert.equal(result.activeIndex,0);
+  assert.equal(result.levels[2],levels[0]);
+  assert.deepEqual(levels,before);
+  assert.equal(moveLevelAt(result.levels, 2, 0, 2).activeIndex,0);
+  for (const [from,to] of [[-1,0],[0,10],[0,0],[null,1]]) assert.equal(moveLevelAt(levels,from,to,1).moved,false);
+});
 
 test("deleting a level removes only the active level and selects its neighbour", () => {
   const first = { label: "Level 1" };

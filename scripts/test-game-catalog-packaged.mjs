@@ -37,6 +37,10 @@ async function create(family, name) {
   document.childModeVisible = false;
   document.globalTimeLimit = true; document.globalTimeLimitValue = 120;
   if (family === 'entertainment') {
+    document.cover = 'cover.png';
+    document.audio = {...document.audio,scoreSound:'score.mp3',injurySound:'injury.mp3',purpleSound:'double.mp3'};
+    document.commonConfig = {...document.commonConfig,gameStartAudio:'start.mp3',gameEndSuccessAudio:'success.mp3',gameEndFailAudio:'fail.mp3',levelPassAudio:'pass.mp3',levelRestartAudio:'restart.mp3'};
+    document.gif = {...document.gif,standby:'idle.gif',gameFailure:'fail.gif',gameOver:'over.gif'};
     document.levels[0].option.rewardPoints = 10;
     document.levels[0].option.passLevelScore = 999;
     document.levels[0].frameList[0].matrix = [{ id: 'blue-target', x: 8, y: 18, color: 1, points: [[0, 0]] }];
@@ -54,6 +58,9 @@ try {
   // Refresh the kept catalog by changing application pages before using the cards.
   await page.locator('.nav-tab').filter({ hasText: /^媒体库$/ }).click(); await select('首页');
   await page.locator(`.game-category-card[data-id="${category.id}"] .game-category-card-main`).click();
+  // Fixtures are written through REST, outside the renderer's catalog-change IPC.
+  // If its initial read predated those writes, use the existing explicit refresh.
+  if (await button('重新加载').isVisible()) await button('重新加载').click();
   let card = page.locator(`.game-card[data-id="${simple}"]`);
   await check('分类标题、新建弹窗白底黑字及导航白字', async () => {
     await expect(page.locator('.page-heading h1')).toHaveText('维护验收分类');
@@ -147,11 +154,23 @@ try {
     assert.ok((await request('/game-categories')).data.some(c => c.id === category.id));
     await categoryCard.getByRole('button', { name: '删除', exact: true }).click(); await page.locator('.catalog-confirm-dialog').getByRole('button', { name: '删除', exact: true }).click();
     await expect(categoryCard).toHaveCount(0); assert.equal((await request(`/game/${simple}`)).data.firstCatalog, '');
+    const replacement = (await request('/game-categories', 'POST', { name: '保存验收分类' })).data;
     await select('游戏列表'); await card.hover(); await card.getByRole('button', { name: '编辑', exact: true }).click();
     await button('全局配置').click();
+    await page.locator('.global-config-field').filter({ has: page.locator('.global-config-label').filter({ hasText: /^一级菜单$/ }) }).locator('select').selectOption(String(replacement.id));
     const visibility = page.locator('.global-config-field').filter({ hasText: '触屏显示' }).locator('input'); await visibility.uncheck();
     await page.locator('.global-config-actions .primary').click(); await expect(page.locator('.global-config-dialog')).toHaveCount(0);
+    await page.locator('.editor-save-dialog button').click();
     assert.equal((await request(`/game/${simple}`)).data.childModeVisible, false);
+    const nameInput = page.locator('.editor-left input').first();
+    const savedName = await nameInput.inputValue();
+    await nameInput.fill(''); await button('保存').click();
+    await expect(page.locator('.editor-save-dialog')).toContainText('请填写以下必填项');
+    assert.equal((await request(`/game/${simple}`)).data.name, savedName);
+    await page.locator('.editor-save-dialog button').click();
+    await nameInput.fill(savedName); await button('保存').click();
+    await expect(page.locator('.editor-save-dialog h2')).toHaveText('保存成功');
+    await page.locator('.editor-save-dialog button').click();
     await button('符号灯布局').click();
     await expect(page.locator('.pixel-layout-fields')).toBeHidden(); await expect(page.locator('.pixel-layout-preview-section')).toBeVisible();
     await expect(page.locator('.pixel-layout-floor-grid line')).toHaveCount(54);
@@ -164,6 +183,14 @@ try {
     await button('启动游戏').click(); await expect.poll(async () => (await request('/engine/game/state')).data.engineState).toBe('RUNNING'); await button('退出调试，返回游戏列表').click();
     await rankCard.hover(); await rankCard.getByRole('button', { name: '编辑', exact: true }).click();
     await expect(page.getByText('触屏显示', { exact: true })).toBeVisible(); assert.equal(await button('启动游戏').count(), 0);
+    const rankName = page.locator('[data-rank-field="name"]'), originalName = await rankName.inputValue();
+    await rankName.fill(''); await page.locator('.rank-actions .primary').click();
+    await expect(page.locator('.editor-save-dialog')).toContainText('请填写以下必填项');
+    assert.equal((await request(`/game/${rank}`)).data.name, originalName);
+    await page.locator('.editor-save-dialog button').click();
+    await rankName.fill(originalName); await page.locator('.rank-actions .primary').click();
+    await expect(page.locator('.editor-save-dialog h2')).toHaveText('保存成功');
+    await page.locator('.editor-save-dialog button').click();
     await page.locator('.rank-title .icon-action').click();
   });
   await check('删除游戏取消保留、确认删除，删空后刷新与重启不补回', async () => {

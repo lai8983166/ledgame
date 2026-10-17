@@ -1,3 +1,14 @@
+export function moveLevelAt(levels, fromIndex, toIndex, activeIndex) {
+  if (![fromIndex, toIndex].every(index => Number.isInteger(index) && index >= 0 && index < levels.length) || fromIndex === toIndex) {
+    return { moved: false, levels, activeIndex };
+  }
+  const activeLevel = levels[activeIndex];
+  const nextLevels = levels.slice();
+  const [level] = nextLevels.splice(fromIndex, 1);
+  nextLevels.splice(toIndex, 0, level);
+  return { moved: true, levels: nextLevels, activeIndex: nextLevels.indexOf(activeLevel) };
+}
+
 export function deleteLevelAt(levels, activeIndex) {
   if (!Array.isArray(levels) || levels.length <= 1) {
     return {

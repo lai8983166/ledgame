@@ -154,6 +154,7 @@ watch(
   ],
   () => {
     const request = resolveBaseDrawMode();
+    refreshCursor();
     scheduleBaseDraw(request.mode, request.cells);
     scheduleOverlayDraw();
   },
@@ -508,6 +509,7 @@ function handlePointerUp(event) {
   dragCurrentCell = null;
   draggingObject = false;
   pointerOrigin = null;
+  refreshCursor();
   scheduleOverlayDraw();
   if (wasDraggingObject) {
     return;
@@ -541,6 +543,7 @@ function handlePointerCancel(event) {
   dragCurrentCell = null;
   draggingObject = false;
   pointerOrigin = null;
+  refreshCursor();
   scheduleOverlayDraw();
 }
 
@@ -549,6 +552,7 @@ function handleContextMenu(event) {
 }
 
 function updateHoverCell(cell) {
+  setCursor(cell);
   const nextKey = cell?.key || "";
   updateCanvasTitle(buildCellTitle(cell));
   if (nextKey === (hoverCell?.key || "")) {
@@ -574,6 +578,7 @@ function buildCellTitle(cell) {
 }
 
 function clearHover() {
+  setCursor(null);
   if (!hoverCell) {
     return;
   }
@@ -588,6 +593,15 @@ function updateCanvasTitle(title) {
   if (canvas && canvas.title !== title) {
     canvas.title = title;
   }
+}
+
+function setCursor(cell) {
+  if (overlayCanvasRef.value) overlayCanvasRef.value.style.cursor = draggingObject ? 'grabbing' : cell?.objectId ? 'pointer' : 'crosshair';
+}
+
+function refreshCursor() {
+  const cell = hoverCell && props.cells.find(cell => cell.x === hoverCell.x && cell.y === hoverCell.y);
+  setCursor(cell);
 }
 
 function getCellFromPointer(event) {

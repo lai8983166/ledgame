@@ -31,7 +31,8 @@ await page.addInitScript(() => {
     participants:1,minPlayers:1,maxPlayers:6,siteSizeWidth:16,siteSizeHeight:36,
     palette:['#ff0000','#0000ff','#00ff00','#ffff00','#aa00ff','#00ffff'],
     color0:'#00ff00',color1:'#0000ff',color2:'#ff0000',color3:'#aa00ff',
-    commonConfig:{},wiringData:{runtimeEnabled:false,width:16,height:36},
+    cover:'cover.png',firstCatalog:'娱乐挑战',audio:{scoreSound:'score.mp3',injurySound:'injury.mp3',purpleSound:'double.mp3'},gif:{standby:'idle.gif',gameFailure:'fail.gif',gameOver:'over.gif'},
+    commonConfig:{gameStartAudio:'start.mp3',gameEndSuccessAudio:'success.mp3',gameEndFailAudio:'fail.mp3',levelPassAudio:'pass.mp3',levelRestartAudio:'restart.mp3'},wiringData:{runtimeEnabled:false,width:16,height:36},
     levels:family==='ranked'?[{type:1,durationSeconds:60,bounds:{minX:0,maxX:15,minY:0,maxY:35},targetsPerPlayerMin:3,targetsPerPlayerMax:4,refreshSeconds:6,bombMin:0,bombMax:1,bombWarningDelaySeconds:3,bombWarningDurationSeconds:1}]
       :[{label:'关卡 1',option:{passLevelScore:1,rewardPoints:0,timeLimitMode:'UNLIMITED',lifeLimitMode:'UNLIMITED'},frameList:[{repeatTimes:10,matrix:[]}]}],
   });
@@ -117,6 +118,7 @@ try {
       await page.getByRole('button',{name:'全局配置',exact:true}).click();
       await page.locator('.global-config-field').filter({has:page.locator('.global-config-label').filter({hasText:/^名称$/})}).locator('input').fill('配置草稿');
       await page.locator('.global-config-actions .primary').click();await page.locator('.global-config-dialog').waitFor({state:'hidden'});
+      await page.locator('.editor-save-dialog button').click();
       assert.equal(await input.inputValue(),'配置草稿');
       await page.getByRole('button',{name:'符号灯布局',exact:true}).click();
       await page.locator('.pixel-layout-actions .primary').click();await page.locator('.pixel-layout-dialog').waitFor({state:'hidden'});
@@ -128,16 +130,19 @@ try {
     const save=rank?page.locator('.rank-actions .primary'):page.locator('.editor-toolbar').getByRole('button',{name:'保存',exact:true});
     await input.fill(`保存-${family}`);await page.evaluate(()=>window.fixture.failSave=true);await save.click();
     await page.locator('.error-line').filter({hasText:'首次保存失败'}).waitFor();
+    await page.locator('.editor-save-dialog button').click();
     assert.equal(await debug.count(),0);
     const previous=await page.evaluate(()=>window.fixture.firstSaves.length);
     await page.evaluate(()=>window.fixture.failSave=false);await save.click();
     await page.waitForFunction(previous=>window.fixture.firstSaves.length===previous+1,previous);
+    await page.locator('.editor-save-dialog button').click();
     const id=await page.evaluate(()=>window.fixture.firstSaves.at(-1));
     const payload=await page.evaluate(()=>window.fixture.firstPayloads.at(-1));
     assert.equal(payload.id,null);assert.equal(payload.wiringData.runtimeEnabled,true);
     if(rank)assert.equal(payload.levels[0].bounds.maxY,35);
     await input.fill(`更新-${family}`);await save.click();
     await page.waitForFunction(id=>window.fixture.updates.includes(id),id);
+    await page.locator('.editor-save-dialog button').click();
     assert.equal(await page.evaluate(()=>window.fixture.firstSaves.length),previous+1);
     assert.equal(await debug.count(),0);
     await page.screenshot({path:path.join(output,`首次保存-${family}.png`)});

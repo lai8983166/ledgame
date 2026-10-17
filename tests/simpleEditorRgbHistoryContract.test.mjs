@@ -59,8 +59,8 @@ test("matrix edits use RGB transactions while frame and level structure clear hi
   const structuralFunctions = [
     ["loadEditor", "waitForEditorFonts"],
     ["importCurrentLevel", "runEditorAction"],
-    ["addLevel", "moveActiveLevelUp"],
-    ["moveActiveLevel", "deleteCurrentLevel"],
+    ["addLevel", "startLevelDrag"],
+    ["dropLevel", "deleteCurrentLevel"],
     ["deleteCurrentLevel", "addFrame"],
     ["addFrame", "deleteCurrentFrame"],
     ["deleteCurrentFrame", "applyCurrentRepeatTimesToAllFrames"],
@@ -96,7 +96,7 @@ test("level deletion is confirmed and disabled when only one level remains", () 
   assert.match(editorSource, /class="level-structure-actions"[\s\S]*@click="deleteCurrentLevel"/);
   assert.match(
     styleSource,
-    /\.level-sequence-row\s*\{[^}]*grid-template-columns:\s*auto auto minmax\(0, 1fr\)/s,
+    /\.level-sequence-row\s*\{[^}]*grid-template-columns:\s*auto minmax\(0, 1fr\)/s,
   );
   assert.match(
     styleSource,
@@ -104,7 +104,7 @@ test("level deletion is confirmed and disabled when only one level remains", () 
   );
 });
 
-test("level reorder tooltips and editor-only disabled styling are visible", () => {
+test("level drag replaces reorder buttons and editor-only disabled styling remains visible", () => {
   assert.match(
     styleSource,
     /\.simple-editor-workspace \.icon-add-button\[data-tip\]::after/,
@@ -113,8 +113,9 @@ test("level reorder tooltips and editor-only disabled styling are visible", () =
     styleSource,
     /\.simple-editor-workspace \.icon-add-button\[data-tip\]:hover::after/,
   );
-  assert.match(editorSource, /class="level-reorder-actions"[\s\S]*:data-tip="t\('simple\.moveLevelUp'\)"/);
-  assert.match(editorSource, /class="level-reorder-actions"[\s\S]*:data-tip="t\('simple\.moveLevelDown'\)"/);
+  assert.doesNotMatch(editorSource, /class="level-reorder-actions"/);
+  assert.match(editorSource, /@dragstart="startLevelDrag\(\$event, index\)"/);
+  assert.match(editorSource, /@drop\.prevent="dropLevel\(index\)"/);
   assert.match(
     styleSource,
     /\.level-reorder-actions \.icon-add-button\[data-tip\]::after\s*\{[^}]*top:\s*calc\(100% \+ 8px\);[^}]*bottom:\s*auto/s,

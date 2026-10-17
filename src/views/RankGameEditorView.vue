@@ -7,6 +7,9 @@ import { confirmWithRendererFocus } from "../lib/rendererFocus.js";
 import { normalizeGameCategoryList } from "../lib/gameCategories.js";
 import { buildMediaPreviewUrl } from "../lib/mediaPreview.js";
 import MediaPickerDialog from "../components/MediaPickerDialog.vue";
+import EditorSaveDialog from '../components/EditorSaveDialog.vue';
+import { requiredEditorFields } from '../lib/editorRequiredFields.js';
+import { withEditorSavingCursor } from '../lib/editorSavingCursor.js';
 import GameWiringDialog from "../components/GameWiringDialog.vue";
 import { saveGameWiring } from "../lib/gameWiring.js";
 
@@ -46,6 +49,7 @@ const errorMessage = ref("");
 const statusMessage = ref("");
 const validationErrors = ref([]);
 const dirty = ref(false);
+const saveFeedback = ref(null);
 const gameCategories = ref([]);
 const mediaPicker = ref(null);
 const audioPreview = ref(null);
@@ -195,6 +199,8 @@ async function validate() {
   errorMessage.value = "";
   statusMessage.value = "";
   try {
+    const missing = requiredEditorFields(document.value, true);
+    if (missing.length) throw new Error(t('editorSave.required') + '\n' + missing.map(field => t(field.label)).join('\n'));
     const payload = createRankEditorPayload(document.value, currentGameId.value);
     const result = await api.validateRankGameEditor(payload);
     const validation = result?.data ?? result;
@@ -221,29 +227,35 @@ async function save() {
   errorMessage.value = "";
   statusMessage.value = "";
   try {
-    const payload = createRankEditorPayload(document.value, currentGameId.value);
-    const validationResult = await api.validateRankGameEditor(payload);
-    const validation = validationResult?.data ?? validationResult;
-    if (!validation?.valid) {
-      validationErrors.value = validation?.errors || [];
-      const first = validation?.errors?.[0];
-      await focusValidationError(first);
-      throw new Error(first ? `${first.path}: ${first.message}` : t("rank.validationFailed"));
-    }
-    validationErrors.value = [];
-    const result = currentGameId.value
-      ? await api.saveRankGameEditor(currentGameId.value, payload)
-      : await api.createRankGameEditor(payload);
-    const saved = result?.data ?? result;
-    if (saved?.saved !== true || !Number.isInteger(saved.gameId) || saved.gameId < 1) {
-      throw new Error(result?.message || t('rank.saveFailed'));
-    }
-    document.value.id = saved.gameId;
-    await nextTick();
-    dirty.value = false;
-    statusMessage.value = t("rank.saved");
+    await withEditorSavingCursor(async () => {
+      const missing = requiredEditorFields(document.value, true);
+      if (missing.length) throw new Error(t('editorSave.required') + '\n' + missing.map(field => t(field.label)).join('\n'));
+      const payload = createRankEditorPayload(document.value, currentGameId.value);
+      const validationResult = await api.validateRankGameEditor(payload);
+      const validation = validationResult?.data ?? validationResult;
+      if (!validation?.valid) {
+        validationErrors.value = validation?.errors || [];
+        const first = validation?.errors?.[0];
+        await focusValidationError(first);
+        throw new Error(first ? `${first.path}: ${first.message}` : t("rank.validationFailed"));
+      }
+      validationErrors.value = [];
+      const result = currentGameId.value
+        ? await api.saveRankGameEditor(currentGameId.value, payload)
+        : await api.createRankGameEditor(payload);
+      const saved = result?.data ?? result;
+      if (saved?.saved !== true || !Number.isInteger(saved.gameId) || saved.gameId < 1) {
+        throw new Error(result?.message || t('rank.saveFailed'));
+      }
+      document.value.id = saved.gameId;
+      await nextTick();
+      dirty.value = false;
+      statusMessage.value = t("rank.saved");
+      saveFeedback.value = { message: statusMessage.value };
+    });
   } catch (error) {
     errorMessage.value = extractErrorMessage(error, t("rank.saveFailed"));
+    saveFeedback.value = { failed: true, message: errorMessage.value };
   } finally {
     busy.value = null;
   }
@@ -303,7 +315,8 @@ function goBack() {
 </script>
 
 <template>
-  <section class="rank-editor workspace">
+  <section class="rank-editor workspace" :aria-busy="busy === 'save'">
+    <EditorSaveDialog v-if="saveFeedback" v-bind="saveFeedback" @close="saveFeedback = null" />
     <header class="rank-toolbar">
       <div class="rank-title">
         <button class="icon-action" type="button" v-bind="{ title: t('rank.back') }" @click="goBack">←</button>

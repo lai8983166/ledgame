@@ -147,7 +147,7 @@ try {
     await page.locator('.media-picker-row[data-path="A/B/same.png"]').dblclick();
     await page.locator('.media-picker-dialog').waitFor({state:'hidden'});
     assert.match(await page.locator('.rank-cover-picker input').inputValue(),/A\/B\/same.png/);
-    await page.locator('.rank-actions .primary').click();await page.locator('.rank-cover-picker button').click();
+    await page.locator('.rank-actions .primary').click();await page.locator('.editor-save-dialog button').click();await page.locator('.rank-cover-picker button').click();
     assert.equal(await page.locator('.media-picker-row[data-path="A/B/same.png"]').count(),1);
     await page.locator('.media-picker-actions .soft-button').click();
     assert.match(await page.locator('.rank-cover-picker input').inputValue(),/A\/B\/same.png/);

@@ -6,6 +6,18 @@ import {
   saveSimpleGlobalConfigDocument,
 } from "../src/lib/simpleGlobalConfig.js";
 
+test('global configuration cannot change the game family or legacy mode', () => {
+  const target={type:'default',mode:'[2]'};
+  applySimpleGlobalConfigPatch(target,{type:'rank',mode:'other',name:'renamed'});
+  assert.equal(target.type,'default'); assert.equal(target.mode,'[2]'); assert.equal(target.name,'renamed');
+});
+
+test('an unconfirmed persistence result cannot update the live draft', async () => {
+  const liveDocument={name:'local'};
+  await assert.rejects(saveSimpleGlobalConfigDocument({api:{getGameEditor:async()=>({data:{name:'saved'}}),saveGameEditor:async()=>({data:{saved:false}})},gameId:1,patch:{name:'new'},liveDocument}), /SAVE_NOT_CONFIRMED/);
+  assert.equal(liveDocument.name,'local');
+});
+
 test('life mode patches preserve per-level life and unrelated partial saves preserve mode', () => {
   const target = {globalLifeLimit:false,levels:[{option:{lifeLimitMode:'LIMITED',lifeLimitValue:10}}]};
   const levels = structuredClone(target.levels);

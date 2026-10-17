@@ -2,6 +2,9 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, toRaw, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import EditorActionIcon from "../components/EditorActionIcon.vue";
+import EditorSaveDialog from '../components/EditorSaveDialog.vue';
+import { requiredEditorFields } from '../lib/editorRequiredFields.js';
+import { withEditorSavingCursor } from '../lib/editorSavingCursor.js';
 import EditorSpritePreview from "../components/EditorSpritePreview.vue";
 import { filterEditorSprites } from '../lib/simpleEditorSprites.js';
 import SimpleMatrixCanvas from "../components/SimpleMatrixCanvas.vue";
@@ -18,7 +21,7 @@ import { resolveLiveOccupancyCell, canApplyColorOccupancy, filterUnoccupiedColor
 import { createLevelPreviewSnapshot } from "../lib/simpleLevelPreview.js";
 import { createWholeFrameCopyPlan } from "../lib/simpleFrameCopyPlan.js";
 import { insertFrameAfter, visibleFrameIndices } from "../lib/simpleFrameSequence.js";
-import { deleteLevelAt } from "../lib/simpleLevelSequence.js";
+import { deleteLevelAt, moveLevelAt } from "../lib/simpleLevelSequence.js";
 import { normalizeLevelOption, validateLevelOption } from "../lib/simpleLevelOptions.js";
 import { createRgbEditHistory } from "../lib/simpleRgbEditHistory.js";
 import { createLatestAsyncTaskGuard } from "../lib/latestAsyncTask.js";
@@ -44,6 +47,9 @@ import {
 import { confirmWithRendererFocus, restoreRendererFocus } from "../lib/rendererFocus.js";
 
 const { t } = useI18n({ useScope: "global" });
+const saveFeedback = ref(null);
+const draggingLevelIndex = ref(null);
+const levelDropIndex = ref(null);
 
 const props = defineProps({
   initialDocument: { type: Object, default: null },
@@ -940,21 +946,28 @@ async function validateEditor() {
 }
 
 async function saveEditor() {
-  if (!document.value) {
-    return;
-  }
-  const localErrors = document.value.levels.flatMap((level, index) =>
-    validateLevelOption(level.option, document.value.globalLifeLimit).map((error) => ({
-      path: "levels[" + index + "].option." + error.field,
-      message: t(error.messageKey),
-    })),
-  );
-  if (localErrors.length) {
-    validationErrors.value = localErrors;
-    statusMessage.value = t("simple.validationFailed");
+  if (!document.value || busyAction.value) {
     return;
   }
   await runEditorAction("save", async () => {
+    const missing = requiredEditorFields(document.value);
+    if (missing.length) {
+      throw new Error(t('editorSave.required') + '\n' + missing.map(field => (field.level ? `${t('simple.level')} ${field.level} · ` : '') + t(field.label)).join('\n'));
+    }
+    const localErrors = document.value.levels.flatMap((level, index) =>
+      validateLevelOption(level.option, document.value.globalLifeLimit).map((error) => ({
+        path: "levels[" + index + "].option." + error.field,
+        message: t(error.messageKey),
+      })),
+    );
+    for (const field of ['siteSizeWidth', 'siteSizeHeight', ...(document.value.globalTimeLimit ? ['globalTimeLimitValue'] : []), ...(document.value.globalLifeLimit ? ['globalLifeLimitValue'] : [])]) {
+      if (!Number.isInteger(Number(document.value[field])) || Number(document.value[field]) <= 0) localErrors.push({ path: field, message: t('simple.levelLimitPositive') });
+    }
+    if (localErrors.length) {
+      validationErrors.value = localErrors;
+      statusMessage.value = t("simple.validationFailed");
+      throw new Error(t('editorSave.invalid') + '\n' + localErrors.map(error => error.message).join('\n'));
+    }
     const payload = createEditorPayload();
     const result = currentGameId.value
       ? await api.saveGameEditor(currentGameId.value, payload)
@@ -995,11 +1008,13 @@ function openGlobalConfig() {
 }
 
 async function saveGlobalConfig(patch) {
+  if (busyAction.value) return;
   const gameId = currentGameId.value;
   if (!gameId) {
     applySimpleGlobalConfigPatch(document.value, patch);
     globalConfigOpen.value = false;
     statusMessage.value = t('gameCreation.draftHint');
+    saveFeedback.value = { message: statusMessage.value };
     return;
   }
   // 仅持久化配置字段：用后端上次已保存的文档作为 base，只应用配置 patch 后落库，
@@ -1260,10 +1275,13 @@ async function runEditorAction(name, action, shouldCommit = () => true) {
     if (!api) {
       throw new Error("Electron API is unavailable");
     }
-    await action();
+    if (name === 'save') await withEditorSavingCursor(action);
+    else await action();
+    if (name === 'save' && shouldCommit()) saveFeedback.value = { message: statusMessage.value || t('simple.saveSuccess') };
   } catch (error) {
     if (shouldCommit()) {
       errorMessage.value = error.message || String(error);
+      if (name === 'save') saveFeedback.value = { failed: true, message: errorMessage.value };
       if (name === 'load') nextTick(scheduleEditorFitMeasurement);
     }
   } finally {
@@ -1765,35 +1783,37 @@ function addLevel() {
   scheduleMatrixCacheWarmup(0);
 }
 
-const canMoveActiveLevelUp = computed(() => activeLevelIndex.value > 0);
-const canMoveActiveLevelDown = computed(
-  () => activeLevelIndex.value >= 0 && activeLevelIndex.value < levels.value.length - 1,
-);
 const canDeleteActiveLevel = computed(() => levels.value.length > 1);
 
-function moveActiveLevelUp() {
-  moveActiveLevel(-1);
+function startLevelDrag(event, index) {
+  if (busyAction.value || anchorEditMode.value) { event.preventDefault(); return; }
+  draggingLevelIndex.value = index;
+  if (event.dataTransfer) {
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('text/plain', String(index));
+  }
 }
 
-function moveActiveLevelDown() {
-  moveActiveLevel(1);
+function endLevelDrag() {
+  draggingLevelIndex.value = null;
+  levelDropIndex.value = null;
 }
 
-function moveActiveLevel(direction) {
-  const fromIndex = activeLevelIndex.value;
-  const toIndex = fromIndex + direction;
-  if (toIndex < 0 || toIndex >= levels.value.length) {
+function dropLevel(index) {
+  if (busyAction.value || draggingLevelIndex.value == null) { endLevelDrag(); return; }
+  const result = moveLevelAt(levels.value, draggingLevelIndex.value, index, activeLevelIndex.value);
+  endLevelDrag();
+  if (!result.moved) {
     return;
   }
-  const [level] = document.value.levels.splice(fromIndex, 1);
-  document.value.levels.splice(toIndex, 0, level);
-  activeLevelIndex.value = toIndex;
+  document.value.levels = result.levels;
+  activeLevelIndex.value = result.activeIndex;
   activeFrameIndex.value = Math.min(activeFrameIndex.value, Math.max(0, frames.value.length - 1));
   clearRgbEditHistory();
   ensureActiveFrame();
   syncSelectedObject();
   scheduleMatrixCacheWarmup(activeFrameIndex.value);
-  statusMessage.value = t(direction < 0 ? "simple.levelMovedUp" : "simple.levelMovedDown");
+  resetMatrixFrameCache();
 }
 
 function deleteCurrentLevel() {
@@ -1819,7 +1839,6 @@ function deleteCurrentLevel() {
   stopSelectionMode();
   syncSelectedObject();
   scheduleMatrixCacheWarmup(0);
-  nextTick(restoreRendererFocus);
   statusMessage.value = t("simple.levelDeleted", { name: levelName });
 }
 
@@ -1869,7 +1888,6 @@ function deleteCurrentFrame() {
   clearRgbEditHistory();
   syncSelectedObject();
   scheduleMatrixCacheWarmup(activeFrameIndex.value);
-  nextTick(restoreRendererFocus);
 }
 
 function applyCurrentRepeatTimesToAllFrames() {
@@ -2149,7 +2167,6 @@ function deleteSelectedObject() {
     stopSelectionMode();
     stopAnchorEdit();
   });
-  nextTick(restoreRendererFocus);
 }
 
 function moveSelectedObjectLayerUp() {
@@ -2362,7 +2379,6 @@ function executeWholeFrameCopy(mode) {
 
   if (mode === "next") {
     selectFrame(plan.targetIndices[0]);
-    nextTick(restoreRendererFocus);
   }
   statusMessage.value = mode === "all"
     ? t("simple.frameCopiedMany", { count: plan.targetIndices.length })
@@ -3088,7 +3104,7 @@ function formatRuntimeSummary(value) {
 </script>
 
 <template>
-  <div ref="fitViewportRef" class="simple-editor-fit-viewport">
+  <div ref="fitViewportRef" class="simple-editor-fit-viewport" :aria-busy="busyAction === 'save'">
     <div v-if="!editorFitReady && !errorMessage" class="simple-editor-loading" role="status" aria-live="polite">
       <span class="simple-editor-loading-spinner" aria-hidden="true"></span>
       <span>{{ t('common.loading') }}</span>
@@ -3544,35 +3560,18 @@ function formatRuntimeSummary(value) {
               -
             </button>
           </div>
-          <div class="level-reorder-actions" :aria-label="t('simple.reorderLevels')">
-            <button
-              class="icon-add-button"
-              type="button"
-              :aria-label="t('simple.moveLevelUp')"
-              :data-tip="t('simple.moveLevelUp')"
-              :disabled="!canMoveActiveLevelUp"
-              @click="moveActiveLevelUp"
-            >
-              ↑
-            </button>
-            <button
-              class="icon-add-button"
-              type="button"
-              :aria-label="t('simple.moveLevelDown')"
-              :data-tip="t('simple.moveLevelDown')"
-              :disabled="!canMoveActiveLevelDown"
-              @click="moveActiveLevelDown"
-            >
-              ↓
-            </button>
-          </div>
           <div class="sequence-list">
             <button
               v-for="(level, index) in levels"
               :key="`level-${index}`"
               class="sequence-pill"
-              :class="{ active: activeLevelIndex === index }"
+              :class="{ active: activeLevelIndex === index, 'level-drop-target': levelDropIndex === index }"
               type="button"
+              :draggable="!busyAction && !anchorEditMode"
+              @dragstart="startLevelDrag($event, index)"
+              @dragover.prevent="draggingLevelIndex !== null && (levelDropIndex = index)"
+              @drop.prevent="dropLevel(index)"
+              @dragend="endLevelDrag"
               @click="selectLevel(index)"
             >
               {{ level.label || `Level ${index + 1}` }}
@@ -3830,6 +3829,7 @@ function formatRuntimeSummary(value) {
     </div>
       </section>
     </div>
+    <EditorSaveDialog v-if="saveFeedback" v-bind="saveFeedback" @close="saveFeedback = null" />
     <GameGlobalConfigDialog
       v-if="globalConfigOpen"
       :config="globalConfigDraft"
@@ -3877,6 +3877,8 @@ function formatRuntimeSummary(value) {
 </template>
 
 <style scoped>
+.sequence-pill[draggable="true"] { cursor: grab; }
+.sequence-pill.level-drop-target { outline: 2px solid var(--ui-accent); outline-offset: -2px; }
 .editor-level-media{display:grid;gap:14px;min-width:0}
 .editor-circle-countdown{display:grid;gap:8px;margin:12px 0;min-width:0}
 .editor-circle-countdown label{display:flex;align-items:center;gap:10px}
