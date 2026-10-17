@@ -10,7 +10,9 @@ test("effect dialog exposes all configuration controls and local preview", () =>
     assert.match(source, new RegExp(`draft\\.${field}`));
   }
   assert.match(source, /value="insert"/);
-  assert.match(source, /value="merge"/);
+  assert.match(source, /value="after"/);
+  assert.doesNotMatch(source, /<option value="merge"/);
+  assert.doesNotMatch(source, /@click="drawPreview"/);
   assert.match(source, /draft\.useSprite/);
   assert.match(source, /availableSprites/);
   assert.match(source, /setColor/);

@@ -46,7 +46,7 @@ try {
     await save.click();await page.locator('.editor-save-dialog').getByRole('heading',{name:'保存成功'}).waitFor();await close();
     await page.evaluate(()=>window.failSave=true);await save.click();await page.locator('.editor-save-dialog').getByText('模拟磁盘写入失败').waitFor();await close();
     const input=page.locator('.editor-left input').first();await input.fill('');await save.click();await page.locator('.editor-save-dialog').getByText(/请填写以下必填项/).waitFor();
-    assert.equal(await page.evaluate(()=>window.saves.length),1);await close();await input.fill('测试游戏');await page.evaluate(()=>window.failSave=false);
+    assert.equal(await page.evaluate(()=>window.saves.length),1);await close();await input.fill('0');await page.evaluate(()=>window.failSave=false);
     assert.equal(await page.locator('html').evaluate(node=>node.classList.contains('editor-saving')),false);
   });
   await check('关卡左键拖动保持数据与当前关卡，旧排序按钮移除',async()=>{

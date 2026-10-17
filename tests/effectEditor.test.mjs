@@ -120,6 +120,15 @@ test("insert preserves current frame after effect and merge appends without dele
   assert.deepEqual(source, sourceSnapshot);
 });
 
+test('after mode inserts new frames without merging or overwriting existing frames', () => {
+  const original=[{repeatTimes:2,matrix:[]},{repeatTimes:3,matrix:[]}];
+  const generated=[{repeatTimes:4,matrix:[]}];
+  const result=applyEffectToFrameList(original,0,generated,'after');
+  assert.deepEqual(result.frameList.map(frame=>frame.repeatTimes),[2,4,3]);
+  assert.equal(result.selectedFrameIndex,1);assert.equal(original.length,2);
+  assert.equal(normalizeEffectConfig({mode:'after'}).mode,'after');
+});
+
 test("normalization preserves explicit merge mode and sprite flag", () => {
   assert.deepEqual(normalizeEffectConfig({ isMerge: true, useSprite: 1 }).mode, "merge");
   assert.equal(normalizeEffectConfig({ useSprite: 0 }).useSprite, false);

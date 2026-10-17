@@ -162,13 +162,13 @@ try {
     await page.locator('.global-config-actions .primary').click(); await expect(page.locator('.global-config-dialog')).toHaveCount(0);
     await page.locator('.editor-save-dialog button').click();
     assert.equal((await request(`/game/${simple}`)).data.childModeVisible, false);
-    const nameInput = page.locator('.editor-left input').first();
-    const savedName = await nameInput.inputValue();
-    await nameInput.fill(''); await button('保存').click();
+    const rewardInput = page.locator('.editor-left input').first();
+    const savedReward = await rewardInput.inputValue();
+    await rewardInput.fill(''); await button('保存').click();
     await expect(page.locator('.editor-save-dialog')).toContainText('请填写以下必填项');
-    assert.equal((await request(`/game/${simple}`)).data.name, savedName);
+    assert.equal(JSON.parse((await request(`/game/${simple}`)).data.levels)[0].option.rewardPoints, Number(savedReward));
     await page.locator('.editor-save-dialog button').click();
-    await nameInput.fill(savedName); await button('保存').click();
+    await rewardInput.fill(savedReward); await button('保存').click();
     await expect(page.locator('.editor-save-dialog h2')).toHaveText('保存成功');
     await page.locator('.editor-save-dialog button').click();
     await button('符号灯布局').click();

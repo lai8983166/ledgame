@@ -120,8 +120,8 @@ test("color controls protect busy/modal editing and import/export icons follow d
     editorSource.indexOf(":data-tip=\"t\('simple.importReplaceLevelJson'\)\""),
     editorSource.indexOf("</div>", editorSource.indexOf(":data-tip=\"t\('simple.importReplaceLevelJson'\)\"")),
   );
-  assert.match(exportButton, /@click="exportCurrentLevel"[\s\S]*⬆/);
-  assert.match(importButton, /@click="importCurrentLevel"[\s\S]*⬇/);
+  assert.match(exportButton, /@click="exportCurrentLevel"[\s\S]*EditorActionIcon name="export"/);
+  assert.match(importButton, /@click="importCurrentLevel"[\s\S]*EditorActionIcon name="import"/);
 });
 
 test("level import validates before confirmation and replacement, and restores focus", () => {

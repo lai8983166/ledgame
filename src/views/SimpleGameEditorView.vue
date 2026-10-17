@@ -82,17 +82,20 @@ const gameWiringOpen = ref(false);
 const gameWiringSaving = ref(false);
 const gameWiringError = ref("");
 async function saveWiring(wiring) {
+  if (gameWiringSaving.value) return;
   gameWiringSaving.value = true;
   gameWiringError.value = "";
   try {
-    if (currentGameId.value) await saveGameWiring(api, currentGameId.value, false, wiring, document.value);
+    if (currentGameId.value) await withEditorSavingCursor(() => saveGameWiring(api, currentGameId.value, false, wiring, document.value));
     else {
       document.value.wiringData = JSON.parse(JSON.stringify(wiring));
       statusMessage.value = t('gameCreation.draftHint');
     }
     gameWiringOpen.value = false;
+    saveFeedback.value = { message: currentGameId.value ? t('simple.saveSuccess') : t('gameCreation.draftHint') };
   } catch (error) {
     gameWiringError.value = error.message?.startsWith('gameWiring.') ? t(error.message) : error.message;
+    saveFeedback.value = { failed: true, message: gameWiringError.value };
   } finally { gameWiringSaving.value = false; }
 }
 const globalConfigDraft = ref({});
@@ -993,6 +996,10 @@ function openGlobalConfig() {
     type: doc.type ?? "",
     mode: doc.mode ?? "",
     name: doc.name ?? "",
+    description: doc.description ?? '',
+    remark: doc.remark ?? '',
+    siteSizeWidth: doc.siteSizeWidth ?? '',
+    siteSizeHeight: doc.siteSizeHeight ?? '',
     firstCatalog: doc.firstCatalog ?? "",
     childModeVisible: doc.childModeVisible !== false,
     globalTimeLimit: Boolean(doc.globalTimeLimit),
@@ -3142,13 +3149,16 @@ function formatRuntimeSummary(value) {
                 :style="{ left: `${activeFramePercent}%` }"
               ></div>
             </div>
-            <div class="frame-tick-row">
+            <div class="frame-tick-row" :style="{
+              '--frame-intervals': Math.max(1, frames.length - 1),
+              '--frame-label-density': Math.max(1, (frames.length - 1) * ((String(frames.length).length + String(Math.max(1, frames.length - 1)).length) / 2 * 0.68 + 0.3)),
+            }">
               <button
                 v-for="index in frameTickIndices"
                 :key="`frame-${index}`"
                 class="frame-tick"
                 :class="{ active: displayedFrameIndex === index }"
-                :style="{ left: `${frames.length <= 1 ? 0 : index / (frames.length - 1) * 100}%` }"
+                :style="{ left: `${index / Math.max(1, frames.length - 1) * 100}%` }"
                 :title="String(index + 1)"
                 type="button"
                 @click="selectFrame(index)"
@@ -3188,9 +3198,9 @@ function formatRuntimeSummary(value) {
               :data-tip="t('simple.copyNextFrame')"
               @click="copyCurrentFrameToNextFrame"
             >
-              N
+              <EditorActionIcon name="copy" />
             </button>
-            <button
+            <button v-if="false"
               class="icon-add-button"
               type="button"
               :aria-label="t('simple.copyAllFrames')"
@@ -3209,26 +3219,6 @@ function formatRuntimeSummary(value) {
               @click="deleteCurrentFrame"
             >
               -
-            </button>
-            <button
-              class="icon-add-button"
-              type="button"
-              :aria-label="t('simple.exportCurrentLevel')"
-              :data-tip="t('simple.exportCurrentLevelJson')"
-              :disabled="Boolean(busyAction) || !activeLevel"
-              @click="exportCurrentLevel"
-            >
-              ⬆
-            </button>
-            <button
-              class="icon-add-button"
-              type="button"
-              :aria-label="t('simple.importReplaceLevel')"
-              :data-tip="t('simple.importReplaceLevelJson')"
-              :disabled="Boolean(busyAction) || !activeLevel"
-              @click="importCurrentLevel"
-            >
-              ⬇
             </button>
           </div>
         </div>
@@ -3412,6 +3402,8 @@ function formatRuntimeSummary(value) {
                 <EditorActionIcon name="copy-color" />
               </button>
               </template>
+<button class="soft-button compact-button object-icon-button" type="button" :aria-label="t('simple.exportCurrentLevel')" :data-tip="t('simple.exportCurrentLevelJson')" :title="t('simple.exportCurrentLevelJson')" :disabled="Boolean(busyAction) || !activeLevel" @click="exportCurrentLevel"><EditorActionIcon name="export" /></button>
+<button class="soft-button compact-button object-icon-button" type="button" :aria-label="t('simple.importReplaceLevel')" :data-tip="t('simple.importReplaceLevelJson')" :title="t('simple.importReplaceLevelJson')" :disabled="Boolean(busyAction) || !activeLevel" @click="importCurrentLevel"><EditorActionIcon name="import" /></button>
 <button class="soft-button compact-button object-icon-button" type="button" :aria-label="t('simple.openPreview')" :title="t('simple.openPreview')" :disabled="Boolean(busyAction) || !activeLevel" @click="openPreview"><EditorActionIcon name="preview" /></button>
 <button class="soft-button compact-button object-icon-button" type="button" :aria-label="t('simple.exportGif')" :title="t('simple.exportGif')" :disabled="Boolean(busyAction) || !activeLevel?.frameList?.length" @click="exportCurrentLevelGif"><EditorActionIcon name="export" /></button>
 <button class="soft-button compact-button object-icon-button" type="button" :aria-label="t('simple.globalConfig')" :title="t('simple.globalConfig')" :disabled="Boolean(busyAction) || !document" @click="openGlobalConfig"><EditorActionIcon name="settings" /></button>
@@ -3433,29 +3425,6 @@ function formatRuntimeSummary(value) {
 
     <div v-if="document" class="simple-editor-layout">
       <aside class="editor-panel editor-left">
-        <h2>{{ t("simple.basicInfo") }}</h2>
-        <label>
-          <span>{{ t("simple.name") }}</span>
-          <input v-model="document.name" type="text" />
-        </label>
-        <label>
-          <span>{{ t("simple.description") }}</span>
-          <input v-model="document.description" type="text" />
-        </label>
-        <label>
-          <span>{{ t("simple.remark") }}</span>
-          <input v-model="document.remark" type="text" />
-        </label>
-        <div class="two-column-fields">
-          <label>
-            <span class="editor-required-label">{{ t("simple.width") }}</span>
-            <input v-model.number="document.siteSizeWidth" min="1" type="number" />
-          </label>
-          <label>
-            <span class="editor-required-label">{{ t("simple.height") }}</span>
-            <input v-model.number="document.siteSizeHeight" min="1" type="number" />
-          </label>
-        </div>
         <!-- 周期和难度字段暂未参与当前玩法，保留数据模型以兼容已有游戏数据。 -->
         <!--
         <div class="two-column-fields">

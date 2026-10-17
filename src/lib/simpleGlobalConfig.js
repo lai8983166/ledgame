@@ -1,7 +1,15 @@
 export function applySimpleGlobalConfigPatch(target, patch) {
   if (Object.hasOwn(patch, 'childModeVisible')) target.childModeVisible = Boolean(patch.childModeVisible);
-  for (const field of ['cover', 'name', 'firstCatalog']) {
+  for (const field of ['cover', 'name', 'description', 'remark', 'firstCatalog']) {
     if (Object.hasOwn(patch, field)) target[field] = patch[field] ?? "";
+  }
+  for (const field of ['siteSizeWidth', 'siteSizeHeight']) {
+    if (Object.hasOwn(patch, field)) target[field] = patch[field];
+  }
+  if (target.wiringData?.runtimeEnabled === true && (Object.hasOwn(patch, 'siteSizeWidth') || Object.hasOwn(patch, 'siteSizeHeight'))) {
+    // Keep all wiring points. The existing backend validation rejects a resize
+    // that would put them outside the field, rather than silently deleting them.
+    target.wiringData = { ...target.wiringData, width: target.siteSizeWidth, height: target.siteSizeHeight };
   }
   if (Object.hasOwn(patch, 'globalTimeLimit')) target.globalTimeLimit = Boolean(patch.globalTimeLimit);
   if (Object.hasOwn(patch, 'globalTimeLimitValue')) target.globalTimeLimitValue = patch.globalTimeLimitValue ?? 0;

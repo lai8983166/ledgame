@@ -1920,14 +1920,66 @@ html.editor-saving * {
 .frame-sequence-header .sequence-head h2 { font-size: 14px; line-height: 18px; }
 .frame-sequence-header .sequence-head p { font-size: 11px; line-height: 18px; }
 .frame-sequence-header .frame-progress-track { height: 8px; margin-top: 4px; margin-bottom: 6px; }
-.frame-sequence-header .frame-tick-row { height: 27px; }
-.frame-sequence-header .frame-tick-label { top: 5px; font-size: 10px; line-height: 1; }
-.frame-sequence-header .frame-tick.active .frame-tick-label { top: 16px; }
+.frame-sequence-header .frame-tick-row {
+  container-type: inline-size;
+  height: 22px;
+  padding: 0;
+}
+.frame-sequence-header .frame-tick-row button.frame-tick {
+  --frame-tick-offset: -50%;
+  width: min(22px, calc(100cqw / var(--frame-intervals)));
+  min-width: 0;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 3px;
+  outline: none;
+  background: transparent;
+  box-shadow: none;
+  transform: translateX(var(--frame-tick-offset));
+  transition: none;
+}
+.frame-sequence-header .frame-tick-row button.frame-tick:first-child {
+  --frame-tick-offset: 0%;
+}
+.frame-sequence-header .frame-tick-row button.frame-tick:last-child:not(:first-child) {
+  --frame-tick-offset: -100%;
+}
+.frame-sequence-header .frame-tick-row button.frame-tick:is(:first-child, :last-child):not(:only-child) {
+  width: min(22px, calc(50cqw / var(--frame-intervals)));
+}
+.frame-sequence-header .frame-tick-row .frame-tick .frame-tick-label {
+  top: 6px;
+  font-size: min(11px, calc(100cqw / var(--frame-label-density)));
+  line-height: 14px;
+}
+.frame-sequence-header .frame-tick-row .frame-tick:first-child .frame-tick-label { left: 0; transform: translateX(-50%); }
+.frame-sequence-header .frame-tick-row .frame-tick:last-child:not(:first-child) .frame-tick-label { right: 0; transform: translateX(50%); }
+.frame-sequence-header .frame-tick-row .frame-tick .frame-tick-dot {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: 2px;
+  height: 3px;
+  margin: 0;
+  border-radius: 0;
+  background: var(--ui-text-secondary);
+  transform: translateX(-50%);
+}
+.frame-sequence-header .frame-tick-row .frame-tick:first-child .frame-tick-dot { left: 0; }
+.frame-sequence-header .frame-tick-row .frame-tick:last-child:not(:first-child) .frame-tick-dot { left: 100%; }
+.frame-sequence-header .frame-tick-row .frame-tick.active {
+  color: var(--ui-accent);
+}
+.frame-sequence-header .frame-tick-row .frame-tick:focus-visible .frame-tick-label { text-decoration: underline; }
+.frame-sequence-header .frame-tick-row .frame-tick.active .frame-tick-dot { background: var(--ui-accent); }
 .frame-sequence-header .frame-icon-actions .icon-add-button { width: 30px; height: 30px; font-size: 20px; }
 
 .frame-sequence-header .frame-progress-track,
 .frame-sequence-header .frame-tick-row {
   width: calc(100% - 12px);
+  margin-left: 6px;
+  margin-right: 6px;
 }
 
 .frame-icon-actions {

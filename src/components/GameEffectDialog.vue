@@ -27,6 +27,7 @@ const emit = defineEmits(["cancel", "confirm"]);
 const { t } = useI18n({ useScope: "global" });
 const dialogRef = ref(null);
 const draft = ref(normalizeEffectConfig(props.effect));
+if (draft.value.mode === 'merge') draft.value.mode = 'after';
 const validationErrors = ref([]);
 const previewFrames = ref([]);
 const previewFrameIndex = ref(0);
@@ -234,6 +235,7 @@ function handleKeydown(event) {
 
 watch(() => props.effect, (value) => {
   draft.value = normalizeEffectConfig(value);
+  if (draft.value.mode === 'merge') draft.value.mode = 'after';
   resetSpriteSelection(false);
   rebuildPreview();
 }, { deep: true });
@@ -346,7 +348,7 @@ onBeforeUnmount(() => {
               <span>{{ t("effect.mode") }}</span>
               <select v-model="draft.mode" :disabled="saving">
                 <option value="insert">{{ t("effect.insert") }}</option>
-                <option value="merge">{{ t("effect.merge") }}</option>
+                <option value="after">{{ t("effect.insertAfter") }}</option>
               </select>
             </label>
           </div>
@@ -393,7 +395,6 @@ onBeforeUnmount(() => {
 
       <footer class="game-effect-actions">
         <button class="soft-button" type="button" :disabled="saving" @click="emit('cancel')">{{ t("common.cancel") }}</button>
-        <button class="soft-button" type="button" :disabled="saving" @click="drawPreview">{{ t("effect.draw") }}</button>
         <button class="action-button primary" type="button" :disabled="saving" @click="handleConfirm">{{ t(saving ? "globalConfig.saving" : "effect.confirm") }}</button>
       </footer>
     </section>

@@ -11,7 +11,11 @@ defineProps({
     aria-hidden="true"
     focusable="false"
   >
-    <template v-if="name === 'rotate-left'">
+    <template v-if="name === 'copy'">
+      <rect x="8" y="8" width="12" height="13" rx="1.5" />
+      <path d="M16 5V3H3v14h2" />
+    </template>
+    <template v-else-if="name === 'rotate-left'">
       <path d="M8 5.2A8 8 0 1 1 5.2 17" />
       <path d="m8 5.2-4.4.5 1.6 4" />
       <text x="12" y="14.1" text-anchor="middle" font-size="6.5" font-family="Arial, sans-serif" font-weight="800">90</text>
@@ -91,6 +95,9 @@ defineProps({
     <template v-else-if="name === 'settings'">
       <path d="m9 3-.6 3-2 .9-2.6-1.1-2 3.4L4 11v2l-2.2 1.8 2 3.4 2.6-1.1 2 .9.6 3h4l.6-3 2-.9 2.6 1.1 2-3.4L18 13v-2l2.2-1.8-2-3.4-2.6 1.1-2-.9L13 3H9Z" />
       <circle cx="11" cy="12" r="3" />
+    </template>
+    <template v-else-if="name === 'import'">
+      <path d="M12 3v12m-4-4 4 4 4-4M4 15v6h16v-6" />
     </template>
     <template v-else-if="name === 'pixel-light'">
       <rect x="7" y="7" width="10" height="10" rx="1" />

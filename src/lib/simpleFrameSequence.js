@@ -1,13 +1,7 @@
-export function visibleFrameIndices(frameCount, currentIndex) {
+export function visibleFrameIndices(frameCount) {
   const count = Math.max(0, Math.trunc(Number(frameCount) || 0));
   if (!count) return [];
-  const slots = Math.min(count, 12);
-  const indices = new Set();
-  for (let index = 0; index < slots; index++) {
-    indices.add(slots === 1 ? 0 : Math.round(index * (count - 1) / (slots - 1)));
-  }
-  indices.add(Math.min(count - 1, Math.max(0, Math.trunc(Number(currentIndex) || 0))));
-  return [...indices].sort((left, right) => left - right);
+  return Array.from({ length: count }, (_, index) => index);
 }
 
 export function insertFrameAfter(frames, activeIndex, frame) {

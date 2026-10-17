@@ -110,7 +110,8 @@ try {
     const draft=await page.evaluate(family=>window.makeDraft(family),family);
     await mount(rank?'RankGameEditorView':'SimpleGameEditorView',{gameId:null,initialDocument:draft});
     const input=rank?page.locator('input[data-rank-field="name"]'):page.locator('.simple-editor-layout .editor-left input').first();
-    await input.waitFor();assert.equal(await input.inputValue(),'Draft');
+    await input.waitFor();assert.equal(await page.evaluate(()=>window.getComponentSetup().document.name),'Draft');
+    const rename=async value=>rank?input.fill(value):page.evaluate(value=>window.getComponentSetup().document.name=value,value);
     const debug=page.getByRole('button',{name:'启动游戏',exact:true});assert.equal(await debug.count(),0);
     assert.deepEqual(await page.evaluate(()=>window.fixture.reads),[]);
     const previousCount=await page.evaluate(()=>window.fixture.firstSaves.length);
@@ -119,16 +120,17 @@ try {
       await page.locator('.global-config-field').filter({has:page.locator('.global-config-label').filter({hasText:/^名称$/})}).locator('input').fill('配置草稿');
       await page.locator('.global-config-actions .primary').click();await page.locator('.global-config-dialog').waitFor({state:'hidden'});
       await page.locator('.editor-save-dialog button').click();
-      assert.equal(await input.inputValue(),'配置草稿');
+      assert.equal(await page.evaluate(()=>window.getComponentSetup().document.name),'配置草稿');
       await page.getByRole('button',{name:'符号灯布局',exact:true}).click();
       await page.locator('.pixel-layout-actions .primary').click();await page.locator('.pixel-layout-dialog').waitFor({state:'hidden'});
     }
     await page.getByRole('button',{name:'地砖布线',exact:true}).click();
     await page.locator('.game-wiring-dialog .elc408-actions .primary').click();await page.locator('.game-wiring-dialog').waitFor({state:'hidden'});
+    await page.locator('.editor-save-dialog button').click();
     assert.equal(await page.evaluate(()=>window.fixture.firstSaves.length),previousCount,'configuration saving must remain local');
     assert.deepEqual(await page.evaluate(()=>window.fixture.reads),[]);
     const save=rank?page.locator('.rank-actions .primary'):page.locator('.editor-toolbar').getByRole('button',{name:'保存',exact:true});
-    await input.fill(`保存-${family}`);await page.evaluate(()=>window.fixture.failSave=true);await save.click();
+    await rename(`保存-${family}`);await page.evaluate(()=>window.fixture.failSave=true);await save.click();
     await page.locator('.error-line').filter({hasText:'首次保存失败'}).waitFor();
     await page.locator('.editor-save-dialog button').click();
     assert.equal(await debug.count(),0);
@@ -140,7 +142,7 @@ try {
     const payload=await page.evaluate(()=>window.fixture.firstPayloads.at(-1));
     assert.equal(payload.id,null);assert.equal(payload.wiringData.runtimeEnabled,true);
     if(rank)assert.equal(payload.levels[0].bounds.maxY,35);
-    await input.fill(`更新-${family}`);await save.click();
+    await rename(`更新-${family}`);await save.click();
     await page.waitForFunction(id=>window.fixture.updates.includes(id),id);
     await page.locator('.editor-save-dialog button').click();
     assert.equal(await page.evaluate(()=>window.fixture.firstSaves.length),previous+1);

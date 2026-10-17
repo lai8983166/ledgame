@@ -12,6 +12,15 @@ test('global configuration cannot change the game family or legacy mode', () => 
   assert.equal(target.type,'default'); assert.equal(target.mode,'[2]'); assert.equal(target.name,'renamed');
 });
 
+test('game metadata and dimensions patch without cropping frames or wiring points', () => {
+  const levels=[{frameList:[{matrix:[{x:15,y:35}]}]}];
+  const target={name:'old',siteSizeWidth:16,siteSizeHeight:36,levels,wiringData:{runtimeEnabled:true,width:16,height:36,lines:[[[15,35]]],mode:'TURN_BACK_ROW_PRIORITY'}};
+  applySimpleGlobalConfigPatch(target,{name:'new',description:'description',remark:'remark',siteSizeWidth:18,siteSizeHeight:40});
+  assert.equal(target.description,'description');assert.equal(target.remark,'remark');assert.equal(target.siteSizeWidth,18);
+  assert.equal(target.wiringData.width,18);assert.equal(target.wiringData.height,40);assert.equal(target.levels,levels);
+  assert.deepEqual(target.wiringData.lines,[[[15,35]]]);
+});
+
 test('an unconfirmed persistence result cannot update the live draft', async () => {
   const liveDocument={name:'local'};
   await assert.rejects(saveSimpleGlobalConfigDocument({api:{getGameEditor:async()=>({data:{name:'saved'}}),saveGameEditor:async()=>({data:{saved:false}})},gameId:1,patch:{name:'new'},liveDocument}), /SAVE_NOT_CONFIRMED/);

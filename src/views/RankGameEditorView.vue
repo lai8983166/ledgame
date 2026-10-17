@@ -30,17 +30,20 @@ const gameWiringOpen = ref(false);
 const gameWiringSaving = ref(false);
 const gameWiringError = ref("");
 async function saveWiring(wiring) {
+  if (gameWiringSaving.value) return;
   gameWiringSaving.value = true;
   gameWiringError.value = "";
   try {
-    if (currentGameId.value) await saveGameWiring(api, currentGameId.value, true, wiring, document.value);
+    if (currentGameId.value) await withEditorSavingCursor(() => saveGameWiring(api, currentGameId.value, true, wiring, document.value));
     else {
       document.value.wiringData = JSON.parse(JSON.stringify(wiring));
       statusMessage.value = t('gameCreation.draftHint');
     }
     gameWiringOpen.value = false;
+    saveFeedback.value = { message: currentGameId.value ? t('simple.saveSuccess') : t('gameCreation.draftHint') };
   } catch (error) {
     gameWiringError.value = error.message?.startsWith('gameWiring.') ? t(error.message) : error.message;
+    saveFeedback.value = { failed: true, message: gameWiringError.value };
   } finally { gameWiringSaving.value = false; }
 }
 const loading = ref(true);

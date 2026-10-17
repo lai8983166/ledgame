@@ -2,12 +2,14 @@
 import { ref, onMounted, onBeforeUnmount, nextTick } from 'vue';
 import { useI18n } from 'vue-i18n';
 import Elc408WiringPanel from './elc408/Elc408WiringPanel.vue';
+import EditorSaveDialog from './EditorSaveDialog.vue';
 import { createGameWiringDraft } from '../lib/gameWiring.js';
 
 const props=defineProps({wiring:{type:Object,default:null},width:{type:Number,required:true},height:{type:Number,required:true},saving:Boolean,error:String});
 const emit=defineEmits(['cancel','save']);
 const {t}=useI18n({useScope:'global'});
 const dialog=ref(null), draft=ref(null), fallback=ref(false);
+const validationError=ref('');
 const previousFocus=document.activeElement;
 let mounted=true;
 onMounted(async()=>{
@@ -30,10 +32,11 @@ onBeforeUnmount(()=>{mounted=false;previousFocus?.focus?.();});
       <p v-if="fallback">{{ t('gameWiring.newDraft') }}</p>
       <p v-if="error" class="error-line" role="alert">{{ error }}</p>
       <div class="game-wiring-content" :class="{saving}">
-        <Elc408WiringPanel v-if="draft" :initial-document="draft" game-scoped :saving="saving" @save="emit('save',$event)" />
+        <Elc408WiringPanel v-if="draft" :initial-document="draft" game-scoped :saving="saving" @save="emit('save',$event)" @save-error="validationError = $event" />
         <p v-else>{{ t('common.loading') }}</p>
       </div>
     </section>
+    <EditorSaveDialog v-if="validationError" :message="validationError" failed @close="validationError = ''" />
   </div>
 </template>
 <style scoped>

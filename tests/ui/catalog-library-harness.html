@@ -42,6 +42,7 @@ window.mountComponent = (component, props, { applicationShell = false } = {}) =>
     onSelect: path => window.componentEvents.push(['select', path]),
     onCancel: () => window.componentEvents.push(['cancel']),
     onSave: value => window.componentEvents.push(['save', value]),
+    onConfirm: value => window.componentEvents.push(['confirm', value]),
     onExit: () => window.componentEvents.push(['exit']),
     onOpenGame: game => window.componentEvents.push(['open-game', game]),
     });

@@ -23,7 +23,7 @@ import Elc408WiringCanvas from "./Elc408WiringCanvas.vue";
 import { serializeGameWiring } from "../../lib/gameWiring.js";
 
 const props = defineProps({ initialDocument: {type:Object, default:null}, gameScoped:Boolean, saving:Boolean });
-const emit = defineEmits(["save"]);
+const emit = defineEmits(["save", "save-error"]);
 
 const { t } = useI18n({ useScope: "global" });
 const api = window.elc408Tools;
@@ -153,6 +153,7 @@ async function download() {
     const kind = classifyBackendErrorCode(extracted.code);
     errorMessage.value = error.message?.startsWith("gameWiring.") ? t(error.message)
       : t(`elc408.errors.${kind}`, { message: extracted.message });
+    if (props.gameScoped) emit('save-error', errorMessage.value);
   } finally {
     downloading.value = false;
   }
@@ -163,8 +164,8 @@ async function download() {
   <div class="elc408-wiring-panel">
     <aside class="elc408-wiring-controls">
       <fieldset>
-        <legend>{{ t("elc408.wiring.frameSize") }}</legend>
-        <label>
+        <legend v-if="!gameScoped">{{ t("elc408.wiring.frameSize") }}</legend>
+        <label v-if="!gameScoped">
           <span>{{ t("elc408.wiring.frameWidth") }}</span>
           <input
             :value="document.width"
@@ -174,7 +175,7 @@ async function download() {
             @change="onWidthChange"
           />
         </label>
-        <label>
+        <label v-if="!gameScoped">
           <span>{{ t("elc408.wiring.frameHeight") }}</span>
           <input
             :value="document.height"

@@ -28,6 +28,10 @@ const sections = computed(() => [
       { label: t("globalConfig.cover"), path: "cover", kind: "media", accept: "image", marked: true },
       { label: t("globalConfig.type"), path: "type", kind: "game-type" },
       { label: t("globalConfig.name"), path: "name", kind: "text" },
+      { label: t("simple.description"), path: "description", kind: "text" },
+      { label: t("simple.remark"), path: "remark", kind: "text" },
+      { label: t("simple.width"), path: "siteSizeWidth", kind: "number", min: 1, marked: true },
+      { label: t("simple.height"), path: "siteSizeHeight", kind: "number", min: 1, marked: true },
       { label: t("globalConfig.firstCatalog"), path: "firstCatalog", kind: "category", marked: true },
       { label: t("management.childModeVisible"), path: "childModeVisible", kind: "checkbox" },
     ],
@@ -106,6 +110,10 @@ function resetDraft() {
     type: source.type ?? "",
     mode: source.mode ?? "",
     name: source.name ?? "",
+    description: source.description ?? '',
+    remark: source.remark ?? '',
+    siteSizeWidth: source.siteSizeWidth ?? '',
+    siteSizeHeight: source.siteSizeHeight ?? '',
     firstCatalog: source.firstCatalog ?? "",
     childModeVisible: source.childModeVisible !== false,
     globalTimeLimit: Boolean(source.globalTimeLimit),
@@ -159,6 +167,10 @@ function handleSave() {
   const missing = requiredGlobalConfigFields(draft.value);
   if (missing.length) {
     saveError.value = t('editorSave.required') + '\n' + missing.map(field => t(field.label)).join('\n');
+    return;
+  }
+  if (['siteSizeWidth','siteSizeHeight'].some(field => !Number.isInteger(draft.value[field]) || draft.value[field] < 1)) {
+    saveError.value = t('editorSave.invalid') + '\n' + t('simple.width') + ' / ' + t('simple.height');
     return;
   }
   if (lifeError.value || (draft.value.globalTimeLimit && (!Number.isInteger(draft.value.globalTimeLimitValue) || draft.value.globalTimeLimitValue <= 0))) {
@@ -280,7 +292,7 @@ onBeforeUnmount(() => {
                 :min="field.min ?? 0"
                 :value="getPath(field.path)"
                 :disabled="saving"
-                @input="setPath(field.path, Number($event.target.value))"
+                @input="setPath(field.path, $event.target.value === '' ? '' : Number($event.target.value))"
               />
 
               <select v-else-if="field.kind === 'life-mode'" :value="String(Boolean(draft.globalLifeLimit))" :disabled="saving" @change="draft.globalLifeLimit = $event.target.value === 'true'">

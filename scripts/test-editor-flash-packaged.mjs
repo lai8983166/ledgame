@@ -28,7 +28,7 @@ try {
   doc.levels=[{...doc.levels[0],label:'A',frameList:[{repeatTimes:1,matrix:[{id:'red',x:0,y:0,color:2,points:[[0,0]]}]}]}];
   const id=(await request('/game-editor','POST',doc)).data.gameId;
   await page.reload();await page.getByTestId('game-menu-button').click();await page.getByRole('menuitem',{name:'游戏列表',exact:true}).click();
-  const card=page.locator(`.game-card[data-id="${id}"]`);await card.hover();await card.getByRole('button',{name:'编辑',exact:true}).click();await page.locator('.simple-editor-fit-shell.ready').waitFor();
+  const card=page.locator(`.game-card[data-id="${id}"]`);await card.getByRole('button',{name:'编辑',exact:true}).focus();await card.getByRole('button',{name:'编辑',exact:true}).click();await page.locator('.simple-editor-fit-shell.ready').waitFor();
   await app.evaluate(({BrowserWindow})=>{
     globalThis.editorFocusCalls=[];
     const win=BrowserWindow.getAllWindows().find(win=>win.webContents.getURL().includes('/dist/index.html')&&!win.webContents.getURL().includes('window='));
@@ -57,8 +57,48 @@ try {
     await expect(page.locator('.editor-save-dialog h2')).toHaveText('保存成功');
     await expect(page.locator('html')).not.toHaveClass(/editor-saving/);
     await page.locator('.editor-save-dialog button').click();
-    const input=page.locator('.editor-left input').first();await input.fill('仍能输入');assert.equal(await input.inputValue(),'仍能输入');
+    const input=page.locator('.editor-left input').first();await input.fill('10');assert.equal(await input.inputValue(),'10');
     records.push({action:'保存等待游标、结束恢复及弹窗后输入',passed:true});
+    await button('全局配置').click();
+    const globalField=label=>page.locator('.global-config-field').filter({has:page.locator('.global-config-label').filter({hasText:new RegExp('^'+label+'$')})}).locator('input');
+    for(const [label,value] of [['描述','全局描述'],['备注','全局备注'],['宽度','18'],['高度','40']])await globalField(label).fill(value);
+    await page.locator('.global-config-actions .primary').click();await expect(page.locator('.editor-save-dialog h2')).toHaveText('保存成功');await page.locator('.editor-save-dialog button').click();
+    const updated=(await request(`/game-editor/${id}`)).data;assert.equal(updated.description,'全局描述');assert.equal(updated.remark,'全局备注');assert.equal(updated.siteSizeWidth,18);assert.equal(updated.siteSizeHeight,40);
+    assert.equal(await page.locator('.editor-left input[type=text]').count(),0);
+    await button('地砖布线').click();await expect(page.locator('.elc408-wiring-controls fieldset').first().locator('input[type=number]')).toHaveCount(1);
+    await button('保存此游戏布线').click();await expect(page.locator('.editor-save-dialog h2')).toHaveText('保存成功');await page.locator('.editor-save-dialog button').click();
+    let wired=(await request(`/game-editor/${id}`)).data;assert.equal(wired.wiringData.width,18);assert.equal(wired.wiringData.height,40);
+    await button('全局配置').click();await globalField('宽度').fill('20');await globalField('高度').fill('42');
+    await page.locator('.global-config-actions .primary').click();await expect(page.locator('.editor-save-dialog h2')).toHaveText('保存成功');await page.locator('.editor-save-dialog button').click();
+    wired=(await request(`/game-editor/${id}`)).data;assert.equal(wired.wiringData.width,20);assert.equal(wired.wiringData.height,42);
+    records.push({action:'真实后端全局元数据/尺寸持久化、布线保存反馈及尺寸同步',passed:true});
+    wired.levels[0].frameList=Array.from({length:100},()=>({repeatTimes:1,matrix:[]}));
+    await request(`/game-editor/${id}`,'PUT',wired);
+    await button('返回列表').click();await card.getByRole('button',{name:'编辑',exact:true}).focus();await card.getByRole('button',{name:'编辑',exact:true}).click();
+    await page.locator('.simple-editor-fit-shell.ready').waitFor();await expect(page.locator('.frame-tick')).toHaveCount(100);
+    const ruler=await page.locator('.frame-tick-row').evaluate(row=>{
+      const track=row.previousElementSibling.getBoundingClientRect();
+      return{left:track.left,width:track.width,ticks:[...row.querySelectorAll('.frame-tick')].map(node=>{
+        const dot=node.querySelector('.frame-tick-dot').getBoundingClientRect(),label=node.querySelector('.frame-tick-label').getBoundingClientRect();
+        return{x:dot.x+dot.width/2,labelX:label.x,right:label.right,y:label.y};
+      })};
+    });
+    for(let i=0;i<100;i++){
+      const tick=ruler.ticks[i];assert.ok(Math.abs(tick.x-ruler.left-ruler.width*i/99)<1,'刻度与条对齐');
+      assert.ok(Math.abs(tick.y-ruler.ticks[0].y)<1,'帧号保持单行');
+      if(i)assert.ok(ruler.ticks[i-1].right<=tick.labelX+0.5,'相邻编号不重叠');
+    }
+    await page.locator('.frame-tick').last().click();
+    const marker=await page.locator('.frame-progress-marker').boundingBox();assert.ok(Math.abs(marker.x+marker.width/2-ruler.left-ruler.width)<1);
+    await expect(page.locator('.frame-tick.active')).toHaveAttribute('title','100');
+    assert.deepEqual(await page.locator('.frame-tick.active').evaluate(node=>{
+      const style=getComputedStyle(node);return[style.boxShadow,style.backgroundColor,style.borderTopWidth,style.outlineStyle];
+    }),['none','rgba(0, 0, 0, 0)','0px','none'],'选中帧号不显示框');
+    const track=await page.locator('.frame-progress-track').boundingBox();
+    await page.mouse.move(track.x+track.width-0.1,track.y+track.height/2);await page.mouse.down();await page.mouse.move(track.x+0.1,track.y+track.height/2);await page.mouse.up();
+    await expect(page.locator('.frame-tick.active')).toHaveAttribute('title','1');
+    records.push({action:'真实EXE 100帧单行刻度、末帧游标对齐和拖动回首帧',passed:true});
   }
   assert.deepEqual(errors,[]);await page.screenshot({path:path.join(data,'验收.png')});
-} finally {await app?.close();await writeFile(path.join(data,baseline?'修复前.json':'验收结果.json'),JSON.stringify({baseline,records,errors},null,2));console.log('隔离证据：'+data);}
+} catch(error){errors.push(error.stack);await page?.screenshot({path:path.join(data,'失败.png')}).catch(()=>{});throw error;}
+finally {await app?.close();await writeFile(path.join(data,baseline?'修复前.json':'验收结果.json'),JSON.stringify({baseline,records,errors},null,2));console.log('隔离证据：'+data);}

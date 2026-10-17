@@ -5,6 +5,7 @@ const read = (document, path) => path.split('.').reduce((value, key) => value?.[
 export function requiredGlobalConfigFields(document) {
   const fields = [
     ['name', 'globalConfig.name'], ['cover', 'globalConfig.cover'], ['firstCatalog', 'globalConfig.firstCatalog'],
+    ['siteSizeWidth', 'simple.width'], ['siteSizeHeight', 'simple.height'],
     ['audio.scoreSound', 'globalConfig.scoreSound'], ['audio.injurySound', 'globalConfig.injurySound'],
     ['audio.purpleSound', 'globalConfig.doubleSound'], ['commonConfig.gameStartAudio', 'globalConfig.gameStartVoice'],
     ['commonConfig.gameEndSuccessAudio', 'globalConfig.gameSuccessVoice'], ['commonConfig.gameEndFailAudio', 'globalConfig.gameFailureVoice'],
@@ -21,7 +22,7 @@ export function requiredEditorFields(document, rank = false) {
   const errors = rank
     ? (blank(document.name) ? [{ path: 'name', label: 'globalConfig.name' }] : [])
     : requiredGlobalConfigFields(document);
-  for (const path of ['siteSizeWidth', 'siteSizeHeight']) {
+  for (const path of rank ? ['siteSizeWidth', 'siteSizeHeight'] : []) {
     if (blank(document[path])) errors.push({ path, label: path === 'siteSizeWidth' ? 'simple.width' : 'simple.height' });
   }
   if (rank) {
