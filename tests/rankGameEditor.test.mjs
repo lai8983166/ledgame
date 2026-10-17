@@ -4,7 +4,7 @@ import test from "node:test";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { createRankEditorPayload } from "../src/lib/rankGameEditor.js";
+import { createRankEditorPayload, createRankLevel, normalizeRankEditorDocument, parseRankRange, applyRankGlobalConfig } from "../src/lib/rankGameEditor.js";
 
 test("Rank editor detaches reactive proxies and converts displayed coordinates for IPC", () => {
   const level = new Proxy({ type: 1, bounds: { minX: 1, minY: 1, maxX: 16, maxY: 36 } }, {});
@@ -41,6 +41,7 @@ test("Rank editor exposes the shared media picker and previews for all lifecycle
     "../src/views/RankGameEditorView.vue",
   );
   const source = await readFile(sourcePath, "utf8");
+  const global = await readFile(new URL('../src/components/GameGlobalConfigDialog.vue',import.meta.url),'utf8');
 
   for (const pattern of [
     /MediaPickerDialog/,
@@ -55,14 +56,34 @@ test("Rank editor exposes the shared media picker and previews for all lifecycle
     /gif\.levelSettlement/,
     /gif\.gameFailure/,
     /gif\.gameOver/,
-    /level\.backgroundVoice/,
-    /level\.gameplayIntro/,
-    /rank-media-image-grid/,
-    /rank-media-audio-grid/,
-    /rank\.imageMediaHint/,
     /buildMediaPreviewUrl/,
-    /<audio :src="audioPreview\.url"/,
   ]) {
-    assert.match(source, pattern);
+    assert.match(source+global, pattern);
   }
+  assert.match(source,/<GameGlobalConfigDialog[^>]*rank/);
+  assert.match(source,/chooseMedia\('startGif','image'/);
+  assert.match(source,/key:'gameplayIntro',label:'rank.voiceDescription'/);
+  assert.match(source,/key:'backgroundVoice',label:'rank.levelBackgroundMusic'/);
+  assert.doesNotMatch(source,/@click="(?:importJson|exportJson)"/);
+});
+
+test('Rank levels require explicit subtype and keep ranges, coordinates and media independent',()=>{
+  const one=createRankLevel(16,36,0),two=createRankLevel(8,8,1);
+  assert.equal(one.label,'Ranking');assert.equal(two.type,null);one.bounds.maxX=2;assert.equal(two.bounds.maxX,8);
+  for(const text of ['2,4',' 2，4 '])assert.deepEqual(parseRankRange(text,1),[2,4]);
+  for(const text of ['', '4,2','1','1,2,3','-1,2','0,2','1.5,2'])assert.equal(parseRankRange(text,1),null);
+  assert.deepEqual(parseRankRange('0,0'),[0,0]);
+  const doc=normalizeRankEditorDocument({name:'internal',displayName:'Displayed',levels:[{label:'Type 1',type:1,startGif:'intro.gif',gameplayIntro:'voice.mp3',backgroundVoice:'bg.mp3',bounds:{minX:0,minY:0,maxX:7,maxY:7}}]});
+  assert.equal(doc.name,'Displayed');assert.equal(doc.levels[0].label,'Ranking');assert.equal(doc.levels[0].bounds.maxY,8);
+  doc.levels.push(two);two.type=1;
+  const payload=createRankEditorPayload(doc,7);assert.equal(payload.displayName,'Displayed');assert.equal(payload.levels[1].bounds.maxX,7);
+  assert.equal(payload.levels[0].startGif,'intro.gif');assert.equal(payload.levels[0].gameplayIntro,'voice.mp3');assert.equal(doc.levels[1].bounds.maxX,8);
+});
+
+test('Rank global patch does not submit or reset level drafts and updates enabled wiring size',()=>{
+  const level=createRankLevel();level.rewardPoints=22;
+  const doc={levels:[level],siteSizeWidth:16,siteSizeHeight:36,wiringData:{runtimeEnabled:true,lines:[[[0,0]]]},name:'Before'};
+  applyRankGlobalConfig(doc,{name:'After',siteSizeWidth:18,siteSizeHeight:40,commonConfig:{rankBombWarningAudio:'warning.mp3'}});
+  assert.equal(doc.levels[0],level);assert.equal(level.rewardPoints,22);assert.equal(level.bombWarningAudio,'warning.mp3');
+  assert.equal(doc.displayName,'After');assert.equal(doc.wiringData.width,18);assert.deepEqual(doc.wiringData.lines,[[[0,0]]]);
 });

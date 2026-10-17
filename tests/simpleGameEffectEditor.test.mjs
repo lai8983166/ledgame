@@ -38,7 +38,6 @@ test("effect button sits beside existing global and pixel-light configuration", 
   assert.ok(start >= 0 && end > start);
   const toolbar = source.slice(start, end);
   for (const [key, icon, handler] of [
-    ["simple.globalConfig", "settings", "openGlobalConfig"],
     ["pixelLight.open", "pixel-light", "openPixelLightLayout"],
     ["effect.open", "effect", "openEffectDialog"],
   ]) {
@@ -47,4 +46,6 @@ test("effect button sits beside existing global and pixel-light configuration", 
     assert.ok(button.includes(`@click="${handler}"`));
     assert.ok(button.includes(`<EditorActionIcon name="${icon}" />`));
   }
+  const header=source.slice(source.indexOf('<div class="editor-heading-row">'),start);
+  assert.match(header,/simple\.globalConfig[\s\S]*EditorActionIcon name="settings"/);
 });

@@ -3,13 +3,14 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue"
 import { useI18n } from "vue-i18n";
 import MediaPickerDialog from "./MediaPickerDialog.vue";
 import EditorSaveDialog from './EditorSaveDialog.vue';
-import { requiredGlobalConfigFields } from '../lib/editorRequiredFields.js';
+import { requiredGlobalConfigFields, requiredEditorFields } from '../lib/editorRequiredFields.js';
 
 const props = defineProps({
   config: { type: Object, required: true },
   categories: { type: Array, default: () => [] },
   saving: { type: Boolean, default: false },
   error: { type: String, default: "" },
+  rank: { type: Boolean, default: false },
 });
 const emit = defineEmits(["cancel", "save"]);
 const { t } = useI18n();
@@ -20,7 +21,8 @@ const saveError = ref('');
 const picker = ref(null); // { path, accept, title } when a media picker is open
 const audioPlayer = ref(null); // { name, url } when the audio player modal is open
 
-const sections = computed(() => [
+const sections = computed(() => {
+  const result = [
   {
     title: t("globalConfig.basicInfo"),
     columns: 1,
@@ -81,7 +83,23 @@ const sections = computed(() => [
       { label: t("globalConfig.gameCompleteAnimation"), path: "gif.gameOver", kind: "media", accept: "image", marked: true },
     ],
   },
-]);
+  ];
+  if (!props.rank) return result;
+  const shared = result.filter(section => section.title !== t('globalConfig.lifeMode'));
+  for (const section of shared) {
+    section.fields = section.fields.filter(field => field.path !== 'remark').map(field => ({ ...field, marked: ['name','siteSizeWidth','siteSizeHeight'].includes(field.path) }));
+  }
+  shared[0].fields.push(
+    { label:t('rank.minPlayers'), path:'minPlayers', kind:'number', min:1 },
+    { label:t('rank.maxPlayers'), path:'maxPlayers', kind:'number', min:1 },
+  );
+  shared.push({ title:t('rank.playerColors'), columns:3, fields: (draft.value.palette || []).map((_,index) => ({ label:`${index+1}P`, path:`palette.${index}`, kind:'color' })) });
+  shared.find(section => section.title === t('globalConfig.soundEffects')).fields.push(
+    { label:t('rank.warningAudio'), path:'commonConfig.rankBombWarningAudio', kind:'media', accept:'audio' },
+    { label:t('rank.explosionAudio'), path:'commonConfig.rankBombExplosionAudio', kind:'media', accept:'audio' },
+  );
+  return shared;
+});
 
 function gridStyle(section) {
   const columns = Number(section?.columns) > 0 ? section.columns : 2;
@@ -123,6 +141,7 @@ function resetDraft() {
     audio: { ...(source.audio || {}) },
     gif: { ...(source.gif || {}) },
     commonConfig: { ...(source.commonConfig || {}) },
+    ...(props.rank ? { minPlayers: source.minPlayers ?? 1, maxPlayers:source.maxPlayers ?? 6, palette:[...(source.palette || [])] } : {}),
   };
 }
 
@@ -164,7 +183,7 @@ function openAudioPlayer(field) {
 
 function handleSave() {
   if (!canSave.value) return;
-  const missing = requiredGlobalConfigFields(draft.value);
+  const missing = props.rank ? requiredEditorFields(draft.value, true) : requiredGlobalConfigFields(draft.value);
   if (missing.length) {
     saveError.value = t('editorSave.required') + '\n' + missing.map(field => t(field.label)).join('\n');
     return;
@@ -260,6 +279,7 @@ onBeforeUnmount(() => {
               <span class="global-config-label" :class="{ 'editor-required-label': field.marked }">{{ field.label }}</span>
 
               <input v-if="field.kind === 'game-type'" type="text" readonly :value="t(draft.type === 'rank' ? 'gameCreation.ranked' : 'gameCreation.entertainment')" />
+              <input v-else-if="field.kind === 'color'" type="color" :value="getPath(field.path)" :disabled="saving" @input="setPath(field.path, $event.target.value)" />
               <input
                 v-else-if="field.kind === 'text'"
                 type="text"

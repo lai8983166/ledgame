@@ -1646,6 +1646,25 @@ html.editor-saving * {
   margin-bottom: 6px;
 }
 
+.editor-heading-row { grid-column: 1 / -1; display:flex; align-items:center; gap:12px; min-width:0; }
+.editor-heading-actions { display:flex; align-items:center; gap:6px; flex-shrink:0; }
+.editor-heading-actions .object-icon-button {
+  display:grid;
+  place-items:center;
+  flex:0 0 44px;
+  width:44px;
+  min-width:44px;
+  height:44px;
+  min-height:44px;
+  padding:4px;
+  line-height:1;
+}
+.editor-heading-actions .object-icon-button .editor-action-icon { width:32px; height:32px; }
+.editor-heading-row .level-sequence-row { flex:1; align-items:center; min-width:0; }
+.editor-heading-row .sequence-list { flex-wrap:nowrap; overflow-x:auto; align-items:center; padding:4px 2px; }
+.editor-heading-row .sequence-pill { flex-shrink:0; }
+.editor-topbar .frame-sequence-header { grid-column:1 / -1; }
+
 .editor-back-button {
   align-self: center;
 }
@@ -1722,7 +1741,7 @@ html.editor-saving * {
 
 .editor-center {
   align-content: start;
-  grid-template-rows: auto auto minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
   gap: 10px;
   overflow: hidden;
   min-height: 0;

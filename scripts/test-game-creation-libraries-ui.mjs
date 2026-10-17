@@ -109,9 +109,8 @@ try {
     const rank=family==='ranked';
     const draft=await page.evaluate(family=>window.makeDraft(family),family);
     await mount(rank?'RankGameEditorView':'SimpleGameEditorView',{gameId:null,initialDocument:draft});
-    const input=rank?page.locator('input[data-rank-field="name"]'):page.locator('.simple-editor-layout .editor-left input').first();
-    await input.waitFor();assert.equal(await page.evaluate(()=>window.getComponentSetup().document.name),'Draft');
-    const rename=async value=>rank?input.fill(value):page.evaluate(value=>window.getComponentSetup().document.name=value,value);
+    await page.waitForFunction(()=>window.getComponentSetup()?.document);assert.equal(await page.evaluate(()=>window.getComponentSetup().document.name),'Draft');
+    const rename=async value=>page.evaluate(value=>window.getComponentSetup().document.name=value,value);
     const debug=page.getByRole('button',{name:'启动游戏',exact:true});assert.equal(await debug.count(),0);
     assert.deepEqual(await page.evaluate(()=>window.fixture.reads),[]);
     const previousCount=await page.evaluate(()=>window.fixture.firstSaves.length);
@@ -129,7 +128,7 @@ try {
     await page.locator('.editor-save-dialog button').click();
     assert.equal(await page.evaluate(()=>window.fixture.firstSaves.length),previousCount,'configuration saving must remain local');
     assert.deepEqual(await page.evaluate(()=>window.fixture.reads),[]);
-    const save=rank?page.locator('.rank-actions .primary'):page.locator('.editor-toolbar').getByRole('button',{name:'保存',exact:true});
+    const save=rank?page.locator('.rank-actions .primary'):page.locator('.editor-heading-actions').getByRole('button',{name:'保存',exact:true});
     await rename(`保存-${family}`);await page.evaluate(()=>window.fixture.failSave=true);await save.click();
     await page.locator('.error-line').filter({hasText:'首次保存失败'}).waitFor();
     await page.locator('.editor-save-dialog button').click();

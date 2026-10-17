@@ -64,8 +64,8 @@ test('image clear inventory leaves audio and other clear actions available', asy
   const simple = await readFile(new URL('../src/components/GameGlobalConfigDialog.vue',import.meta.url),'utf8');
   assert.match(simple,/<button\s+v-if="field.accept === 'audio'"[\s\S]*?@click="clearMedia\(field\)"/);
   const rank=await readFile(new URL('../src/views/RankGameEditorView.vue',import.meta.url),'utf8');
-  const images=rank.slice(rank.indexOf('<section class="rank-media-group rank-media-image-group">'),rank.indexOf('<section class="rank-media-group rank-media-audio-group">'));
-  assert.doesNotMatch(images, /clearMedia/);assert.match(rank.slice(rank.indexOf('<section class="rank-media-group rank-media-audio-group">')),/clearMedia/);
+  const images=rank.slice(rank.indexOf('<label class="rank-level-media">'),rank.indexOf("t('management.rankReward')"));
+  assert.doesNotMatch(images,/globalConfig\.clear/);assert.match(rank,/@click="type1Config\[field.key\]=''"/);
   assert.match(await readFile(new URL('../src/components/elc408/Elc408DebugToolsPanel.vue',import.meta.url),'utf8'),/@click="clearLogs"/);
   assert.match(await readFile(new URL('../src/views/LedGameTouchView.vue',import.meta.url),'utf8'),/touch\.clear/);
 });

@@ -32,7 +32,7 @@ const check=async(name,fn)=>{await fn();passed.push(name);console.log('通过：
 try {
   await page.goto(`http://127.0.0.1:${server.httpServer.address().port}/tests/ui/catalog-library-harness.html`);await page.waitForFunction(()=>window.mountComponent);
   const doc=await page.evaluate(()=>window.completeDraft);
-  await mount('SimpleGameEditorView',doc);const save=page.locator('.editor-toolbar').getByRole('button',{name:'保存',exact:true});await save.waitFor();
+  await mount('SimpleGameEditorView',doc);const save=page.locator('.editor-heading-actions').getByRole('button',{name:'保存',exact:true});await save.waitFor();
   await check('保存立即等待、防重复提交及结束/失败/必填拦截均恢复游标',async()=>{
     await page.evaluate(()=>window.deferSave=true);await save.click();
     await page.waitForFunction(()=>window.finishSave);
@@ -87,8 +87,8 @@ try {
     await page.evaluate(doc=>{window.ledGame.getRankGameEditor=async()=>({data:structuredClone(doc)});},rankDoc);
     await mount('RankGameEditorView',rankDoc);
     const button=page.locator('.rank-actions .primary');await button.click();await page.locator('.editor-save-dialog').getByRole('heading',{name:'保存成功'}).waitFor();await close();
-    const count=await page.evaluate(()=>window.saves.length);await page.locator('[data-rank-field="name"]').fill('');await button.click();await page.locator('.editor-save-dialog').getByText(/请填写以下必填项/).waitFor();assert.equal(await page.evaluate(()=>window.saves.length),count);await close();
-    await page.locator('[data-rank-field="name"]').fill('Rank');await page.evaluate(()=>window.failSave=true);await button.click();await page.locator('.editor-save-dialog').getByText('模拟磁盘写入失败').waitFor();await close();
+    const count=await page.evaluate(()=>window.saves.length);await page.evaluate(()=>window.getComponentSetup().document.name='');await button.click();await page.locator('.editor-save-dialog').getByText(/请填写以下必填项/).waitFor();assert.equal(await page.evaluate(()=>window.saves.length),count);await close();
+    await page.evaluate(()=>{window.getComponentSetup().document.name='Rank';window.failSave=true;});await button.click();await page.locator('.editor-save-dialog').getByText('模拟磁盘写入失败').waitFor();await close();
   });
   assert.deepEqual(errors,[]);await writeFile(path.join(output,'result.json'),JSON.stringify({passed,errors},null,2));
 } finally {await browser.close();await server.close();}

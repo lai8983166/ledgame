@@ -3124,7 +3124,24 @@ function formatRuntimeSummary(value) {
         :style="editorFitContentStyle"
       >
     <div class="editor-topbar">
+      <div class="editor-heading-row">
       <button class="soft-button editor-back-button" type="button" @click="$emit('back')">{{ t("simple.backToList") }}</button>
+      <div v-if="document && !anchorEditMode" class="editor-heading-actions">
+        <button class="soft-button compact-button object-icon-button" type="button" :aria-label="t('simple.save')" :title="t('simple.save')" :disabled="Boolean(busyAction)" @click="saveEditor"><EditorActionIcon name="save" /></button>
+        <button class="soft-button compact-button object-icon-button" type="button" :aria-label="t('simple.globalConfig')" :title="t('simple.globalConfig')" :disabled="Boolean(busyAction)" @click="openGlobalConfig"><EditorActionIcon name="settings" /></button>
+        <button class="soft-button compact-button object-icon-button" type="button" :aria-label="t('gameWiring.title')" :title="t('gameWiring.title')" :disabled="Boolean(busyAction)" @click="gameWiringError = ''; gameWiringOpen = true"><EditorActionIcon name="wiring" /></button>
+      </div>
+      <div v-if="document" class="level-sequence-row">
+        <div class="level-structure-actions">
+          <button class="icon-add-button" type="button" :aria-label="t('simple.addLevel')" :title="t('simple.addLevel')" @click="addLevel">+</button>
+          <button class="icon-add-button icon-danger-button" type="button" :aria-label="t('simple.deleteCurrentLevel')" :data-tip="t('simple.deleteCurrentLevel')" :disabled="Boolean(busyAction) || !canDeleteActiveLevel" @click="deleteCurrentLevel">-</button>
+        </div>
+        <div class="sequence-list">
+          <button v-for="(level,index) in levels" :key="`level-${index}`" class="sequence-pill" :class="{active:activeLevelIndex===index,'level-drop-target':levelDropIndex===index}" type="button" :draggable="!busyAction && !anchorEditMode"
+            @dragstart="startLevelDrag($event, index)" @dragover.prevent="draggingLevelIndex!==null&&(levelDropIndex=index)" @drop.prevent="dropLevel(index)" @dragend="endLevelDrag" @click="selectLevel(index)">{{level.label||`Level ${index+1}`}}</button>
+        </div>
+      </div>
+      </div>
       <div v-if="document" class="sequence-block frame-sequence-header">
         <div class="sequence-head">
           <h2>{{ t("simple.frames") }}</h2>
@@ -3338,7 +3355,6 @@ function formatRuntimeSummary(value) {
                 >
                   <EditorActionIcon name="copy-all" />
                 </button>
-                <button class="soft-button compact-button object-icon-button" type="button" :aria-label="t('simple.save')" :title="t('simple.save')" :disabled="Boolean(busyAction) || !document" @click="saveEditor"><EditorActionIcon name="save" /></button>
                 <button
                   class="soft-button compact-button object-icon-button object-danger-button"
                   :disabled="!selectedObject"
@@ -3406,9 +3422,7 @@ function formatRuntimeSummary(value) {
 <button class="soft-button compact-button object-icon-button" type="button" :aria-label="t('simple.importReplaceLevel')" :data-tip="t('simple.importReplaceLevelJson')" :title="t('simple.importReplaceLevelJson')" :disabled="Boolean(busyAction) || !activeLevel" @click="importCurrentLevel"><EditorActionIcon name="import" /></button>
 <button class="soft-button compact-button object-icon-button" type="button" :aria-label="t('simple.openPreview')" :title="t('simple.openPreview')" :disabled="Boolean(busyAction) || !activeLevel" @click="openPreview"><EditorActionIcon name="preview" /></button>
 <button class="soft-button compact-button object-icon-button" type="button" :aria-label="t('simple.exportGif')" :title="t('simple.exportGif')" :disabled="Boolean(busyAction) || !activeLevel?.frameList?.length" @click="exportCurrentLevelGif"><EditorActionIcon name="export" /></button>
-<button class="soft-button compact-button object-icon-button" type="button" :aria-label="t('simple.globalConfig')" :title="t('simple.globalConfig')" :disabled="Boolean(busyAction) || !document" @click="openGlobalConfig"><EditorActionIcon name="settings" /></button>
 <button class="soft-button compact-button object-icon-button" type="button" :aria-label="t('pixelLight.open')" :title="t('pixelLight.open')" :disabled="Boolean(busyAction) || !document" @click="openPixelLightLayout"><EditorActionIcon name="pixel-light" /></button>
-<button class="soft-button compact-button object-icon-button" type="button" :aria-label="t('gameWiring.title')" :title="t('gameWiring.title')" :disabled="Boolean(busyAction) || !document" @click="gameWiringError = ''; gameWiringOpen = true"><EditorActionIcon name="wiring" /></button>
 <button class="soft-button compact-button object-icon-button" type="button" :aria-label="t('effect.open')" :title="t('effect.open')" :disabled="Boolean(busyAction) || !activeFrame" @click="openEffectDialog"><EditorActionIcon name="effect" /></button>
             </div>
     </div>
@@ -3513,40 +3527,6 @@ function formatRuntimeSummary(value) {
       </aside>
 
       <main class="editor-panel editor-center">
-        <div class="level-sequence-row">
-          <div class="level-structure-actions">
-            <button class="icon-add-button" type="button" :aria-label="t('simple.addLevel')" :title="t('simple.addLevel')" @click="addLevel">
-              +
-            </button>
-            <button
-              class="icon-add-button icon-danger-button"
-              type="button"
-              :aria-label="t('simple.deleteCurrentLevel')"
-              :data-tip="t('simple.deleteCurrentLevel')"
-              :disabled="Boolean(busyAction) || !canDeleteActiveLevel"
-              @click="deleteCurrentLevel"
-            >
-              -
-            </button>
-          </div>
-          <div class="sequence-list">
-            <button
-              v-for="(level, index) in levels"
-              :key="`level-${index}`"
-              class="sequence-pill"
-              :class="{ active: activeLevelIndex === index, 'level-drop-target': levelDropIndex === index }"
-              type="button"
-              :draggable="!busyAction && !anchorEditMode"
-              @dragstart="startLevelDrag($event, index)"
-              @dragover.prevent="draggingLevelIndex !== null && (levelDropIndex = index)"
-              @drop.prevent="dropLevel(index)"
-              @dragend="endLevelDrag"
-              @click="selectLevel(index)"
-            >
-              {{ level.label || `Level ${index + 1}` }}
-            </button>
-          </div>
-        </div>
 
         <div class="matrix-status-bar" :class="{ active: panoramaMode || selectionMode || anchorEditMode }">
           <div class="matrix-status-main">

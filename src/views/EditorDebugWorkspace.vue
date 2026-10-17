@@ -51,7 +51,7 @@ const countdown=computed(()=>{
     return Math.ceil(Math.max(0,remaining)/1000);
   }
   if(time)return time.mode==='LIMITED'?Math.ceil((time.remainingMillis || 0)/1000):t('editorDebug.unlimited');
-  if(props.game.type==='rank' && props.game.levels?.[0]?.durationSeconds>0)return props.game.levels[0].durationSeconds;
+  if(props.game.type==='rank' && props.game.levels?.[Math.max(0,options.startLevel-1)]?.durationSeconds>0)return props.game.levels[options.startLevel-1].durationSeconds;
   return props.game.globalTimeLimit?props.game.globalTimeLimitValue:t('editorDebug.unlimited');
 });
 let removeState,removeFrame,balanceTimer,alive=true,scanBuffer='';

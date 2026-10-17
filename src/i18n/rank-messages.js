@@ -1,6 +1,10 @@
 export const rankMessages = {
   "zh-CN": {
     rank: {
+      levelName: "关卡名", gameDescription: "游戏说明", voiceDescription: "语音说明", timeLimit: "时间限制（秒）",
+      type1: "炸弹3x3", selectType: "请选择类型", targetRange: "每玩家目标", bombRange: "炸弹数量",
+      rangePlaceholder: "输入min,max", rangeInvalid: "请输入合法的min,max，最小值不能大于最大值",
+      bombAppearDelay: "炸弹出现延迟（秒）", deleteLevelConfirm: "确定删除关卡“{name}”吗？",
       unsupportedEditor: "当前游戏类型没有可用的编辑器",
       typeLabel: "RANK TYPE 1",
       back: "返回游戏列表",
@@ -75,6 +79,10 @@ export const rankMessages = {
   },
   "en-US": {
     rank: {
+      levelName: "Level name", gameDescription: "Game instructions", voiceDescription: "Voice instructions", timeLimit: "Time limit (seconds)",
+      type1: "Bomb 3x3", selectType: "Select a type", targetRange: "Targets per player", bombRange: "Bomb count",
+      rangePlaceholder: "Enter min,max", rangeInvalid: "Enter a valid min,max range with min no greater than max",
+      bombAppearDelay: "Bomb appearance delay (seconds)", deleteLevelConfirm: "Delete level “{name}”?",
       unsupportedEditor: "No editor is available for this game type",
       typeLabel: "RANK TYPE 1",
       back: "Back to games",

@@ -62,6 +62,11 @@ try {
   // If its initial read predated those writes, use the existing explicit refresh.
   if (await button('重新加载').isVisible()) await button('重新加载').click();
   let card = page.locator(`.game-card[data-id="${simple}"]`);
+  await expect.poll(async()=>{
+    if(await card.count())return true;
+    if(await button('重新加载').isVisible())await button('重新加载').click();
+    return false;
+  },{timeout:15000}).toBe(true);
   await check('分类标题、新建弹窗白底黑字及导航白字', async () => {
     await expect(page.locator('.page-heading h1')).toHaveText('维护验收分类');
     await expect(page.locator('.page-heading p, .game-category-breadcrumb span')).toHaveCount(0);
@@ -182,16 +187,26 @@ try {
     const rankCard = page.locator(`.game-card[data-id="${rank}"]`); await rankCard.hover(); await rankCard.getByRole('button', { name: '调试游戏', exact: true }).click();
     await button('启动游戏').click(); await expect.poll(async () => (await request('/engine/game/state')).data.engineState).toBe('RUNNING'); await button('退出调试，返回游戏列表').click();
     await rankCard.hover(); await rankCard.getByRole('button', { name: '编辑', exact: true }).click();
-    await expect(page.getByText('触屏显示', { exact: true })).toBeVisible(); assert.equal(await button('启动游戏').count(), 0);
-    const rankName = page.locator('[data-rank-field="name"]'), originalName = await rankName.inputValue();
-    await rankName.fill(''); await page.locator('.rank-actions .primary').click();
+    await button('全局配置').click();await expect(page.locator('.global-config-dialog').getByText('触屏显示', { exact: true })).toBeVisible();assert.equal(await button('启动游戏').count(), 0);
+    const rankName=page.locator('.global-config-field').filter({has:page.locator('.global-config-label').filter({hasText:/^名称$/})}).locator('input');
+    const originalName=await rankName.inputValue();await rankName.fill('');await page.locator('.global-config-actions .primary').click();
     await expect(page.locator('.editor-save-dialog')).toContainText('请填写以下必填项');
     assert.equal((await request(`/game/${rank}`)).data.name, originalName);
     await page.locator('.editor-save-dialog button').click();
-    await rankName.fill(originalName); await page.locator('.rank-actions .primary').click();
+    await rankName.fill(originalName);await page.locator('.global-config-actions .primary').click();
     await expect(page.locator('.editor-save-dialog h2')).toHaveText('保存成功');
     await page.locator('.editor-save-dialog button').click();
-    await page.locator('.rank-title .icon-action').click();
+    await button('添加关卡').click();await page.locator('[data-rank-field="level.type"]').selectOption('1');
+    await page.locator('[data-rank-field="level.label"]').fill('第二关验收');await page.locator('[data-rank-field="level.durationSeconds"]').fill('1');await page.locator('[data-rank-field="level.rewardPoints"]').fill('11');
+    await page.locator('.rank-actions .primary').click();await expect(page.locator('.editor-save-dialog h2')).toHaveText('保存成功');await page.locator('.editor-save-dialog button').click();
+    const persisted=(await request(`/rank-game-editor/${rank}`)).data;assert.equal(persisted.levels.length,2);assert.equal(persisted.levels[1].label,'第二关验收');assert.equal(persisted.levels[1].rewardPoints,11);assert.equal(persisted.levels[1].bounds.maxY,35);
+    await button('返回列表').click();
+    await rankCard.getByRole('button',{name:'调试游戏',exact:true}).focus();await rankCard.getByRole('button',{name:'调试游戏',exact:true}).click();
+    await page.locator('.editor-debug-workspace input[type=number]').nth(1).fill('2');await button('启动游戏').click();
+    await expect.poll(async()=>{const state=(await request('/engine/game/state')).data;return state.engineState==='RUNNING'?state.currentStageIndex:null;}).toBe(1);
+    await expect.poll(async()=>(await request('/engine/game/state')).data.engineState,{timeout:15000}).toBe('STOPPED');
+    assert.equal((await request('/engine/game/state')).data.success,true);
+    await button('退出调试，返回游戏列表').click();
   });
   await check('删除游戏取消保留、确认删除，删空后刷新与重启不补回', async () => {
     await card.hover(); await card.getByRole('button', { name: '删除', exact: true }).click(); await button('取消').click();
