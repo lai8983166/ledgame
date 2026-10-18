@@ -102,12 +102,10 @@ try {
     }
   });
   await page.setViewportSize({width:1366,height:768});
-  await check('硬件助手两页，操作控件横排、长日志展开、搜索与发送停止、隐藏页停止采样', async () => {
+  await check('硬件助手仅调试工具，操作控件横排、搜索与发送停止、离开停止采样', async () => {
     await mount('Elc408DebugAssistantView');
-    assert.equal(await page.getByRole('tab').count(), 2);
-    assert.equal(await page.getByRole('tab').first().getAttribute('aria-selected'), 'true');
-    for (const label of ['单行', '单列', '折返行', '折返列']) assert.equal(await page.getByText(label, { exact: true }).count(), 1);
-    await page.getByRole('tab').last().click();
+    assert.equal(await page.getByRole('tab').count(), 0);
+    assert.equal(await page.locator('.elc408-wiring-panel').count(),0);
     await page.locator('.elc408-debug-controls select').first().selectOption('nic');
     assert.equal(await page.locator('.elc408-debug-controls select').nth(2).inputValue(), 'GRB');
     await page.getByRole('button', { name: '搜索', exact: true }).click();
@@ -121,7 +119,7 @@ try {
       await page.setViewportSize({width,height}); await noOverflow();
       await page.screenshot({ path: path.join(output, `debug-${width}.png`) });
     }
-    await page.getByRole('tab').first().click();
+    await mount('ApplicationSettingsView');
     await page.waitForFunction(() => window.fixture.capture.at(-1) === false);
   });
   await page.setViewportSize({width:1366,height:768});
@@ -137,6 +135,7 @@ try {
     }
     await page.evaluate(() => window.changeTestLocale('zh-CN'));
   });
+  if(!process.argv.includes('--settings-only')) {
   await check('真实游戏信息弹窗独立保存显示开关，取消其他草稿、失败回滚、禁重复保存', async () => {
     await mount('GameListView', { section: 'list' });
     const open = () => page.locator('.game-card[data-id="1"] .game-card-edit').click();
@@ -193,6 +192,7 @@ try {
     await mount('ApplicationSettingsView');
     assert.equal(await page.evaluate(() => window.fixture.listeners), 0);
   });
+  }
   assert.deepEqual(errors, []);
 } catch (error) {
   await page.screenshot({ path: path.join(output, 'failure.png'), fullPage: true }); throw error;

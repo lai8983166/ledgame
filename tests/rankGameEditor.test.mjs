@@ -81,9 +81,21 @@ test('Rank levels require explicit subtype and keep ranges, coordinates and medi
 });
 
 test('Rank global patch does not submit or reset level drafts and updates enabled wiring size',()=>{
-  const level=createRankLevel();level.rewardPoints=22;
+  const level=createRankLevel();level.rewardPoints=22;level.bombWarningAudio='level-warning.mp3';level.bombExplosionAudio='level-bomb.mp3';
   const doc={levels:[level],siteSizeWidth:16,siteSizeHeight:36,wiringData:{runtimeEnabled:true,lines:[[[0,0]]]},name:'Before'};
   applyRankGlobalConfig(doc,{name:'After',siteSizeWidth:18,siteSizeHeight:40,commonConfig:{rankBombWarningAudio:'warning.mp3'}});
-  assert.equal(doc.levels[0],level);assert.equal(level.rewardPoints,22);assert.equal(level.bombWarningAudio,'warning.mp3');
+  assert.equal(doc.levels[0],level);assert.equal(level.rewardPoints,22);assert.equal(level.bombWarningAudio,'level-warning.mp3');assert.equal(level.bombExplosionAudio,'level-bomb.mp3');
   assert.equal(doc.displayName,'After');assert.equal(doc.wiringData.width,18);assert.deepEqual(doc.wiringData.lines,[[[0,0]]]);
+});
+
+test('Rank bomb media belongs to the subtype and independent level payload, never global controls',async()=>{
+  const one=createRankLevel(),two=createRankLevel();one.type=two.type=1;
+  Object.assign(one,{bombWarningAudio:'one-warning.mp3',bombExplosionAudio:'one-bomb.mp3'});
+  Object.assign(two,{bombWarningAudio:'two-warning.mp3',bombExplosionAudio:''});
+  const doc=normalizeRankEditorDocument({levels:[one,two]});
+  const payload=createRankEditorPayload(doc,7);
+  assert.deepEqual(payload.levels.map(({bombWarningAudio,bombExplosionAudio})=>[bombWarningAudio,bombExplosionAudio]),[['one-warning.mp3','one-bomb.mp3'],['two-warning.mp3','']]);
+  assert.equal(createRankLevel().bombWarningAudio,'');assert.equal(createRankLevel().bombExplosionAudio,'');
+  const global=await readFile(new URL('../src/components/GameGlobalConfigDialog.vue',import.meta.url),'utf8');
+  assert.doesNotMatch(global,/rankBombWarningAudio|rankBombExplosionAudio/);
 });

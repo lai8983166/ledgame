@@ -315,16 +315,12 @@ function drawEmptyCell(context, index) {
   context.lineWidth = 1;
   context.setLineDash(virtualCell ? [3, 2] : []);
   context.strokeStyle = realCell
-    ? "rgba(190, 205, 220, 0.28)"
+    ? "#ffffff"
     : "rgba(100, 110, 124, 0.34)";
   context.strokeRect(left + 0.5, top + 0.5, Math.max(0, size - 1), Math.max(0, size - 1));
   context.stroke();
   context.setLineDash([]);
 
-  if (realCell) {
-    context.strokeStyle = "rgba(93, 121, 151, 0.12)";
-    context.strokeRect(left - 0.5, top - 0.5, size + 1, size + 1);
-  }
 }
 
 function drawCellOverlay(context, cell, index) {
@@ -346,21 +342,16 @@ function drawCellOverlay(context, cell, index) {
 
   // Redraw the grid stroke ON TOP of the object fill to match the non-cached look
   // (drawCell originally strokes after filling).
-  context.lineWidth = objectCell ? 1.25 : 1;
+  context.lineWidth = realCell ? 1 : objectCell ? 1.25 : 1;
   context.setLineDash(virtualCell ? [3, 2] : []);
-  context.strokeStyle = objectCell
-    ? "rgba(0, 0, 0, 0.84)"
-    : realCell
-      ? "rgba(190, 205, 220, 0.34)"
+  context.strokeStyle = realCell
+    ? "#ffffff"
+    : objectCell
+      ? "rgba(0, 0, 0, 0.84)"
       : "rgba(100, 110, 124, 0.42)";
   context.strokeRect(left + 0.5, top + 0.5, Math.max(0, size - 1), Math.max(0, size - 1));
   context.stroke();
   context.setLineDash([]);
-
-  if (realCell) {
-    context.strokeStyle = "rgba(93, 121, 151, 0.12)";
-    context.strokeRect(left - 0.5, top - 0.5, size + 1, size + 1);
-  }
 
   if (overlapCell && props.showOverlapIndicator) {
     drawOverlapIndicator(context, left, top, size, cell.overlapCount);

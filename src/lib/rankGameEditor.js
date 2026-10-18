@@ -26,6 +26,7 @@ export function createRankEditorPayload(value, gameId) {
 export function createRankLevel(width = 16, height = 36, index = 0) {
   return { label: index === 0 ? 'Ranking' : `Level ${index + 1}`, type: null,
     rewardPoints: 0, durationSeconds: 60, description: '', startGif: '', gameplayIntro: '', backgroundVoice: '',
+    bombWarningAudio: '', bombExplosionAudio: '',
     bounds: { minX: 1, minY: 1, maxX: width, maxY: height },
     targetsPerPlayerMin: 3, targetsPerPlayerMax: 4, bombMin: 0, bombMax: 1,
     bombWarningDelaySeconds: 3, bombWarningDurationSeconds: 1, refreshSeconds: 6, earlyRefresh: true };
@@ -64,8 +65,4 @@ export function applyRankGlobalConfig(target, patch) {
   }
   target.displayName = target.name;
   if (target.wiringData?.runtimeEnabled) target.wiringData = { ...target.wiringData, width:target.siteSizeWidth, height:target.siteSizeHeight };
-  for (const level of target.levels || []) {
-    if (target.commonConfig?.rankBombWarningAudio != null) level.bombWarningAudio = target.commonConfig.rankBombWarningAudio;
-    if (target.commonConfig?.rankBombExplosionAudio != null) level.bombExplosionAudio = target.commonConfig.rankBombExplosionAudio;
-  }
 }

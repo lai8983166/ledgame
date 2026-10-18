@@ -121,6 +121,7 @@ const activeFrameIndex = ref(0);
 const selectedColor = ref(0);
 const spriteBrushActive = ref(false);
 const spriteSearchText = ref("");
+const spriteFilterColors = ref([0, 1, 2, 3]);
 const selectedSpriteId = ref("");
 const matrixZoom = ref(1);
 const showOverlapIndicators = ref(true);
@@ -290,7 +291,7 @@ const spriteDimensionFilter = computed(() => {
   }
   return { width, height };
 });
-const filteredEditorSprites = computed(() => filterEditorSprites(normalizedEditorSprites.value, spriteSearchText.value));
+const filteredEditorSprites = computed(() => filterEditorSprites(normalizedEditorSprites.value, spriteSearchText.value, spriteFilterColors.value));
 const selectedEditorSprite = computed(() =>
   filteredEditorSprites.value.find((sprite) => sprite.id === selectedSpriteId.value) || null,
 );
@@ -1642,13 +1643,13 @@ function cloneRgbMatrix(matrix) {
   }));
 }
 
-function runRgbEdit(targets, action, mutation) {
+function runRgbEdit(targets, action, mutation, { recenter = true } = {}) {
   const before = captureRgbHistorySnapshot(targets);
   const selection = { mode: selectionMode.value, ids: [...mergeSelectionIds.value] };
   const result = mutation();
   for (const target of targets) {
     const frame = document.value?.levels?.[target.levelIndex]?.frameList?.[target.frameIndex];
-    if (frame) frame.matrix = frame.matrix.map(centerObjectAnchor);
+    if (frame && recenter) frame.matrix = frame.matrix.map(centerObjectAnchor);
   }
   const after = captureRgbHistorySnapshot(targets);
   if (!after.matrices.every((item, index) =>
@@ -2469,7 +2470,7 @@ function rotateSelectedObject(direction) {
       direction,
     );
     invalidateMatrixFrame();
-  });
+  }, { recenter: false });
 }
 
 function moveSelectedObject(deltaX, deltaY) {
@@ -3742,6 +3743,12 @@ function formatRuntimeSummary(value) {
                 :placeholder="t('simple.spriteSearchPlaceholder')"
                 :aria-label="t('simple.spriteSearch')"
               />
+              <div class="sprite-color-filters" role="group" :aria-label="t('simple.color')">
+                <label v-for="option in colorOptions" :key="option.index" :style="{ '--sprite-filter-color': option.value }" :title="t(`effect.colors.color${option.index}`)">
+                  <input v-model="spriteFilterColors" type="checkbox" :value="option.index" :aria-label="t(`effect.colors.color${option.index}`)" />
+                  <span aria-hidden="true"></span>
+                </label>
+              </div>
               <p v-if="effectSpiritLoadFailed" class="sprite-preview-empty">{{ t("effect.spiritLoadFailed") }}</p>
               <p v-else-if="!filteredEditorSprites.length" class="sprite-preview-empty">{{ t("simple.spriteNoMatch") }}</p>
               <div v-else class="sprite-preview-grid">
@@ -3762,8 +3769,6 @@ function formatRuntimeSummary(value) {
                     :sprite="sprite"
                     :color="colorOptions[sprite.color]?.value || '#70d6b3'"
                   />
-                  <strong>{{ sprite.name }}</strong>
-                  <small>{{ sprite.width }} × {{ sprite.height }} · {{ sprite.points.length }} {{ t("simple.spritePointsUnit") }}</small>
                 </button>
               </div>
             </div>

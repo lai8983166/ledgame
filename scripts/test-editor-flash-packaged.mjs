@@ -29,6 +29,15 @@ try {
   const id=(await request('/game-editor','POST',doc)).data.gameId;
   await page.reload();await page.getByTestId('game-menu-button').click();await page.getByRole('menuitem',{name:'游戏列表',exact:true}).click();
   const card=page.locator(`.game-card[data-id="${id}"]`);await card.getByRole('button',{name:'编辑',exact:true}).focus();await card.getByRole('button',{name:'编辑',exact:true}).click();await page.locator('.simple-editor-fit-shell.ready').waitFor();
+  if(!baseline){
+    const grid=await page.locator('.matrix-base-canvas').evaluate(canvas=>{
+      const context=canvas.getContext('2d'),cell=canvas.width/16;
+      return[0,1,2].map(col=>[...context.getImageData(Math.round(col*cell),Math.floor(cell/2),1,1).data]);
+    });
+    assert.ok(grid.every(([r,g,b])=>r===255&&g===255&&b===255),'对象和空白格边框均为白色');
+    for(const palette of await page.locator('.object-action-palette .object-color-button').all())assert.equal(await palette.evaluate(node=>getComputedStyle(node).borderTopWidth),'0px');
+    records.push({action:'真实EXE空白/对象格逐格白边及四色画笔无普通边框',passed:true});
+  }
   await app.evaluate(({BrowserWindow})=>{
     globalThis.editorFocusCalls=[];
     const win=BrowserWindow.getAllWindows().find(win=>win.webContents.getURL().includes('/dist/index.html')&&!win.webContents.getURL().includes('window='));

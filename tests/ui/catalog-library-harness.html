@@ -8,6 +8,7 @@ import ApplicationSettingsView from '../../src/views/ApplicationSettingsView.vue
 import Elc408DebugAssistantView from '../../src/views/Elc408DebugAssistantView.vue';
 import GameListView from '../../src/views/GameListView.vue';
 import LedGameTouchView from '../../src/views/LedGameTouchView.vue';
+import SecondaryDisplayView from '../../src/views/SecondaryDisplayView.vue';
 import MediaLibraryView from '../../src/views/MediaLibraryView.vue';
 import SpiritLibraryView from '../../src/views/SpiritLibraryView.vue';
 import GameWiringDialog from '../../src/components/GameWiringDialog.vue';
@@ -34,7 +35,7 @@ window.mountComponent = (component, props, { applicationShell = false } = {}) =>
   window.componentEvents = [];
   app = createApp({ render: () => {
     const view = h({ MediaPickerDialog, GameGlobalConfigDialog, ApplicationSettingsView,
-    Elc408DebugAssistantView, GameListView, LedGameTouchView, MediaLibraryView, SpiritLibraryView,
+    Elc408DebugAssistantView, GameListView, LedGameTouchView, SecondaryDisplayView, MediaLibraryView, SpiritLibraryView,
     GameWiringDialog, SimpleGameEditorView, RankGameEditorView, EditorDebugWorkspace, PixelLightLayoutDialog,
     GameEffectDialog, SpiritPointEditorDialog, SecondaryDisplayPickerDialog, LanguageSelectionDialog,
     GameCreationDialog, GameCategoryEditDialog, CatalogDeleteDialog, App }[component], {

@@ -2935,12 +2935,11 @@ html.editor-saving * {
   align-content: start;
   gap: 6px;
   padding: 8px;
-  border: 1px solid var(--ui-border);
+  border: 0;
   border-radius: 12px;
   color: var(--ui-text-secondary);
-  background: var(--ui-surface);
-  box-shadow:
-    var(--ui-shadow);
+  background: transparent;
+  box-shadow: none;
   cursor: pointer;
   text-align: left;
   transition:
@@ -2954,6 +2953,11 @@ html.editor-saving * {
   color: var(--ui-text-secondary);
   transform: translateY(-1px);
 }
+
+.sprite-color-filters { display:flex; align-items:center; gap:12px; }
+.sprite-color-filters label { display:flex; align-items:center; gap:5px; cursor:pointer; }
+.sprite-color-filters input[type=checkbox] { width:16px; height:16px; margin:0; accent-color:var(--sprite-filter-color); }
+.sprite-color-filters span { width:18px; height:18px; border-radius:3px; background:var(--sprite-filter-color); }
 
 .sprite-preview-card.active {
   color: var(--ui-purple);
@@ -3671,7 +3675,7 @@ html.editor-saving * {
 .editor-toolbar .object-edit-controls { flex: 0 0 180px; }
 .editor-toolbar .object-actions { display: flex; flex-wrap: nowrap; flex: 0 0 auto; align-items: center; }
 .object-panel .object-action-palette { display: flex; flex-wrap: nowrap; gap: 8px; margin-bottom: 12px; }
-.object-panel .object-color-button { flex: 0 0 44px; width: 44px; height: 44px; }
+.object-panel .object-color-button { flex: 0 0 44px; width: 44px; height: 44px; border:0; }
 .object-panel .object-action-palette .palette-label { display: none; }
 .editor-toolbar .object-icon-button { flex: 0 0 52px; }
 .simple-editor-fit-content .editor-feedback {

@@ -62,6 +62,11 @@ try {
   assert.equal(connection.port, memberPort);
   await page.locator('.nav-tab').filter({ hasText: /^配置$/ }).click();
   await page.locator('.application-settings-field input').first().fill('验收标题');
+  const settingInput=label=>page.locator('.application-settings-field').filter({has:page.locator('span').filter({hasText:new RegExp('^'+label+'$')})}).locator('input');
+  await settingInput('副屏上标题').fill('上标题验收');await settingInput('副屏下标题').fill('下标题验收');
+  assert.equal(await page.locator('input[maxlength="12"]').getAttribute('type'),'text');
+  await page.locator('input[maxlength="12"]').fill('12345678');
+  await page.locator('select').selectOption('coin');await page.locator('input[max="999"]').fill('3');
   assert.equal(await page.locator('input[max="65535"]').count(), 0);
   assert.equal(await page.locator('.application-settings-panel small').count(),0);
   assert.equal(await page.locator('select').filter({has:page.locator('option[value="debug"]')}).count(),0);
@@ -69,6 +74,7 @@ try {
   await page.getByRole('button', { name: '保存', exact: true }).click();
   await page.waitForFunction(async () => (await window.appSettings.get()).applicationTitle === '验收标题');
   assert.equal(await page.evaluate(async () => (await window.appSettings.get()).memberPlatformPort), memberPort);
+  const settings=await page.evaluate(()=>window.appSettings.get());assert.equal(settings.secondaryIdlePromptText,'上标题验收');assert.equal(settings.secondaryIdleSubtitleText,'下标题验收');assert.equal(settings.coinCount,3);
   await page.getByRole('button', {name:'测试连接',exact:true}).click();
   await page.getByText('会员管理端可访问', {exact:true}).waitFor();
   // The room WebSocket may connect in the background; the connection-test API
@@ -78,12 +84,26 @@ try {
   passed.push('真实 EXE 配置保存、隐藏端口及旧自定义端口保留');
   await page.locator('.nav-tab').filter({ hasText: /^帮助/ }).click();
   await page.getByRole('menuitem').filter({ hasText: '调试助手' }).click();
-  assert.equal(await page.getByRole('tab').count(), 2);
-  assert.equal(await page.getByRole('tab').first().getAttribute('aria-selected'), 'true');
-  await page.getByRole('tab').last().click();
+  assert.equal(await page.getByRole('tab').count(), 0);
+  assert.equal(await page.locator('.elc408-wiring-panel').count(),0);
   assert.equal(await page.getByRole('combobox', { name: 'RGB 线序', exact: true }).inputValue(), 'GRB');
   await page.screenshot({ path: path.join(data, 'assistant.png') });
-  passed.push('真实 EXE 两子页、默认布线、调试默认 GRB');
+  passed.push('真实 EXE 调试助手无重复布线、调试默认 GRB');
+  if(process.argv.includes('--settings-only')) {
+    await app.close();app=null;await launch();
+    const reopened=await page.evaluate(()=>window.appSettings.get());
+    assert.equal(reopened.secondaryIdlePromptText,'上标题验收');assert.equal(reopened.secondaryIdleSubtitleText,'下标题验收');assert.equal(reopened.coinCount,3);
+    passed.push('重启后副屏上下标题和投币数量持久化');
+    await page.evaluate(()=>window.secondaryDisplay.open());const secondary=await findWindow('secondary');
+    await secondary.locator('.touch-idle-title-face').nth(1).waitFor();assert.deepEqual(await secondary.locator('.touch-idle-title-face').allTextContents(),['上标题验收','下标题验收']);
+    await page.evaluate(()=>window.ledGame.enterGameFlow({mode:'game'}));const touch=await findWindow('touch');
+    await touch.locator('.touch-language-trigger').waitFor();
+    for(const language of ['zh-CN','en-US']){await touch.locator('.touch-language-trigger').click();await touch.locator(`.touch-language-dialog input[value="${language}"]`).click();await touch.locator('.touch-language-dialog').waitFor({state:'hidden'});}
+    await touch.locator('.touch-exit-edge').dispatchEvent('pointerup',{pointerType:'mouse',button:0});await touch.locator('.touch-exit-caret').waitFor();
+    for(const digit of '12345678')await touch.locator('.touch-exit-grid').getByRole('button',{name:digit,exact:true}).click();
+    assert.equal((await touch.locator('.touch-exit-code').innerText()).trim(),'••••••••');
+    passed.push('真实副屏两行标题，Touch语言选择自动关闭、空光标与8位密码遮蔽输入');
+  } else {
   await selectGames();
   const id = Number(await page.locator('.game-card').first().getAttribute('data-id'));
   await page.evaluate(() => window.ledGame.enterGameFlow({ mode: 'debug' }));
@@ -136,6 +156,7 @@ try {
   assert.ok(!(await page.evaluate(async () => (await window.ledGame.listPlayableGames()).data)).some(game => game.gameId === id));
   assert.notEqual((await page.evaluate(async () => (await window.ledGame.listManageableGames()).data)).find(game => game.gameId === id).name, '不会保存的草稿');
   passed.push('关闭再启动，标题、旧端口和触屏显示开关持久化');
+  }
   console.log(JSON.stringify({ data, passed }, null, 2));
 } catch (error) {
   if (page && !page.isClosed()) await page.screenshot({ path: path.join(data, 'failure.png') });

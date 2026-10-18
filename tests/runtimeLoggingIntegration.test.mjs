@@ -45,7 +45,7 @@ test("window and application shutdown release protocol capture before backend st
 });
 
 test("DebugTools owns capture only while its panel and document are visible", () => {
-  assert.match(assistantSource, /:active="activePanel === 'debugTools'"/);
+  assert.match(assistantSource, /:active="true"/);
   assert.match(debugPanelSource, /watch\(\(\) => props\.active/);
   assert.match(debugPanelSource, /document\.visibilityState === "visible"/);
   assert.match(debugPanelSource, /await setLogCapture\(true\)/);

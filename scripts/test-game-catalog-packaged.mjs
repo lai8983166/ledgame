@@ -1,7 +1,7 @@
 // Packaged Electron + embedded backend; all writes go to an isolated userData.
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
-import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import net from 'node:net';
 import { fileURLToPath } from 'node:url';
@@ -10,6 +10,7 @@ const { _electron, expect } = createRequire(path.join(root, '../ledGame-platform
 await mkdir(path.join(root, '.build'), { recursive: true });
 const data = await mkdtemp(path.join(root, '.build/game-catalog-packaged-'));
 const media = path.join(data, 'media'); await mkdir(media);
+await copyFile(path.join(root,'build-resources/media/危险来袭.mp3'),path.join(media,'危险来袭.mp3'));
 const file = path.join(data, 'roundtrip.game.json');
 async function freePort() { const server = net.createServer(); await new Promise(r => server.listen(0, '127.0.0.1', r)); const port = server.address().port; await new Promise(r => server.close(r)); return port; }
 const port = await freePort(), framePort = await freePort();
@@ -35,6 +36,7 @@ async function create(family, name) {
   const document = (await request('/games/draft', 'POST', { family })).data;
   document.name = name; if (family === 'ranked') document.displayName = name;
   document.childModeVisible = false;
+  if(family==='ranked')Object.assign(document.levels[0],{bombWarningAudio:'危险来袭.mp3',bombExplosionAudio:'Ranking/bomb.mp3'});
   document.globalTimeLimit = true; document.globalTimeLimitValue = 120;
   if (family === 'entertainment') {
     document.cover = 'cover.png';
@@ -198,8 +200,12 @@ try {
     await page.locator('.editor-save-dialog button').click();
     await button('添加关卡').click();await page.locator('[data-rank-field="level.type"]').selectOption('1');
     await page.locator('[data-rank-field="level.label"]').fill('第二关验收');await page.locator('[data-rank-field="level.durationSeconds"]').fill('1');await page.locator('[data-rank-field="level.rewardPoints"]').fill('11');
+    const explosion=page.locator('[data-rank-field="level.bombExplosionAudio"]');
+    await explosion.getByRole('button',{name:'选择',exact:true}).click();
+    await page.locator('.media-picker-row[data-path="危险来袭.mp3"]').click();await page.locator('.media-picker-actions .primary').click();
     await page.locator('.rank-actions .primary').click();await expect(page.locator('.editor-save-dialog h2')).toHaveText('保存成功');await page.locator('.editor-save-dialog button').click();
     const persisted=(await request(`/rank-game-editor/${rank}`)).data;assert.equal(persisted.levels.length,2);assert.equal(persisted.levels[1].label,'第二关验收');assert.equal(persisted.levels[1].rewardPoints,11);assert.equal(persisted.levels[1].bounds.maxY,35);
+    assert.equal(persisted.levels[0].bombWarningAudio,'危险来袭.mp3');assert.equal(persisted.levels[0].bombExplosionAudio,'Ranking/bomb.mp3');assert.equal(persisted.levels[1].bombExplosionAudio,'危险来袭.mp3');
     await button('返回列表').click();
     await rankCard.getByRole('button',{name:'调试游戏',exact:true}).focus();await rankCard.getByRole('button',{name:'调试游戏',exact:true}).click();
     await page.locator('.editor-debug-workspace input[type=number]').nth(1).fill('2');await button('启动游戏').click();

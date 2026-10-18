@@ -57,6 +57,8 @@ const currentIdlePromptText = computed({
 
 const dirty = computed(
     () => draft.entryMethod !== saved.value.entryMethod
+    || draft.coinCount !== saved.value.coinCount
+    || draft.secondaryIdleSubtitleText !== saved.value.secondaryIdleSubtitleText
     || draft.memberPlatformHost !== saved.value.memberPlatformHost
     || Number(draft.memberPlatformPort) !== Number(saved.value.memberPlatformPort)
     || JSON.stringify(draft.touchIdlePromptTexts) !== JSON.stringify(saved.value.touchIdlePromptTexts)
@@ -115,6 +117,8 @@ function applySettings(settings) {
   const promptFontSize = Number(settings?.touchIdlePromptFontSize);
   const secondaryPromptFontSize = Number(settings?.secondaryIdlePromptFontSize);
   const normalized = {
+    coinCount: Number.isInteger(settings?.coinCount) && settings.coinCount >= 1 && settings.coinCount <= 999 ? settings.coinCount : 1,
+    secondaryIdleSubtitleText: typeof settings?.secondaryIdleSubtitleText === 'string' ? settings.secondaryIdleSubtitleText : '',
     entryMethod: ["touch", "coin", "wristband"].includes(settings?.entryMethod)
       ? settings.entryMethod
       : "touch",
@@ -148,6 +152,8 @@ function applySettings(settings) {
   };
   saved.value = normalized;
   draft.entryMethod = normalized.entryMethod;
+  draft.coinCount = normalized.coinCount;
+  draft.secondaryIdleSubtitleText = normalized.secondaryIdleSubtitleText;
   draft.memberPlatformHost = normalized.memberPlatformHost;
   draft.memberPlatformPort = normalized.memberPlatformPort;
   draft.touchIdlePromptTexts = normalized.touchIdlePromptTexts;
@@ -269,7 +275,7 @@ async function testMemberPlatform() {
       <template v-else>
         <section class="application-settings-connection">
           <label class="application-settings-field"><span>{{ t('management.appTitle') }}</span><input v-model.trim="draft.applicationTitle" type="text" maxlength="64" /></label>
-          <label class="application-settings-field"><span>{{ t('management.exitPassword') }}</span><input v-model="draft.touchExitPassword" type="password" inputmode="numeric" maxlength="12" /></label>
+          <label class="application-settings-field"><span>{{ t('management.exitPassword') }}</span><input v-model="draft.touchExitPassword" type="text" inputmode="numeric" maxlength="12" autocomplete="off" /></label>
           <div class="application-settings-actions"><button class="application-settings-secondary" type="button" @click="chooseApplicationIcon">{{ t('management.chooseIcon') }}</button><span>{{ applicationIconLabel }}</span></div>
           <div class="application-settings-actions application-settings-background-actions">
             <button class="application-settings-secondary" type="button" @click="chooseSecondaryBackground">{{ t('management.chooseSecondaryBackground') }}</button>
@@ -285,6 +291,10 @@ async function testMemberPlatform() {
           </select>
         </label>
 
+        <label v-if="draft.entryMethod === 'coin'" class="application-settings-field">
+          <span>{{ t('applicationSettings.coinCount') }}</span>
+          <input v-model.number="draft.coinCount" type="number" min="1" max="999" step="1" />
+        </label>
         <label class="application-settings-field">
           <span>{{ t("applicationSettings.idlePromptText") }}</span>
           <input
@@ -311,13 +321,17 @@ async function testMemberPlatform() {
 
         <section class="application-settings-connection">
           <label class="application-settings-field">
-            <span>{{ t("applicationSettings.secondaryIdlePromptText") }}</span>
+            <span>{{ t("applicationSettings.secondaryIdleTopTitle") }}</span>
             <input
               v-model.trim="draft.secondaryIdlePromptText"
               type="text"
               maxlength="64"
               autocomplete="off"
             />
+          </label>
+          <label class="application-settings-field">
+            <span>{{ t('applicationSettings.secondaryIdleBottomTitle') }}</span>
+            <input v-model.trim="draft.secondaryIdleSubtitleText" type="text" maxlength="64" autocomplete="off" />
           </label>
           <label class="application-settings-field">
             <span>{{ t("applicationSettings.secondaryIdlePromptFontSize") }}</span>

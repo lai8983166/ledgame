@@ -160,6 +160,32 @@ try {
     page.once('dialog',dialog=>dialog.accept());await button('删除当前关卡').click();assert.equal(await pills.count(),1);
     assert.equal(await pills.first().innerText(),'Ranking');assert.equal(await button('删除当前关卡').isDisabled(),true);
   });
+  await check('Rank类型专属音效选择试听、取消与切关独立，全局保存不覆盖且主保存可回读',async()=>{
+    await page.evaluate(()=>{
+      const one=window.fixture.doc.levels[0];
+      Object.assign(one,{label:'第一关',type:1,bombWarningAudio:'危险来袭.mp3',bombExplosionAudio:'Ranking/bomb.mp3'});
+      window.fixture.doc.levels=[one,{...structuredClone(one),label:'第二关',bombWarningAudio:'second-warning.mp3',bombExplosionAudio:'second-bomb.mp3'}];
+      Object.assign(window.fixture.doc.commonConfig,{rankBombWarningAudio:'obsolete-global.mp3',rankBombExplosionAudio:'obsolete-bomb.mp3'});
+    });
+    await mount('RankGameEditorView');
+    const warning=page.locator('[data-rank-field="level.bombWarningAudio"]'),explosion=page.locator('[data-rank-field="level.bombExplosionAudio"]');
+    assert.equal(await warning.locator('input').inputValue(),'危险来袭.mp3');assert.equal(await explosion.locator('audio').getAttribute('src'),'led-media://preview/Ranking/bomb.mp3');
+    await warning.getByRole('button',{name:'选择',exact:true}).click();await page.locator('.media-picker-dialog').getByRole('button',{name:'取消',exact:true}).click();assert.equal(await warning.locator('input').inputValue(),'危险来袭.mp3');
+    await warning.getByRole('button',{name:'选择',exact:true}).click();await page.locator('.media-picker-row[data-path="voice.mp3"]').click();await page.locator('.media-picker-actions .primary').click();
+    assert.equal(await warning.locator('audio').getAttribute('src'),'led-media://preview/voice.mp3');
+    await page.locator('.sequence-pill').nth(1).click();assert.equal(await warning.locator('input').inputValue(),'second-warning.mp3');
+    await explosion.getByRole('button',{name:'清除',exact:true}).click();
+    await button('全局配置').click();for(const name of ['炸弹预警音效','炸弹爆炸音效'])assert.equal(await page.locator('.global-config-dialog').getByText(name,{exact:true}).count(),0);
+    await field('名称').fill('音效独立');await page.locator('.global-config-actions .primary').click();await page.locator('.editor-save-dialog').waitFor();await close();
+    assert.deepEqual(await page.evaluate(()=>window.fixture.doc.levels.map(level=>level.bombWarningAudio)),['危险来袭.mp3','second-warning.mp3'],'局部保存不提交音效草稿');
+    assert.equal(await explosion.locator('input').inputValue(),'');
+    await button('保存').click();await page.locator('.editor-save-dialog').getByText('Rank 游戏已保存',{exact:true}).waitFor();await close();
+    await mount('RankGameEditorView');assert.equal(await warning.locator('input').inputValue(),'voice.mp3');assert.equal(await explosion.locator('input').inputValue(),'Ranking/bomb.mp3');
+    await page.locator('.sequence-pill').nth(1).click();assert.equal(await warning.locator('input').inputValue(),'second-warning.mp3');assert.equal(await explosion.locator('input').inputValue(),'');
+    await button('添加关卡').click();assert.equal(await warning.count(),0);assert.equal(await explosion.count(),0);
+    await page.locator('[data-rank-field="level.type"]').selectOption('1');assert.equal(await warning.locator('input').inputValue(),'');assert.equal(await explosion.locator('input').inputValue(),'');
+    await warning.scrollIntoViewIfNeeded();await page.screenshot({path:path.join(output,'Rank关卡炸弹音效.png')});
+  });
   assert.deepEqual(errors,[]);
 } catch(error){await page.screenshot({path:path.join(output,'失败.png')});throw error;}
 finally{await writeFile(path.join(output,'验收结果.json'),JSON.stringify({passed,errors},null,2));await browser.close();await server.close();}

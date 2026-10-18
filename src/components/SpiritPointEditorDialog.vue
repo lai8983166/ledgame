@@ -252,9 +252,9 @@ onBeforeUnmount(() => {
       </div>
 
       <div v-if="creating" class="spirit-editor-colors" role="radiogroup" :aria-label="t('spirits.color')">
-        <label v-for="value in [0, 1, 2, 3]" :key="value" :class="{ selected: color === value }" :style="{ '--spirit-color': spiritColorCss(value) }">
-          <input v-model.number="color" name="new-spirit-color" type="radio" :value="value" :disabled="saving" />
-          <span class="spirit-color-swatch" aria-hidden="true"></span>{{ t(`globalConfig.colors.color${value}`) }}
+        <label v-for="value in [0, 1, 2, 3]" :key="value" :class="{ selected: color === value }" :style="{ '--spirit-color': spiritColorCss(value) }" :title="t(`effect.colors.color${value}`)">
+          <input v-model.number="color" name="new-spirit-color" type="radio" :value="value" :disabled="saving" :aria-label="t(`effect.colors.color${value}`)" :title="t(`effect.colors.color${value}`)" />
+          <span class="spirit-color-swatch" aria-hidden="true"></span>
         </label>
       </div>
 

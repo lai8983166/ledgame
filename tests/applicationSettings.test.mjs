@@ -29,6 +29,8 @@ const DEFAULT_PROMPT_TEXTS = {
   "ar-SA": "ابدأ اللعبة",
 };
 const BRAND_DEFAULTS = {
+  coinCount: 1,
+  secondaryIdleSubtitleText: '',
   applicationTitle: "LED Game",
   applicationIconPath: null,
   secondaryDisplayBackgroundPath: null,
@@ -187,6 +189,21 @@ test("application settings migrate the legacy single idle prompt into localized 
   const normalized = normalizeApplicationSettings({ touchIdlePromptText: "自定义开始" });
   assert.equal(normalized.touchIdlePromptTexts["zh-CN"], "自定义开始");
   assert.equal(normalized.touchIdlePromptTexts["en-US"], "Start Game");
+});
+
+test('secondary subtitle and placeholder coin count persist independently of Touch',async()=>{
+  const directory=await mkdtemp(path.join(os.tmpdir(),'led-game-subtitle-'));
+  try {
+    const settingsPath=path.join(directory,'application.json'),store=createApplicationSettingsStore({fs,settingsPath});
+    const before=await store.get();
+    await store.update({secondaryIdlePromptText:'UPPER',secondaryIdleSubtitleText:' LOWER ',entryMethod:'coin',coinCount:3});
+    const saved=await createApplicationSettingsStore({fs,settingsPath}).get();
+    assert.equal(saved.secondaryIdleSubtitleText,'LOWER');assert.equal(saved.coinCount,3);
+    assert.deepEqual(saved.touchIdlePromptTexts,before.touchIdlePromptTexts);
+    await store.update({secondaryIdleSubtitleText:''});
+    for(const coinCount of [0,-1,1.5,1000,'2'])await assert.rejects(()=>store.update({coinCount}),/Coin count/);
+    await assert.rejects(()=>store.update({secondaryIdleSubtitleText:'x'.repeat(65)}),/subtitle/);
+  }finally{await rm(directory,{recursive:true,force:true});}
 });
 
 test("application title, managed icon and touch exit password persist with safe validation", async () => {

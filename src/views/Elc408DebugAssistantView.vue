@@ -1,15 +1,8 @@
 <script setup>
-import { ref } from "vue";
 import { useI18n } from "vue-i18n";
-import Elc408WiringPanel from "../components/elc408/Elc408WiringPanel.vue";
 import Elc408DebugToolsPanel from "../components/elc408/Elc408DebugToolsPanel.vue";
 
 const { t } = useI18n({ useScope: "global" });
-const activePanel = ref("wiringTools");
-const panels = [
-  { id: "wiringTools", label: "elc408.tabs.wiringTools" },
-  { id: "debugTools", label: "elc408.tabs.debugTools" },
-];
 </script>
 
 <template>
@@ -18,26 +11,9 @@ const panels = [
       <div class="elc408-heading-copy">
         <h1>{{ t("elc408.title") }}</h1>
       </div>
-      <nav class="elc408-segmented" role="tablist">
-        <button
-          v-for="panel in panels"
-          :key="panel.id"
-          type="button"
-          role="tab"
-          :aria-selected="activePanel === panel.id"
-          :class="['elc408-segment', { active: activePanel === panel.id }]"
-          @click="activePanel = panel.id"
-        >
-          {{ t(panel.label) }}
-        </button>
-      </nav>
     </header>
     <div class="elc408-panels">
-      <Elc408WiringPanel v-show="activePanel === 'wiringTools'" />
-      <Elc408DebugToolsPanel
-        v-show="activePanel === 'debugTools'"
-        :active="activePanel === 'debugTools'"
-      />
+      <Elc408DebugToolsPanel :active="true" />
     </div>
   </section>
 </template>

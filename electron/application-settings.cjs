@@ -33,6 +33,7 @@ const SECONDARY_DISPLAY_BACKGROUND_DEFAULT = null
 const SECONDARY_IDLE_MEDIA_DEFAULT = null
 const DEFAULT_APPLICATION_SETTINGS = Object.freeze({
   entryMethod: 'touch',
+  coinCount: 1,
   mode: 'game',
   memberPlatformHost: '127.0.0.1',
   memberPlatformPort: 8090,
@@ -40,6 +41,7 @@ const DEFAULT_APPLICATION_SETTINGS = Object.freeze({
   touchIdlePromptTexts: TOUCH_IDLE_PROMPT_DEFAULTS,
   touchIdlePromptFontSize: TOUCH_IDLE_PROMPT_FONT_SIZE_DEFAULT,
   secondaryIdlePromptText: SECONDARY_IDLE_PROMPT_DEFAULT,
+  secondaryIdleSubtitleText: '',
   secondaryIdlePromptFontSize: SECONDARY_IDLE_PROMPT_FONT_SIZE_DEFAULT,
   applicationTitle: APPLICATION_TITLE_DEFAULT,
   applicationIconPath: null,
@@ -144,6 +146,7 @@ function normalizeApplicationSettings(value) {
       : DEFAULT_APPLICATION_SETTINGS.entryMethod,
     // Global debug mode is retired; editor debugging owns its simulation session.
     mode: 'game',
+    coinCount: Number.isInteger(source.coinCount) && source.coinCount >= 1 && source.coinCount <= 999 ? source.coinCount : 1,
     memberPlatformHost: normalizeMemberPlatformHost(source.memberPlatformHost),
     memberPlatformPort: normalizeMemberPlatformPort(source.memberPlatformPort),
     secondaryDisplay: normalizeSecondaryDisplay(source.secondaryDisplay),
@@ -152,6 +155,7 @@ function normalizeApplicationSettings(value) {
     ),
     touchIdlePromptFontSize: normalizeTouchIdlePromptFontSize(source.touchIdlePromptFontSize),
     secondaryIdlePromptText: normalizeSecondaryIdlePromptText(source.secondaryIdlePromptText),
+    secondaryIdleSubtitleText: typeof source.secondaryIdleSubtitleText === 'string' && Array.from(source.secondaryIdleSubtitleText.trim()).length <= SECONDARY_IDLE_PROMPT_MAX_LENGTH ? source.secondaryIdleSubtitleText.trim() : '',
     secondaryIdlePromptFontSize: normalizeSecondaryIdlePromptFontSize(source.secondaryIdlePromptFontSize),
     applicationTitle: normalizeApplicationTitle(source.applicationTitle),
     applicationIconPath: typeof source.applicationIconPath === 'string' && source.applicationIconPath.trim()
@@ -168,6 +172,8 @@ function normalizeApplicationSettings(value) {
 
 function validateSettingsPatch(value) {
   const patch = value && typeof value === 'object' ? value : {}
+  if ('coinCount' in patch && (!Number.isInteger(patch.coinCount) || patch.coinCount < 1 || patch.coinCount > 999)) throw new Error('Coin count must be an integer between 1 and 999')
+  if ('secondaryIdleSubtitleText' in patch && (typeof patch.secondaryIdleSubtitleText !== 'string' || Array.from(patch.secondaryIdleSubtitleText.trim()).length > SECONDARY_IDLE_PROMPT_MAX_LENGTH)) throw new Error('Secondary idle subtitle must contain at most 64 characters')
   if ('entryMethod' in patch && !ENTRY_METHODS.includes(patch.entryMethod)) {
     throw new Error(`Unsupported entry method: ${patch.entryMethod}`)
   }

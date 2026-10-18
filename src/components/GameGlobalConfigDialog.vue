@@ -94,10 +94,6 @@ const sections = computed(() => {
     { label:t('rank.maxPlayers'), path:'maxPlayers', kind:'number', min:1 },
   );
   shared.push({ title:t('rank.playerColors'), columns:3, fields: (draft.value.palette || []).map((_,index) => ({ label:`${index+1}P`, path:`palette.${index}`, kind:'color' })) });
-  shared.find(section => section.title === t('globalConfig.soundEffects')).fields.push(
-    { label:t('rank.warningAudio'), path:'commonConfig.rankBombWarningAudio', kind:'media', accept:'audio' },
-    { label:t('rank.explosionAudio'), path:'commonConfig.rankBombExplosionAudio', kind:'media', accept:'audio' },
-  );
   return shared;
 });
 

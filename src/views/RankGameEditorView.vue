@@ -97,9 +97,6 @@ async function save(){
 }
 function openGlobalConfig(){
   globalError.value='';globalConfigDraft.value=JSON.parse(JSON.stringify(document.value));
-  const common=globalConfigDraft.value.commonConfig, first=levels.value[0];
-  common.rankBombWarningAudio??=first?.bombWarningAudio||'';
-  common.rankBombExplosionAudio??=first?.bombExplosionAudio||'';
   globalConfigOpen.value=true;
 }
 async function saveGlobalConfig(patch){
@@ -173,6 +170,10 @@ function goBack(){if(!dirty.value||confirmWithRendererFocus(t('rank.confirmLeave
         </div></label>
         <label><span>{{t('rank.bombAppearDelay')}}</span><input v-model.number="type1Config.bombWarningDelaySeconds" data-rank-field="level.bombWarningDelaySeconds" type="number" min="0" /></label>
         <label><span>{{t('rank.warningDuration')}}</span><input v-model.number="type1Config.bombWarningDurationSeconds" type="number" min="1" /></label>
+        <label v-for="field in [{key:'bombWarningAudio',label:'rank.warningAudio'},{key:'bombExplosionAudio',label:'rank.explosionAudio'}]" :key="field.key" class="rank-level-media" :data-rank-field="`level.${field.key}`"><span>{{t(field.label)}}</span><div>
+          <div class="rank-media-control"><input :value="mediaValue(field.key)" :placeholder="t('globalConfig.notSelected')" readonly /><button class="soft-button compact-button" type="button" @click="chooseMedia(field.key,'audio',t(field.label))">{{t('globalConfig.choose')}}</button><button class="soft-button compact-button" type="button" :disabled="!mediaValue(field.key)" @click="type1Config[field.key]=''">{{t('globalConfig.clear')}}</button></div>
+          <audio v-if="mediaValue(field.key)" :key="mediaValue(field.key)" :src="buildMediaPreviewUrl(mediaValue(field.key))" controls preload="none" />
+        </div></label>
         <label><span>{{t('rank.earlyRefresh')}}</span><input v-model="type1Config.earlyRefresh" type="checkbox" /></label>
         <label><span>{{t('rank.refreshSeconds')}}</span><input v-model.number="type1Config.refreshSeconds" type="number" min="1" /></label>
       </template>

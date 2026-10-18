@@ -28,6 +28,7 @@ const idleMediaType = ref("");
 const idleMediaFailed = ref(false);
 const idlePromptFading = ref(false);
 const secondaryIdlePromptText = ref("LED FLOOR GAME");
+const secondaryIdleSubtitleText = ref('');
 const secondaryIdlePromptFontSize = ref(72);
 const stateObservedAt = ref(Date.now());
 const clockNow = ref(Date.now());
@@ -118,6 +119,7 @@ function applyApplicationSettings(settings) {
     ? settings.secondaryIdlePromptText.trim()
     : "";
   secondaryIdlePromptText.value = text || "LED FLOOR GAME";
+  secondaryIdleSubtitleText.value = typeof settings?.secondaryIdleSubtitleText === 'string' ? settings.secondaryIdleSubtitleText.trim() : '';
   const fontSize = Number(settings?.secondaryIdlePromptFontSize);
   secondaryIdlePromptFontSize.value = Number.isInteger(fontSize) && fontSize >= 32 && fontSize <= 200
     ? fontSize
@@ -291,6 +293,7 @@ function displayValue(value) {
           :fading="idlePromptFading"
           @animation-end="idlePromptFading = false"
         />
+        <IdlePromptDisplay v-if="secondaryIdleSubtitleText" :text="secondaryIdleSubtitleText" :font-size="secondaryIdlePromptFontSize" :allow-wrap="true" :fading="idlePromptFading" @animation-end="idlePromptFading = false" />
       </div>
     </section>
 
@@ -397,7 +400,7 @@ function displayValue(value) {
 .secondary-runtime-content, .secondary-runtime-center { position: relative; z-index: 1; }
 .secondary-idle { position: relative; z-index: 1; width: 100%; height: 100%; overflow: hidden; }
 .secondary-idle-image, .secondary-idle-video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; background: #071018; }
-.secondary-idle-action { position: relative; z-index: 1; display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; background: rgba(7, 16, 24, 0.34); }
+.secondary-idle-action { position: relative; z-index: 1; display: flex; flex-direction:column; gap:3vh; align-items: center; justify-content: center; width: 100%; height: 100%; background: rgba(7, 16, 24, 0.34); }
 .secondary-runtime-center { height: 100%; display: grid; place-content: center; gap: 12px; padding: 6vh 7vw; text-align: center; }
 .secondary-runtime-center span, .game-heading > span { color: #63cde1; font-weight: 850; text-transform: uppercase; }
 .secondary-runtime-center h1, .secondary-runtime-center p { margin: 0; }

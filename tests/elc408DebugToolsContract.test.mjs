@@ -11,13 +11,11 @@ const viewSource = await readFile(
   "utf8",
 );
 
-test("debug assistant exposes wiring and debugging without the configuration panel", () => {
+test("debug assistant exposes only debug tools without duplicate wiring", () => {
   assert.doesNotMatch(viewSource, /id: "configuration"/);
-  assert.match(viewSource, /id: "wiringTools"/);
-  assert.match(viewSource, /id: "debugTools"/);
-  assert.equal((viewSource.match(/\{ id: "/g) || []).length, 2);
+  assert.doesNotMatch(viewSource, /wiringTools|activePanel/);
   assert.doesNotMatch(viewSource, /<Elc408ConfigurationPanel/);
-  assert.match(viewSource, /<Elc408WiringPanel/);
+  assert.doesNotMatch(viewSource, /<Elc408WiringPanel/);
   assert.match(viewSource, /<Elc408DebugToolsPanel/);
 });
 

@@ -549,7 +549,7 @@ function openLanguagePanel(event) {
 }
 
 function closeLanguagePanel(event) {
-  event?.stopPropagation();
+  event?.stopPropagation?.();
   languagePanelOpen.value = false;
 }
 
@@ -1244,7 +1244,7 @@ function closeExitKeypad() {
 }
 
 function appendExitDigit(digit) {
-  if (exitCode.value.length >= 6) return;
+  if (exitCode.value.length >= 12) return;
   exitCode.value += String(digit);
   exitError.value = "";
 }
@@ -2099,7 +2099,8 @@ async function confirmReturnToIdle() {
         <span class="touch-kicker">OPERATOR EXIT</span>
         <h2>{{ t("touch.exitFullScreen") }}</h2>
         <div class="touch-exit-code" aria-live="polite">
-          {{ "•".repeat(exitCode.length) || "—" }}
+          <span v-if="exitCode">{{ "•".repeat(exitCode.length) }}</span>
+          <span v-else class="touch-exit-caret" aria-hidden="true"></span>
         </div>
         <div class="touch-exit-grid">
           <button
@@ -3664,6 +3665,9 @@ fieldset:disabled {
   font-size: 34px;
   letter-spacing: 10px;
 }
+.touch-exit-caret { display:block; width:2px; height:32px; background:currentColor; animation:exit-caret-blink 1s steps(1) infinite; }
+@keyframes exit-caret-blink { 50% { opacity:0; } }
+@media (prefers-reduced-motion:reduce) { .touch-exit-caret { animation:none; } }
 
 .touch-exit-grid {
   display: grid;

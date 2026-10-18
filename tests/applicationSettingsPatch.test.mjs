@@ -43,12 +43,15 @@ test("application settings IPC patch includes the managed secondary background p
     touchIdlePromptTexts: {},
     touchIdlePromptFontSize: 72,
     secondaryIdlePromptText: "FLOOR READY",
+    secondaryIdleSubtitleText: "LET'S PLAY",
+    coinCount: 2,
     secondaryIdlePromptFontSize: 96,
     secondaryDisplayBackgroundPath: "C:\\data\\secondary-display-background.png",
     secondaryIdleMediaPath: "C:\\data\\secondary-idle-media-1.mp4",
   });
   assert.equal(patch.secondaryDisplayBackgroundPath, "C:\\data\\secondary-display-background.png");
   assert.equal(patch.secondaryIdlePromptText, "FLOOR READY");
+  assert.equal(patch.secondaryIdleSubtitleText, "LET'S PLAY");assert.equal(patch.coinCount,2);
   assert.equal(patch.secondaryIdlePromptFontSize, 96);
   assert.equal(patch.secondaryIdleMediaPath, "C:\\data\\secondary-idle-media-1.mp4");
 });

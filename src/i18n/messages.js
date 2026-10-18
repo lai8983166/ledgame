@@ -1479,6 +1479,19 @@ mergedMessages['en-US'].catalogMaintenance = {
   failed: 'Operation failed. Please retry.', importTitle: 'Choose game type to import', back: 'Exit debug and return to games',
 };
 
+const followupSettingLabels = {
+  'zh-CN':['副屏上标题','副屏下标题','投币数量'], 'en-US':['Secondary upper title','Secondary lower title','Coin count'],
+  'es-ES':['Título superior secundario','Título inferior secundario','Cantidad de monedas'], 'pt-PT':['Título superior secundário','Título inferior secundário','Número de moedas'],
+  'fr-FR':['Titre supérieur secondaire','Titre inférieur secondaire','Nombre de pièces'], 'de-DE':['Oberer Zweitbildschirmtitel','Unterer Zweitbildschirmtitel','Münzanzahl'],
+  'pl-PL':['Górny tytuł drugiego ekranu','Dolny tytuł drugiego ekranu','Liczba monet'], 'ru-RU':['Верхний заголовок второго экрана','Нижний заголовок второго экрана','Количество монет'],
+  'vi-VN':['Tiêu đề trên màn hình phụ','Tiêu đề dưới màn hình phụ','Số xu'], 'it-IT':['Titolo superiore secondario','Titolo inferiore secondario','Numero di monete'],
+  'cs-CZ':['Horní nadpis druhé obrazovky','Dolní nadpis druhé obrazovky','Počet mincí'], 'ko-KR':['보조 화면 위 제목','보조 화면 아래 제목','동전 개수'],
+  'ro-RO':['Titlu superior secundar','Titlu inferior secundar','Număr de monede'], 'ar-SA':['عنوان الشاشة الثانوية العلوي','عنوان الشاشة الثانوية السفلي','عدد العملات'],
+};
+for (const [locale,[secondaryIdleTopTitle,secondaryIdleBottomTitle,coinCount]] of Object.entries(followupSettingLabels)) {
+  mergedMessages[locale].applicationSettings = {...mergedMessages[locale].applicationSettings,secondaryIdleTopTitle,secondaryIdleBottomTitle,coinCount};
+}
+
 export const authoredMessages = Object.fromEntries(
   canonicalLocales.map((locale) => [locale, mergedMessages[locale] || {}]),
 );

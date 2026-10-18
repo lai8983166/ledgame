@@ -10,6 +10,8 @@ export function createApplicationSettingsPatch(settings) {
   if (settings && Object.prototype.hasOwnProperty.call(settings, "secondaryIdlePromptText")) {
     patch.secondaryIdlePromptText = settings.secondaryIdlePromptText;
   }
+  if (settings && Object.hasOwn(settings, 'secondaryIdleSubtitleText')) patch.secondaryIdleSubtitleText = settings.secondaryIdleSubtitleText;
+  if (settings && Object.hasOwn(settings, 'coinCount')) patch.coinCount = settings.coinCount;
   if (settings && Object.prototype.hasOwnProperty.call(settings, "secondaryIdlePromptFontSize")) {
     patch.secondaryIdlePromptFontSize = settings.secondaryIdlePromptFontSize;
   }

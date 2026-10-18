@@ -37,9 +37,10 @@ test('settings retain a custom hidden port when editing the host or other fields
   assert.match(view, /memberPlatformPort: Number\(draft.memberPlatformPort\)/);
 });
 
-test('hardware assistant starts with wiring and does not mount the old configuration tab', async () => {
+test('hardware assistant mounts only debug tools, per-game wiring remains separate', async () => {
   const view = await source('src/views/Elc408DebugAssistantView.vue');
-  assert.match(view, /activePanel = ref\("wiringTools"\)/);
+  assert.match(view, /<Elc408DebugToolsPanel :active="true"/);
+  assert.doesNotMatch(view, /Elc408WiringPanel|wiringTools/);
   assert.doesNotMatch(view, /Elc408ConfigurationPanel|id: "configuration"/);
 });
 
