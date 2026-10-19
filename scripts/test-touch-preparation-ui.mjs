@@ -20,7 +20,7 @@ await context.addInitScript(()=>{
   const games=[1,2,3,4].map(id=>({id,name:['Simple','Normal','Diffcult','Rank'][id-1],type:id===4?'rank':'default',firstCatalog:String(id===4?12:11),minPlayers:1,maxPlayers:6,participants:6,cover:id===4?'Breakthrough-mode.png':`Entertainment-Ｍode/${['简单','正常','困难'][id-1]}.png`,levels:[{durationSeconds:90}]}));
   const publish=()=>{stateListener?.(structuredClone(state));return {data:structuredClone(state)};};
   const participant=uid=>({member:{id:Number(uid),phone:'13800000000',name:`玩家${uid}`},access:{bindingId:Number(uid),uid,status:'READY',durationMinutes:30,remainingSeconds:1800}});
-  window.fixture={entryMethod:'wristband',failCount:false,failCategories:false,noCategories:false,scanDelay:0,canceled:[],updates:[],confirmed:[],
+  window.fixture={entryMethod:'wristband',failCount:false,failCategories:false,noCategories:false,scanDelay:0,failConfirm:null,canceled:[],updates:[],confirmed:[],
     reset(){state={engineState:'PREPARING',runtimeMode:'PRODUCTION',preparation:{sessionId:'test-'+ ++revision,revision,options:{userCount:1,startLevelIndex:0,launchMethod:this.entryMethod,runtimeMode:'PRODUCTION'}}};return publish();},
     scan(uid){scanListener?.({wristbandId:uid});},
     state:()=>structuredClone(state),
@@ -37,9 +37,10 @@ await context.addInitScript(()=>{
     createWristbandPreparation:async(id,uid)=>{await new Promise(r=>setTimeout(r,window.fixture.scanDelay));if(state.preparation?.sessionId!==id)throw Error('已取消');if(state.playerAccesses?.some(p=>p.access.uid===uid))throw Error('重复手环');state.playerAccesses=[...(state.playerAccesses||[]),participant(uid)];state.preparation.revision=++revision;return publish();},
     selectPreparationGame:async(id,gameId)=>{Object.assign(state.preparation,{gameId,revision:++revision});return publish();},
     getGameEditor:async id=>({data:{id,name:games[id-1].name,description:'踩亮得分地砖，避开陷阱，完成关卡挑战。',globalTimeLimit:true,globalTimeLimitValue:900,globalLifeLimit:true,globalLifeLimitValue:5,levels:Array.from({length:10},(_,i)=>({label:'Level '+(i+1),option:{timeLimitMode:'CYCLE_SECONDS',timeLimitValue:30,lifeLimitMode:'LIMITED',lifeLimitValue:3}}))}}),
+    getRankGameEditor:async id=>({data:{id,type:'rank',name:'Rank',description:'Rank instructions',palette:['#128944','#FFAA11','#6932AA','#22AAAA','#AA2288','#3344BB'],levels:[1,2,3].map(type=>({type,label:'Bomb '+(type*2+1),durationSeconds:90}))}}),
     cancelPreparation:async id=>{window.fixture.canceled.push(id);state={engineState:'IDLE'};return publish();},
     startSystemIdle:async()=>{state={engineState:'IDLE'};return publish();},createPreparation:async()=>window.fixture.reset(),
-    confirmPreparation:async id=>{window.fixture.confirmed.push({id,options:structuredClone(state.preparation.options)});state={engineState:'RUNNING',runtimeMode:'PRODUCTION'};return publish();},
+    confirmPreparation:async id=>{if(window.fixture.failConfirm)throw Error(window.fixture.failConfirm);window.fixture.confirmed.push({id,options:structuredClone(state.preparation.options)});state={engineState:'RUNNING',runtimeMode:'PRODUCTION'};return publish();},
   };
 });
 const page=await context.newPage(),errors=[],passed=[];
@@ -75,6 +76,32 @@ try{
     await page.setViewportSize({width:1366,height:768});await page.getByTestId('game-level-3').click();await page.getByTestId('game-start').click();
     await page.locator('.touch-shell[data-state="RUNNING"]').waitFor({timeout:10000});
     const options=await page.evaluate(()=>window.fixture.confirmed.at(-1).options);assert.equal(options.userCount,2);assert.equal(options.startLevelIndex,3);
+  });
+  await check('Rank本局真实配色、矩形色块、多关卡选择及无控制器弹窗/关闭/重试',async()=>{
+    await page.evaluate(()=>{window.fixture.entryMethod='wristband';window.fixture.reset();});await mount();
+    await page.getByTestId('game-player-count-2').click();await step('wristband');
+    await page.evaluate(()=>window.fixture.scan('201'));await page.locator('[data-player-progress="1/2"]').waitFor();
+    await page.evaluate(()=>window.fixture.scan('202'));await step('game');
+    await page.getByTestId('game-category-12').click();await page.locator('.touch-carousel-card.current').click();await step('level');
+    const row=page.getByTestId('rank-player-colors');await row.waitFor();
+    assert.deepEqual(await row.locator('rect').evaluateAll(nodes=>nodes.map(node=>node.getAttribute('fill'))),['#128944','#FFAA11']);
+    for(const [width,height] of [[1366,768],[1280,600],[1920,1080]]){
+      await page.setViewportSize({width,height});const box=await row.boundingBox(),picker=await page.locator('.touch-level-picker').boundingBox();
+      assert.ok(box.y+box.height<=picker.y+1);const start=await page.getByTestId('game-start').boundingBox();assert.ok(start.y+start.height<=height);
+    }
+    await page.setViewportSize({width:1366,height:768});await shot('Rank玩家配色');
+    await page.getByTestId('game-level-2').click();await page.evaluate(()=>window.fixture.failConfirm='503: ELC408_NO_CONTROLLERS: SEARCH_NO_CONTROLLERS: no controller discovered');
+    await page.getByTestId('game-start').click();await page.getByTestId('touch-hardware-notice').waitFor({timeout:10000});await step('level');
+    assert.match(await page.getByTestId('touch-hardware-notice').innerText(),/未连接设备/);await shot('手环无设备弹窗');
+    await page.getByTestId('touch-hardware-close').click();await page.getByTestId('touch-hardware-notice').waitFor({state:'detached'});
+    assert.equal(await page.evaluate(()=>window.fixture.state().engineState),'PREPARING');
+    await page.getByTestId('game-start').click();await page.getByTestId('touch-hardware-notice').waitFor({timeout:10000});
+    await page.getByTestId('touch-hardware-notice').waitFor({state:'detached',timeout:4000});
+    await page.evaluate(()=>window.fixture.failConfirm='503: ELC408_RUNTIME_DISABLED: disabled');await page.getByTestId('game-start').click();
+    await page.getByTestId('game-error').filter({hasText:'ELC408_RUNTIME_DISABLED'}).waitFor({timeout:10000});await step('level');
+    assert.equal(await page.getByTestId('touch-hardware-notice').count(),0);
+    await page.evaluate(()=>window.fixture.failConfirm=null);await page.getByTestId('game-start').click();await page.locator('.touch-shell[data-state="RUNNING"]').waitFor({timeout:10000});
+    assert.equal(await page.evaluate(()=>window.fixture.confirmed.at(-1).options.startLevelIndex),2);
   });
   await check('触屏跳过刷卡；没有分类可用；分类读取失败重试',async()=>{
     await page.evaluate(()=>{window.fixture.entryMethod='touch';window.fixture.noCategories=true;window.fixture.reset();});await mount();

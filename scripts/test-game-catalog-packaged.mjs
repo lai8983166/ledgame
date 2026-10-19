@@ -36,7 +36,7 @@ async function create(family, name) {
   const document = (await request('/games/draft', 'POST', { family })).data;
   document.name = name; if (family === 'ranked') document.displayName = name;
   document.childModeVisible = false;
-  if(family==='ranked')Object.assign(document.levels[0],{bombWarningAudio:'危险来袭.mp3',bombExplosionAudio:'Ranking/bomb.mp3'});
+  if(family==='ranked')Object.assign(document.levels[0],{type:2,bombWarningAudio:'危险来袭.mp3',bombExplosionAudio:'Ranking/bomb.mp3'});
   document.globalTimeLimit = true; document.globalTimeLimitValue = 120;
   if (family === 'entertainment') {
     document.cover = 'cover.png';
@@ -198,13 +198,14 @@ try {
     await rankName.fill(originalName);await page.locator('.global-config-actions .primary').click();
     await expect(page.locator('.editor-save-dialog h2')).toHaveText('保存成功');
     await page.locator('.editor-save-dialog button').click();
-    await button('添加关卡').click();await page.locator('[data-rank-field="level.type"]').selectOption('1');
+    await button('添加关卡').click();await page.locator('[data-rank-field="level.type"]').selectOption('3');
     await page.locator('[data-rank-field="level.label"]').fill('第二关验收');await page.locator('[data-rank-field="level.durationSeconds"]').fill('1');await page.locator('[data-rank-field="level.rewardPoints"]').fill('11');
     const explosion=page.locator('[data-rank-field="level.bombExplosionAudio"]');
     await explosion.getByRole('button',{name:'选择',exact:true}).click();
     await page.locator('.media-picker-row[data-path="危险来袭.mp3"]').click();await page.locator('.media-picker-actions .primary').click();
     await page.locator('.rank-actions .primary').click();await expect(page.locator('.editor-save-dialog h2')).toHaveText('保存成功');await page.locator('.editor-save-dialog button').click();
     const persisted=(await request(`/rank-game-editor/${rank}`)).data;assert.equal(persisted.levels.length,2);assert.equal(persisted.levels[1].label,'第二关验收');assert.equal(persisted.levels[1].rewardPoints,11);assert.equal(persisted.levels[1].bounds.maxY,35);
+    assert.deepEqual(persisted.levels.map(level=>level.type),[2,3]);
     assert.equal(persisted.levels[0].bombWarningAudio,'危险来袭.mp3');assert.equal(persisted.levels[0].bombExplosionAudio,'Ranking/bomb.mp3');assert.equal(persisted.levels[1].bombExplosionAudio,'危险来袭.mp3');
     await button('返回列表').click();
     await rankCard.getByRole('button',{name:'调试游戏',exact:true}).focus();await rankCard.getByRole('button',{name:'调试游戏',exact:true}).click();

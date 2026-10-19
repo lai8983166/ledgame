@@ -140,7 +140,8 @@ try {
     await button('添加关卡').click();assert.equal(await page.evaluate(()=>window.getComponentSetup().type1Config.type),null);
     assert.equal(await page.getByText('每玩家目标',{exact:true}).count(),0);
     await button('保存').click();await page.locator('.editor-save-dialog').getByText(/请选择类型/).waitFor();await close();
-    await page.locator('[data-rank-field="level.type"]').selectOption('1');await page.locator('[data-rank-field="level.label"]').fill('第二关');
+    assert.deepEqual(await page.locator('[data-rank-field="level.type"] option').allTextContents(),['请选择类型','炸弹3x3','炸弹5x5','炸弹7x7']);
+    await page.locator('[data-rank-field="level.type"]').selectOption('2');await page.locator('[data-rank-field="level.label"]').fill('第二关');
     await page.locator('[data-rank-field="level.targets"]').fill('4,2');await button('保存').click();await page.locator('.editor-save-dialog').getByText(/min,max/).waitFor();await close();
     await page.locator('[data-rank-field="level.targets"]').fill('2,4');await page.locator('[data-rank-field="level.bombs"]').fill('0,1');
     const media=page.locator('.rank-level-media');await media.nth(0).getByRole('button',{name:'选择',exact:true}).click();
@@ -150,6 +151,9 @@ try {
     const persisted=await page.evaluate(()=>window.fixture.doc);assert.equal(persisted.levels.length,2);assert.equal(persisted.levels[0].rewardPoints,55);assert.equal(persisted.levels[0].startGif,'old.gif');
     assert.equal(persisted.levels[1].startGif,'intro.gif');assert.equal(persisted.levels[1].gameplayIntro,'voice.mp3');assert.equal(persisted.levels[1].targetsPerPlayerMax,4);assert.equal(persisted.levels[1].bounds.maxY,39);
     await mount('RankGameEditorView');assert.equal(await page.locator('.sequence-pill').count(),2);await page.locator('.sequence-pill').nth(1).click();assert.equal(await page.locator('[data-rank-field="level.label"]').inputValue(),'第二关');
+    assert.equal(await page.locator('[data-rank-field="level.type"]').inputValue(),'2');
+    await page.locator('[data-rank-field="level.type"]').selectOption('3');await button('保存').click();await page.locator('.editor-save-dialog').getByText('Rank 游戏已保存',{exact:true}).waitFor();await close();
+    assert.equal(await page.evaluate(()=>window.fixture.doc.levels[1].type),3);
     await page.screenshot({path:path.join(output,'Rank多关卡.png')});
   });
   await check('Rank拖动保留选中关卡和媒体，删除取消不修改、确认只删除目标关卡',async()=>{

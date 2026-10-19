@@ -29,6 +29,8 @@ button {
 }
 
 .app-shell {
+  position: relative;
+  isolation: isolate;
   color: var(--ui-text-secondary);
   font-family: var(--ui-font);
   color-scheme: dark;
@@ -38,10 +40,36 @@ button {
   min-height: 0;
   padding: clamp(18px, 3vh, 42px);
   overflow: hidden;
-  background:
-    radial-gradient(ellipse at 8% 0%, rgba(168, 85, 247, 0.12), transparent 52%),
-    radial-gradient(ellipse at 100% 85%, rgba(0, 240, 255, 0.04), transparent 55%),
-    var(--ui-base);
+  background: var(--ui-base);
+}
+
+/* Match the Vue reference backdrop without tinting content or other windows. */
+.app-shell::before,
+.app-shell::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+}
+
+.app-shell::before {
+  background: repeating-linear-gradient(
+    0deg,
+    transparent 0px,
+    transparent 2px,
+    rgba(0, 240, 255, 0.025) 3px,
+    transparent 4px
+  );
+}
+
+.app-shell::after {
+  background-image:
+    linear-gradient(rgba(0, 240, 255, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 240, 255, 0.04) 1px, transparent 1px);
+  background-size: 60px 60px;
+  mask-image: radial-gradient(ellipse 80% 60% at 50% 50%, black 30%, transparent 80%);
+  -webkit-mask-image: radial-gradient(ellipse 80% 60% at 50% 50%, black 30%, transparent 80%);
 }
 
 .app-shell--custom-titlebar {

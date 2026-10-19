@@ -1,3 +1,5 @@
+export const RANK_BOMB_TYPES = Object.freeze([1, 2, 3]);
+
 export function createRankEditorPayload(value, gameId) {
   const payload = JSON.parse(JSON.stringify(value && typeof value === "object" ? value : {}));
   const normalizedId = Number(gameId);

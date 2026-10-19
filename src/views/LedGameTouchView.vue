@@ -90,6 +90,10 @@ const catalogRefreshError = ref(false);
 const gameInitializationWarning = ref("");
 const busyAction = ref("");
 const errorMessage = ref("");
+const hardwareNoticeOpen = ref(false);
+const hardwareNoticeDialog = ref(null);
+let hardwareNoticeTimer = null;
+let hardwareNoticeReturnFocus = null;
 const queuePanelOpen = ref(false);
 const queueUid = ref("");
 const queueGameId = ref(null);
@@ -242,6 +246,23 @@ const gameLevels = computed(() => gameDocument.value?.levels || []);
 const selectedWizardLevel = computed(
   () => gameLevels.value[draft.startLevelIndex] || gameLevels.value[0] || null,
 );
+const rankPreparationColors = computed(() => selectedGame.value?.type === 'rank'
+  ? (gameDocument.value?.palette || []).slice(0, requiredPlayerCount.value) : []);
+
+function closeHardwareNotice() {
+  clearTimeout(hardwareNoticeTimer);
+  hardwareNoticeOpen.value = false;
+  if (hardwareNoticeReturnFocus?.isConnected) hardwareNoticeReturnFocus.focus({ preventScroll: true });
+}
+async function showHardwareNotice() {
+  clearTimeout(hardwareNoticeTimer);
+  hardwareNoticeReturnFocus = document.activeElement;
+  hardwareNoticeOpen.value = true;
+  await nextTick();
+  if (!touchMounted) return;
+  hardwareNoticeDialog.value?.querySelector('button')?.focus();
+  hardwareNoticeTimer = setTimeout(closeHardwareNotice, 2000);
+}
 const gameBackgroundStyle = computed(() =>
   gameBackgroundUrl.value
     ? { backgroundImage: `url("${gameBackgroundUrl.value}")` }
@@ -304,6 +325,7 @@ onUnmounted(() => {
   removeWristbandListener?.();
   removeCatalogListener?.();
   clearTimeout(wristbandAdvanceTimer);
+  clearTimeout(hardwareNoticeTimer);
   window.clearInterval(playerAccessClockTimer);
   stopIdlePromptAnimation();
   stopGameCountdown();
@@ -1017,16 +1039,14 @@ async function showLevelSelection() {
     applyRuntimeState(selection?.data ?? selection);
     draft.userCount = selectedPlayers;
     const detail = game.type === "rank"
-      ? rankTouchDocument(game)
+      ? rankTouchDocument((await api.getRankGameEditor(game.id))?.data)
       : await api.getGameEditor(game.id);
     const normalized = normalizeTouchGameDocument(detail, game);
     if (!normalized.levels.length) {
       throw new Error(t("touch.noSelectableLevels"));
     }
     gameDocument.value = normalized;
-    draft.startLevelIndex = game.type === "rank"
-      ? 0
-      : Math.min(
+    draft.startLevelIndex = Math.min(
           Math.max(0, Math.floor(Number(draft.startLevelIndex) || 0)),
           normalized.levels.length - 1,
         );
@@ -1047,8 +1067,10 @@ function rankTouchDocument(game) {
     id: game.id,
     name: game.displayName || game.name,
     description: game.description || "",
-    globalTimeLimit: false,
-    levels: (game.levels || []).slice(0, 1).map((level) => ({
+    globalTimeLimit: Boolean(game.globalTimeLimit),
+    globalTimeLimitValue: game.globalTimeLimitValue,
+    palette: game.palette,
+    levels: (game.levels || []).map((level) => ({
       label: level.label,
       option: {
         timeLimit: true,
@@ -1061,10 +1083,6 @@ function rankTouchDocument(game) {
 }
 
 function selectWizardLevel(index) {
-  if (selectedGame.value?.type === "rank") {
-    draft.startLevelIndex = 0;
-    return;
-  }
   const normalized = Math.floor(Number(index));
   if (normalized < 0 || normalized >= gameLevels.value.length) return;
   draft.startLevelIndex = normalized;
@@ -1167,9 +1185,7 @@ function levelLifeText(level) {
 function preparationPatch() {
   return {
     userCount: Math.max(1, Math.floor(Number(draft.userCount) || 1)),
-    startLevelIndex: selectedGame.value?.type === "rank"
-      ? 0
-      : Math.max(0, Math.floor(Number(draft.startLevelIndex) || 0)),
+    startLevelIndex: Math.max(0, Math.floor(Number(draft.startLevelIndex) || 0)),
     stageFailurePolicy:
       draft.stageFailurePolicy === "RETRY" ? "RETRY" : "END_GAME",
     launchMethod: preparation.value?.options.launchMethod || "touch",
@@ -1202,6 +1218,9 @@ async function confirmPreparation() {
         const actionError = localizedOperationError(error);
         await refreshState();
         errorMessage.value = actionError;
+        if (isGamePresentation.value && /ELC408_NO_CONTROLLERS|SEARCH_NO_CONTROLLERS/.test(String(error?.message || error))) {
+          await showHardwareNotice();
+        }
       },
     });
   } catch (_error) {
@@ -1586,7 +1605,7 @@ async function confirmReturnToIdle() {
         class="touch-wizard-screen touch-level-step touch-catalog-layout"
       >
         <TouchCategoryRail :categories="touchCategories" :cover-urls="categoryCoverUrls" :selected-id="selectedCategoryId" :disabled="Boolean(busyAction)" @select="selectTouchCategory" />
-        <div class="touch-catalog-panel touch-level-panel">
+        <div class="touch-catalog-panel touch-level-panel" :class="{'touch-level-panel--rank': rankPreparationColors.length}">
         <div class="touch-game-description">
           <strong>{{ t("touch.gameDescription") }} <span>{{ gameDocument?.name || selectedGame?.displayName || selectedGame?.name }}</span></strong>
           <p>{{ gameDocument?.description || t("touch.noGameDescription") }}</p>
@@ -1600,6 +1619,13 @@ async function confirmReturnToIdle() {
           <div>
             <span>{{ t("touch.lifeValue") }}</span>
             <strong>{{ levelLifeText(selectedWizardLevel) }}</strong>
+          </div>
+        </div>
+
+        <div v-if="rankPreparationColors.length" class="touch-rank-preparation-colors" data-testid="rank-player-colors" :aria-label="t('rank.playerColors')">
+          <div v-for="(color,index) in rankPreparationColors" :key="index">
+            <span>{{ index + 1 }}P</span>
+            <svg width="64" height="28" viewBox="0 0 64 28" role="img" :aria-label="`${index + 1}P ${color}`"><rect width="64" height="28" :fill="color" /></svg>
           </div>
         </div>
 
@@ -2161,10 +2187,24 @@ async function confirmReturnToIdle() {
         />
       </section>
     </div>
+    <div v-if="hardwareNoticeOpen" class="touch-hardware-backdrop" @click.self="closeHardwareNotice">
+      <section ref="hardwareNoticeDialog" class="touch-hardware-dialog" role="dialog" aria-modal="true" :aria-label="t('editorDebug.deviceNotConnected')" data-testid="touch-hardware-notice" @keydown.esc.stop="closeHardwareNotice">
+        <p>{{ t('editorDebug.deviceNotConnected') }}</p>
+        <button type="button" data-testid="touch-hardware-close" :aria-label="t('common.close')" @click="closeHardwareNotice">×</button>
+      </section>
+    </div>
   </main>
 </template>
 
 <style scoped>
+.touch-hardware-backdrop{position:fixed;inset:0;z-index:1100;display:grid;place-items:center;background:#0008}
+.touch-hardware-dialog{display:flex;align-items:center;gap:32px;padding:24px 28px;border:1px solid #ddd;border-radius:12px;background:#fff;color:#111;box-shadow:0 12px 48px #0008}
+.touch-hardware-dialog p{margin:0;font-size:24px;font-weight:600}
+.touch-hardware-dialog button{width:40px;height:40px;font-size:28px;color:#111;background:#f3f3f3;border:1px solid #bbb;border-radius:6px;cursor:pointer}
+.touch-level-panel.touch-level-panel--rank{grid-template-rows:minmax(60px,.6fr) auto auto minmax(0,1fr) auto}
+.touch-rank-preparation-colors{display:flex;flex-wrap:wrap;gap:12px 24px;align-items:center}
+.touch-rank-preparation-colors>div{display:flex;align-items:center;gap:10px;font-size:clamp(16px,1.4vw,26px)}
+.touch-rank-preparation-colors svg{display:block;width:clamp(36px,4vw,64px);height:24px;border:1px solid #ffffff80}
 .touch-shell {
   position: relative;
   width: 100vw;

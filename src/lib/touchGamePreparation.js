@@ -103,6 +103,7 @@ export function normalizeTouchGameDocument(value, fallback = {}) {
     globalTimeLimitValue: positiveInteger(document.globalTimeLimitValue),
     globalLifeLimit: Boolean(document.globalLifeLimit),
     globalLifeLimitValue: positiveInteger(document.globalLifeLimitValue),
+    ...(Array.isArray(document.palette) ? { palette: document.palette.slice(0, 6) } : {}),
     levels,
   };
 }

@@ -5,6 +5,16 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { createRankEditorPayload, createRankLevel, normalizeRankEditorDocument, parseRankRange, applyRankGlobalConfig } from "../src/lib/rankGameEditor.js";
+import { RANK_BOMB_TYPES } from "../src/lib/rankGameEditor.js";
+
+test('all bomb sizes keep their subtype, bounds and independent audio in editor payloads',()=>{
+  assert.deepEqual(RANK_BOMB_TYPES,[1,2,3]);
+  const levels=RANK_BOMB_TYPES.map(type=>({...createRankLevel(),type,bombExplosionAudio:`bomb-${type}.mp3`}));
+  const payload=createRankEditorPayload({levels},9);
+  assert.deepEqual(payload.levels.map(level=>level.type),[1,2,3]);
+  assert.deepEqual(payload.levels.map(level=>level.bombExplosionAudio),['bomb-1.mp3','bomb-2.mp3','bomb-3.mp3']);
+  assert.ok(payload.levels.every(level=>level.bounds.maxY===35));
+});
 
 test("Rank editor detaches reactive proxies and converts displayed coordinates for IPC", () => {
   const level = new Proxy({ type: 1, bounds: { minX: 1, minY: 1, maxX: 16, maxY: 36 } }, {});

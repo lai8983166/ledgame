@@ -2,7 +2,7 @@
 import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { extractErrorMessage } from '../lib/gameFlowState.js';
-import { createRankEditorPayload, createRankLevel, normalizeRankEditorDocument, applyRankGlobalConfig, parseRankRange } from '../lib/rankGameEditor.js';
+import { RANK_BOMB_TYPES, createRankEditorPayload, createRankLevel, normalizeRankEditorDocument, applyRankGlobalConfig, parseRankRange } from '../lib/rankGameEditor.js';
 import { confirmWithRendererFocus } from '../lib/rendererFocus.js';
 import { normalizeGameCategoryList } from '../lib/gameCategories.js';
 import { buildMediaPreviewUrl } from '../lib/mediaPreview.js';
@@ -73,8 +73,8 @@ async function validatePayload(payload){
   const missing=requiredEditorFields(document.value,true);
   if(missing.length)throw Error(t('editorSave.required')+'\n'+missing.map(field=>t(field.label)).join('\n'));
   for(const [index,level] of levels.value.entries()){
-    const invalid=level?.type!==1||Object.entries(rangeDrafts.get(level)||{}).some(([kind,text])=>!parseRankRange(text,kind==='targets'?1:0));
-    if(invalid){activeLevelIndex.value=index;throw Error(`${level?.label||index+1}: ${t(level?.type!==1?'rank.selectType':'rank.rangeInvalid')}`);}
+    const invalid=!RANK_BOMB_TYPES.includes(level?.type)||Object.entries(rangeDrafts.get(level)||{}).some(([kind,text])=>!parseRankRange(text,kind==='targets'?1:0));
+    if(invalid){activeLevelIndex.value=index;throw Error(`${level?.label||index+1}: ${t(!RANK_BOMB_TYPES.includes(level?.type)?'rank.selectType':'rank.rangeInvalid')}`);}
   }
   const result=await api.validateRankGameEditor(payload), validation=result?.data??result;
   if(!validation?.valid){
@@ -162,8 +162,8 @@ function goBack(){if(!dirty.value||confirmWithRendererFocus(t('rank.confirmLeave
         <audio v-if="mediaValue(field.key)" :key="mediaValue(field.key)" :src="buildMediaPreviewUrl(mediaValue(field.key))" controls preload="none" />
       </div></label>
       <label v-for="field in ['minX','maxX','minY','maxY']" :key="field"><span>{{t(`rank.${field}`)}}</span><input v-model.number="type1Config.bounds[field]" :data-rank-field="`level.bounds.${field}`" type="number" min="1" :max="field.endsWith('X')?document.siteSizeWidth:document.siteSizeHeight" /></label>
-      <label><span class="editor-required-label">{{t('globalConfig.type')}}</span><select v-model="type1Config.type" data-rank-field="level.type"><option :value="null" disabled>{{t('rank.selectType')}}</option><option :value="1">{{t('rank.type1')}}</option></select></label>
-      <template v-if="type1Config.type===1">
+      <label><span class="editor-required-label">{{t('globalConfig.type')}}</span><select v-model="type1Config.type" data-rank-field="level.type"><option :value="null" disabled>{{t('rank.selectType')}}</option><option v-for="type in RANK_BOMB_TYPES" :key="type" :value="type">{{t(`rank.type${type}`)}}</option></select></label>
+      <template v-if="RANK_BOMB_TYPES.includes(type1Config.type)">
         <label v-for="field in [{key:'targets',label:'rank.targetRange'},{key:'bombs',label:'rank.bombRange'}]" :key="field.key"><span>{{t(field.label)}}</span><div>
           <input :value="rangeText(field.key)" :data-rank-field="`level.${field.key}`" :placeholder="t('rank.rangePlaceholder')" :aria-invalid="rangeInvalid(field.key)" @input="setRange(field.key,$event.target.value)" />
           <small v-if="rangeInvalid(field.key)" class="field-error">{{t('rank.rangeInvalid')}}</small>

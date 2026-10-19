@@ -21,6 +21,16 @@ try {
   app=await _electron.launch({executablePath:path.join(root,'release/win-unpacked/LED Game.exe'),env,timeout:90000});
   await expect.poll(()=>{page=app.windows().find(page=>page.url().includes('/dist/index.html')&&!page.url().includes('window='));return Boolean(page);},{timeout:90000}).toBe(true);
   page.on('pageerror',error=>errors.push(error.message));await page.getByTestId('game-menu-button').waitFor();await page.bringToFront();await page.setViewportSize({width:1366,height:768});
+  const backdrop=await page.locator('.app-shell').evaluate(node=>({
+    color:getComputedStyle(node).backgroundColor,image:getComputedStyle(node).backgroundImage,
+    isolation:getComputedStyle(node).isolation,
+    layers:['::before','::after'].map(p=>{const s=getComputedStyle(node,p);return{content:s.content,z:s.zIndex,pointer:s.pointerEvents,size:s.backgroundSize};}),
+  }));
+  assert.equal(backdrop.color,'rgb(10, 1, 24)');assert.equal(backdrop.image,'none');assert.equal(backdrop.isolation,'isolate');
+  assert.ok(backdrop.layers.every(layer=>layer.content==='""'&&layer.z==='-1'&&layer.pointer==='none'));
+  assert.ok(backdrop.layers[1].size.split(',').every(size=>size.trim()==='60px 60px'));
+  await page.screenshot({path:path.join(data,'主窗口背景.png')});
+  records.push({action:'真实EXE主窗口参考底色、扫描线和网格隔离',passed:true});
   const doc=(await request('/games/draft','POST',{family:'entertainment'})).data;
   Object.assign(doc,{name:'闪屏隔离验收',cover:'cover.png',firstCatalog:'验收',siteSizeWidth:16,siteSizeHeight:36,
     audio:{scoreSound:'score.mp3',injurySound:'injury.mp3',purpleSound:'double.mp3'},gif:{standby:'idle.gif',gameFailure:'fail.gif',gameOver:'over.gif'},
