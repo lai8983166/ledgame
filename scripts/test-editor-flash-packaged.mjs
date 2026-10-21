@@ -26,8 +26,11 @@ try {
     isolation:getComputedStyle(node).isolation,
     layers:['::before','::after'].map(p=>{const s=getComputedStyle(node,p);return{content:s.content,z:s.zIndex,pointer:s.pointerEvents,size:s.backgroundSize};}),
   }));
-  assert.equal(backdrop.color,'rgb(10, 1, 24)');assert.equal(backdrop.image,'none');assert.equal(backdrop.isolation,'isolate');
-  assert.ok(backdrop.layers.every(layer=>layer.content==='""'&&layer.z==='-1'&&layer.pointer==='none'));
+  assert.equal(backdrop.color,'rgb(10, 1, 24)');assert.equal(backdrop.isolation,'isolate');
+  assert.equal((backdrop.image.match(/radial-gradient/g)||[]).length,3);
+  for(const color of ['rgba(168, 85, 247, 0.18)','rgba(0, 240, 255, 0.1)','rgba(255, 0, 212, 0.12)'])assert.ok(backdrop.image.includes(color));
+  assert.ok(backdrop.layers.every(layer=>layer.content==='""'&&layer.pointer==='none'));
+  assert.deepEqual(backdrop.layers.map(layer=>layer.z),['-1','-2']);
   assert.ok(backdrop.layers[1].size.split(',').every(size=>size.trim()==='60px 60px'));
   await page.screenshot({path:path.join(data,'主窗口背景.png')});
   records.push({action:'真实EXE主窗口参考底色、扫描线和网格隔离',passed:true});

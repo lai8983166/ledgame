@@ -40,10 +40,14 @@ button {
   min-height: 0;
   padding: clamp(18px, 3vh, 42px);
   overflow: hidden;
-  background: var(--ui-base);
+  background:
+    radial-gradient(ellipse 80% 50% at 50% 0%, rgba(168, 85, 247, 0.18) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 40% at 20% 100%, rgba(0, 240, 255, 0.1) 0%, transparent 50%),
+    radial-gradient(ellipse 70% 50% at 80% 80%, rgba(255, 0, 212, 0.12) 0%, transparent 55%),
+    var(--ui-base);
 }
 
-/* Match the Vue reference backdrop without tinting content or other windows. */
+/* Match the full-page Style A reference without tinting content or other windows. */
 .app-shell::before,
 .app-shell::after {
   content: '';
@@ -64,6 +68,7 @@ button {
 }
 
 .app-shell::after {
+  z-index: -2;
   background-image:
     linear-gradient(rgba(0, 240, 255, 0.04) 1px, transparent 1px),
     linear-gradient(90deg, rgba(0, 240, 255, 0.04) 1px, transparent 1px);

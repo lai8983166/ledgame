@@ -5,8 +5,9 @@ import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 const {chromium}=createRequire(path.join(root,'../ledGame-platform/package.json'))('playwright');
-const reference=path.join(root,'../Grid-Vue-Component-Library-Style/src/styles');
-const referenceCss=(await readFile(path.join(reference,'tokens.css'),'utf8'))+(await readFile(path.join(reference,'base.css'),'utf8')).replace(/@import[^;]+;/g,'');
+const reference=path.join(root,'../game清单/style-a-neon.html');
+const referenceCss=(await readFile(reference,'utf8')).match(/<style>([\s\S]*?)<\/style>/)?.[1];
+assert.ok(referenceCss,'新版参考页面包含样式');
 const gameCss=(await readFile(path.join(root,'src/styles/cyber-neon-tokens.css'),'utf8'))+(await readFile(path.join(root,'src/style.css'),'utf8')).replace(/@import[^;]+;/g,'');
 const cache=path.join(process.env.LOCALAPPDATA,'ms-playwright'),chrome=(await readdir(cache)).filter(x=>/^chromium-\d+$/.test(x)).sort().at(-1);
 const browser=await chromium.launch({executablePath:path.join(cache,chrome,'chrome-win64/chrome.exe')});
@@ -38,10 +39,14 @@ try{
   for(const [width,height,dpr] of [[1280,720,1],[1920,1080,1],[1280,720,1.25]]){
     const context=await browser.newContext({viewport:{width,height},deviceScaleFactor:dpr}),page=await context.newPage();
     await paint(page,referenceCss,'demo-page');
+    const referenceBackground=await page.evaluate(()=>getComputedStyle(document.body).backgroundImage);
     const referenceLayers=await page.evaluate(()=>['::before','::after'].map(p=>{const s=getComputedStyle(document.body,p);return[s.backgroundImage,s.backgroundSize,s.maskImage,s.pointerEvents];}));
     const asset=await page.locator('#asset').screenshot(),matrix=await page.locator('#matrix').screenshot();
-    const clips=[{x:0,y:height-160,width:width,height:150},{x:0,y:200,width:250,height:200}];
+    const clips=[{x:0,y:height-160,width:width,height:150},{x:0,y:200,width:256,height:200},{x:width-256,y:200,width:256,height:200},{x:0,y:0,width,height:40}];
     const referenceStrips=await Promise.all(clips.map(clip=>page.screenshot({clip})));
+    const referenceHide=await page.addStyleTag({content:'body::before,body::after{display:none!important}'});
+    const referenceGradients=await Promise.all(clips.map(clip=>page.screenshot({clip})));
+    await referenceHide.evaluate(node=>node.remove());
     await page.screenshot({path:path.join(output,`reference-${width}-${dpr}.png`)});
     await paint(page,gameCss,'app-shell');
     await page.screenshot({path:path.join(output,`game-${width}-${dpr}.png`)});
@@ -50,14 +55,17 @@ try{
       layers:['::before','::after'].map(p=>{const s=getComputedStyle(shell,p);return[s.backgroundImage,s.backgroundSize,s.maskImage,s.pointerEvents];}),
       z:['::before','::after'].map(p=>getComputedStyle(shell,p).zIndex),isolation:getComputedStyle(shell).isolation,
     }));
-    assert.equal(actual.color,'rgb(10, 1, 24)');assert.equal(actual.image,'none','主背景不再有自定义光晕');
-    assert.deepEqual(actual.layers,referenceLayers,'两层装饰参数与参考一致');assert.deepEqual(actual.z,['-1','-1']);assert.equal(actual.isolation,'isolate');
+    assert.equal(actual.color,'rgb(10, 1, 24)');assert.equal(actual.image,referenceBackground,'三层渐变使用新版参考原参数');
+    assert.deepEqual(actual.layers,referenceLayers,'两层装饰参数与参考一致');assert.deepEqual(actual.z,['-1','-2']);assert.equal(actual.isolation,'isolate');
     for(let i=0;i<clips.length;i++){
       const currentStrip=await page.screenshot({clip:clips[i]});
-      // Two translucent layers in an isolated stack may round channels by two levels.
+      // Independently composited translucent decorations may round channels by two levels.
       const comparison=await comparePixels(page,currentStrip,referenceStrips[i]);
-      assert.ok(comparison.maxDifference<=2&&comparison.differences/comparison.channels<0.02,`参考背景像素对比：${width}/${dpr}/${i} ${JSON.stringify(comparison)}`);
+      assert.ok(comparison.maxDifference<=2,`参考背景像素对比：${width}/${dpr}/${i} ${JSON.stringify(comparison)}`);
     }
+    const gameHide=await page.addStyleTag({content:'.app-shell::before,.app-shell::after{display:none!important}'});
+    for(let i=0;i<clips.length;i++)assert.ok((await comparePixels(page,await page.screenshot({clip:clips[i]}),referenceGradients[i])).maxDifference<=1,'三层渐变像素只允许1/255的合成舍入差');
+    await gameHide.evaluate(node=>node.remove());
     assert.equal((await comparePixels(page,await page.locator('#asset').screenshot(),asset)).maxDifference,0,'图片不被装饰覆盖');
     assert.equal((await comparePixels(page,await page.locator('#matrix').screenshot(),matrix)).maxDifference,0,'矩阵不被装饰覆盖');
     await page.locator('#action').evaluate(button=>button.onclick=()=>button.dataset.clicked='yes');await page.locator('#action').click();assert.equal(await page.locator('#action').getAttribute('data-clicked'),'yes');
