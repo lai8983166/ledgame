@@ -1,7 +1,10 @@
 <script setup>
+import { useId } from "vue";
+
 defineProps({
   name: { type: String, required: true },
 });
+const gifGradientId = `editor-gif-${useId()}`;
 </script>
 
 <template>
@@ -89,29 +92,54 @@ defineProps({
       <circle cx="12" cy="12" r="3" />
     </template>
     <template v-else-if="name === 'gif'">
-      <path d="M4 2h11l5 5v15H4V2ZM15 2v5h5" />
-      <text x="12" y="16" text-anchor="middle" font-size="7" font-family="Arial, sans-serif" font-weight="800">GIF</text>
+      <defs>
+        <linearGradient :id="gifGradientId" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="#9063ff" />
+          <stop offset="1" stop-color="#20a8fa" />
+        </linearGradient>
+      </defs>
+      <rect x="1" y="1" width="22" height="22" rx="6" :fill="'url(#' + gifGradientId + ')'" stroke="#ffffff" stroke-width=".7" />
+      <g color="#ffffff" stroke="#ffffff" stroke-width="1.3">
+        <path d="M12 6.3v7.2m-2.8-4.4L12 6.3l2.8 2.8M6.7 12.3v5.5a1.9 1.9 0 0 0 1.9 1.9m8.7-7.4v5.5a1.9 1.9 0 0 1-1.9 1.9" />
+        <text x="12" y="19.6" text-anchor="middle" font-size="6.4" font-family="Arial, sans-serif" font-weight="700">GIF</text>
+      </g>
     </template>
     <template v-else-if="name === 'brush'">
       <path d="m10 14 9-11 3 3-11 9M10 14l1 1" />
       <path d="M10 15c-5-3-3 5-8 5 5 3 11 0 8-5Z" />
     </template>
-    <template v-else-if="name === 'eraser'">
-      <path d="m3 14 10-11a2 2 0 0 1 3 0l5 5a2 2 0 0 1 0 3L11 21H8l-5-5a1.5 1.5 0 0 1 0-2ZM8 9l9 8M11 21h10" />
+    <template v-else-if="name === 'add'">
+      <path d="M12 4v16M4 12h16" />
+    </template>
+    <template v-else-if="name === 'delete'">
+      <path d="M4 12h16" />
+    </template>
+    <template v-else-if="name === 'region'">
+      <path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5" stroke-linecap="square" />
     </template>
     <template v-else-if="name === 'select'">
       <path d="m5 3 14 10-7 1-3 7L5 3Z" />
     </template>
     <template v-else-if="name === 'export'">
-      <rect x="3" y="4" width="18" height="16" rx="2" />
-      <path d="m5 16 4-4 3 3M12 19l5-6 4 4M16 3v6m-3-3 3 3 3-3" />
+      <path d="M8.5 7.8H6.3a3.6 3.6 0 0 0-3.6 3.6v6.9a3.6 3.6 0 0 0 3.6 3.6h11.4a3.6 3.6 0 0 0 3.6-3.6v-6.9a3.6 3.6 0 0 0-3.6-3.6h-2.2" stroke="#94a0b2" stroke-width="1.9" />
+      <path d="M4 17.2h6.3v-1.8h9.8M10.3 17.2h5.6M15.1 15.4v-4l2.4 1.1-2.4 1.1" stroke="#94a0b2" stroke-width=".9" />
+      <path d="M12 10.3V2.8m-3.4 3.4L12 2.8l3.4 3.4" stroke="#3d49bc" stroke-width="2.3" />
     </template>
     <template v-else-if="name === 'settings'">
       <path d="m9 3-.6 3-2 .9-2.6-1.1-2 3.4L4 11v2l-2.2 1.8 2 3.4 2.6-1.1 2 .9.6 3h4l.6-3 2-.9 2.6 1.1 2-3.4L18 13v-2l2.2-1.8-2-3.4-2.6 1.1-2-.9L13 3H9Z" />
       <circle cx="11" cy="12" r="3" />
     </template>
     <template v-else-if="name === 'import'">
-      <path d="M12 3v12m-4-4 4 4 4-4M4 15v6h16v-6" />
+      <path d="M8.7 6.8H6.4a3.2 3.2 0 0 0-3.2 3.2v8.3a3.2 3.2 0 0 0 3.2 3.2h11.2a3.2 3.2 0 0 0 3.2-3.2V10a3.2 3.2 0 0 0-3.2-3.2h-2.3" stroke="#94a0b2" stroke-width="1.9" />
+      <path d="M7.7 17.4h8.6" stroke="#94a0b2" stroke-width="1.9" />
+      <path d="M14 17.2v-4.3l2.5 1.3-2.5 1.4" stroke="#94a0b2" stroke-width="1.1" />
+      <path d="M12 3.2v7.5m-2.7-2.7 2.7 2.7 2.7-2.7" stroke="#3d49bc" stroke-width="2.1" />
+    </template>
+    <template v-else-if="name === 'delete-frame'">
+      <rect x="3" y="7.5" width="14.3" height="13.5" rx="2" stroke="#94a3b8" stroke-width="1.7" />
+      <circle cx="6.8" cy="11.2" r="1.4" fill="#94a3b8" stroke="none" />
+      <path d="m4 18.4 3.8-4 3.4 3.4 2.5-2.7 2.5 3" stroke="#94a3b8" stroke-width="1.7" />
+      <path d="m14.8 3.5 6.4 6.4m0-6.4-6.4 6.4" stroke="#ff4048" stroke-width="3.1" />
     </template>
     <template v-else-if="name === 'pixel-light'">
       <rect x="7" y="7" width="10" height="10" rx="1" />

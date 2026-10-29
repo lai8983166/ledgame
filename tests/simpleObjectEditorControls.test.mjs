@@ -11,7 +11,7 @@ test("object editor actions use accessible icons instead of button copy", () => 
   assert.match(editorSource, /import EditorActionIcon from "\.\.\/components\/EditorActionIcon\.vue"/);
   for (const icon of [
     "check", "close", "rotate-left", "rotate-right", "anchor", "layer-up", "layer-down",
-    "layers", "palette", "copy-previous", "copy-next", "copy-all", "trash", "copy-color",
+    "layers", "palette", "copy-previous", "copy-next", "copy-all", "copy-color",
   ]) {
     assert.match(editorSource, new RegExp(`<EditorActionIcon name="${icon}"`), `${icon} icon`);
   }

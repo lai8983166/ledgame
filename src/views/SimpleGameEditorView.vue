@@ -24,7 +24,6 @@ import { insertFrameAfter, visibleFrameIndices } from "../lib/simpleFrameSequenc
 import { deleteLevelAt, moveLevelAt } from "../lib/simpleLevelSequence.js";
 import { normalizeLevelOption, validateLevelOption } from "../lib/simpleLevelOptions.js";
 import { createRgbEditHistory } from "../lib/simpleRgbEditHistory.js";
-import { createObjectEraseStroke, drawingStrokeCells } from "../lib/simpleDrawingTools.js";
 import { createLatestAsyncTaskGuard } from "../lib/latestAsyncTask.js";
 import { applySimpleGlobalConfigPatch, saveSimpleGlobalConfigDocument } from "../lib/simpleGlobalConfig.js";
 import { normalizePixelLightWiring } from "../lib/pixelLightLayout.js";
@@ -121,6 +120,8 @@ const activeLevelIndex = ref(0);
 const activeFrameIndex = ref(0);
 const selectedColor = ref(0);
 const drawingTool = ref("select");
+const editingMode = ref("point");
+const matrixInteractionRevision = ref(0);
 const spriteBrushActive = ref(false);
 const spriteSearchText = ref("");
 const spriteFilterColors = ref([0, 1, 2, 3]);
@@ -176,8 +177,6 @@ let matrixResizeObserver = null;
 const matrixBasePatchVersion = ref(0);
 const matrixBasePatchCells = ref([]);
 const objectDragPreview = ref(null);
-const erasePreviewFrame = ref(null);
-let eraseStrokeState = null;
 let matrixFrameCache = new WeakMap();
 let frameOccupancyCache = new WeakMap();
 let matrixCacheWarmupHandle = 0;
@@ -307,11 +306,11 @@ watch(selectedEditorSprite, sprite => {
 });
 const matrixCells = computed(() => {
   matrixCacheRevision.value;
-  const frame = erasePreviewFrame.value || previewFrame.value;
+  const frame = previewFrame.value;
   return frame ? getOrCreateMatrixCells(frame) : [];
 });
 const matrixOverlayHighlights = computed(() => {
-  const frame = erasePreviewFrame.value || previewFrame.value;
+  const frame = previewFrame.value;
   if (!frame) {
     return [];
   }
@@ -503,7 +502,6 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
-  cancelEraseStroke();
   editorMounted = false;
   editorLoadGuard.invalidate();
   levelPreviewSnapshot.value = null;
@@ -580,6 +578,7 @@ async function loadEditor() {
     activeFrameIndex.value = 0;
     selectedColor.value = 0;
     drawingTool.value = "select";
+    editingMode.value = "point";
     spriteBrushActive.value = false;
     spriteSearchText.value = "";
     selectedSpriteId.value = "";
@@ -1650,7 +1649,6 @@ function cloneRgbMatrix(matrix) {
 }
 
 function runRgbEdit(targets, action, mutation, { recenter = true } = {}) {
-  cancelEraseStroke();
   const before = captureRgbHistorySnapshot(targets);
   const selection = { mode: selectionMode.value, ids: [...mergeSelectionIds.value] };
   const result = mutation();
@@ -1678,13 +1676,11 @@ function runRgbEdit(targets, action, mutation, { recenter = true } = {}) {
 }
 
 function clearRgbEditHistory() {
-  cancelEraseStroke();
   rgbEditHistory.clear();
   rgbHistoryRevision.value += 1;
 }
 
 function undoRgbEdit() {
-  cancelEraseStroke();
   if (busyAction.value || !rgbEditHistory.canUndo) {
     return false;
   }
@@ -1696,7 +1692,6 @@ function undoRgbEdit() {
 }
 
 function redoRgbEdit() {
-  cancelEraseStroke();
   if (busyAction.value || !rgbEditHistory.canRedo) {
     return false;
   }
@@ -1731,7 +1726,6 @@ function clampIndex(value, length) {
 }
 
 function selectLevel(index) {
-  cancelEraseStroke();
   activeLevelIndex.value = index;
   activeFrameIndex.value = 0;
   ensureActiveFrame();
@@ -1740,7 +1734,6 @@ function selectLevel(index) {
 }
 
 function selectFrame(index) {
-  cancelEraseStroke();
   previewFrameIndex.value = null;
   draggingFrameProgress.value = false;
   activeFrameIndex.value = index;
@@ -1932,19 +1925,19 @@ function selectColor(index) {
   spriteBrushActive.value = false;
   selectedSpriteId.value = '';
   selectedColor.value = index;
-  selectDrawingTool("brush");
+  selectDrawingTool("add");
 }
 
 function selectEditorSprite(sprite) {
-  if (colorSelectionDisabled.value || !sprite) return;
+  if (colorSelectionDisabled.value || editingMode.value === "region" || !sprite) return;
   selectedSpriteId.value = sprite.id;
   spriteBrushActive.value = true;
-  selectDrawingTool("brush");
+  selectDrawingTool("add");
 }
 
 function selectDrawingTool(tool) {
-  if (busyAction.value) return;
-  cancelEraseStroke();
+  if (busyAction.value || !["select", "add", "delete"].includes(tool)) return;
+  matrixInteractionRevision.value += 1;
   drawingTool.value = tool;
   objectDragState = null;
   objectDragPreview.value = null;
@@ -1953,46 +1946,45 @@ function selectDrawingTool(tool) {
   stopAnchorEdit();
 }
 
-function cancelEraseStroke() {
-  eraseStrokeState = null;
-  erasePreviewFrame.value = null;
-}
-
-function handleEraseStart(cell) {
-  cancelEraseStroke();
-  if (busyAction.value || drawingTool.value !== "eraser" || selectionMode.value || anchorEditMode.value) return;
-  const frame = activeFrame.value;
-  if (!frame) return;
-  eraseStrokeState = { frame, targets: currentFrameRgbHistoryTargets(), eraser: createObjectEraseStroke(frame.matrix), lastCell: null };
-  handleEraseMove(cell);
-}
-
-function handleEraseMove(cell) {
-  const stroke = eraseStrokeState;
-  if (!stroke || stroke.frame !== activeFrame.value) { cancelEraseStroke(); return; }
-  if (!cell) { stroke.lastCell = null; return; }
-  const cells = stroke.lastCell ? drawingStrokeCells(stroke.lastCell, cell).slice(1) : [{ x: cell.x, y: cell.y }];
-  stroke.lastCell = { x: cell.x, y: cell.y };
-  if (stroke.eraser.visit(cells)) {
-    erasePreviewFrame.value = { ...stroke.frame, matrix: stroke.frame.matrix.filter(object => !stroke.eraser.removedIds.has(object.id)) };
+function selectEditingMode(mode) {
+  if (busyAction.value || drawingTool.value === "select" || !["point", "region"].includes(mode)) return;
+  matrixInteractionRevision.value += 1;
+  editingMode.value = mode;
+  if (mode === "region") {
+    spriteBrushActive.value = false;
+    selectedSpriteId.value = "";
   }
 }
 
-function handleEraseEnd(payload) {
-  if (payload?.cancelled) { cancelEraseStroke(); return; }
-  if (payload?.current) handleEraseMove(payload.current);
-  const stroke = eraseStrokeState;
-  cancelEraseStroke();
-  if (!stroke || stroke.frame !== activeFrame.value || busyAction.value || !stroke.eraser.removedIds.size) return;
-  runRgbEdit(stroke.targets, "erase-objects", () => {
-    stroke.frame.matrix = stroke.frame.matrix.filter(object => !stroke.eraser.removedIds.has(object.id));
-    if (stroke.eraser.removedIds.has(selectedObjectId.value)) selectedObjectId.value = "";
+function deletePointAtCell(frame, existing, x, y) {
+  const topObjectId = getTopOccupancyEntry(existing?.occupants)?.object?.id;
+  const object = frame.matrix.find(entry => entry.id === topObjectId);
+  if (!object) return;
+  runRgbEdit(currentFrameRgbHistoryTargets(), "delete-point", () => {
+    object.points = getObjectPoints(object).filter(([dx, dy]) =>
+      toInteger(object.x, 0) + dx !== x || toInteger(object.y, 0) + dy !== y);
+    if (!object.points.length) {
+      frame.matrix = frame.matrix.filter(entry => entry.id !== object.id);
+      if (selectedObjectId.value === object.id) selectedObjectId.value = "";
+    }
+  }, { recenter: false });
+}
+
+function deleteObjectsInCells(frame, cells) {
+  const keys = new Set(cells.map(cell => createPointKey(cell.x, cell.y)));
+  const removedIds = new Set(frame.matrix
+    .filter(object => getObjectCells(object).some(cell => keys.has(createPointKey(cell.x, cell.y))))
+    .map(object => object.id));
+  if (!removedIds.size) return;
+  runRgbEdit(currentFrameRgbHistoryTargets(), "delete-region-objects", () => {
+    frame.matrix = frame.matrix.filter(object => !removedIds.has(object.id));
+    if (removedIds.has(selectedObjectId.value)) selectedObjectId.value = "";
   }, { recenter: false });
 }
 
 function handleCellClick(x, y) {
   if (busyAction.value) return;
-  const frame = ensureActiveFrame();
+  const frame = activeFrame.value || ensureActiveFrame();
   const existing = getExpandedCellAt(x, y);
   if (anchorEditMode.value) {
     selectAnchorCandidate(existing);
@@ -2012,7 +2004,16 @@ function handleCellClick(x, y) {
     }
     return;
   }
-  if (drawingTool.value !== "brush") return;
+  if (drawingTool.value === "delete") {
+    if (editingMode.value === "region") deleteObjectsInCells(frame, [{ x, y }]);
+    else deletePointAtCell(frame, existing, x, y);
+    return;
+  }
+  if (drawingTool.value !== "add") return;
+  if (editingMode.value === "region") {
+    handleCellRangeCreate({ anchorX: x, anchorY: y, cells: [{ x, y }] });
+    return;
+  }
   if (!panoramaMode.value && !isRealCell(x, y)) {
     statusMessage.value = t("simple.realCellsOnly");
     return;
@@ -2047,10 +2048,14 @@ function handleCellClick(x, y) {
 }
 
 function handleCellRangeCreate(payload) {
-  if (busyAction.value || drawingTool.value !== "brush" || spriteBrushActive.value || anchorEditMode.value || selectionMode.value) {
+  if (busyAction.value || editingMode.value !== "region" || drawingTool.value === "select" || anchorEditMode.value || selectionMode.value) {
     return;
   }
-  const frame = ensureActiveFrame();
+  const frame = activeFrame.value || ensureActiveFrame();
+  if (drawingTool.value === "delete") {
+    deleteObjectsInCells(frame, dedupeCells(payload?.cells || []));
+    return;
+  }
   const cells = filterUnoccupiedColorCells(frame.matrix, dedupeCells(payload?.cells || []), selectedColor.value);
   if (!cells.length) {
     return;
@@ -3045,7 +3050,6 @@ function cancelZoomFrame() {
 }
 
 function syncSelectedObject() {
-  cancelEraseStroke();
   // Selection reconciliation must not re-center a restored history snapshot.
   const frame = activeFrame.value || ensureActiveFrame();
   objectDragState = null;
@@ -3073,13 +3077,21 @@ function canTriggerGlobalShortcut(event) {
 }
 
 function handleGlobalKeydown(event) {
-  if (event.key === "Escape" && eraseStrokeState) { cancelEraseStroke(); event.preventDefault(); return; }
   if (levelMediaPicker.value) return;
   const tagName = event.target?.tagName?.toLowerCase();
   if (["input", "textarea", "select", "audio"].includes(tagName) || event.target?.isContentEditable) {
     return;
   }
   const lowerKey = event.key.toLowerCase();
+  if (event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey &&
+      !event.repeat && !event.isComposing && ["a", "d"].includes(lowerKey)) {
+    if (busyAction.value || globalConfigOpen.value || gameWiringOpen.value || pixelLightLayoutOpen.value ||
+        effectDialogOpen.value || levelPreviewSnapshot.value || saveFeedback.value ||
+        [...window.document.querySelectorAll('[role="dialog"][aria-modal="true"]')].some(node => node.getClientRects().length)) return;
+    event.preventDefault();
+    selectDrawingTool(lowerKey === "a" ? "add" : "delete");
+    return;
+  }
   const historyModifier = event.ctrlKey || event.metaKey;
   const historyShortcut = (
     !event.repeat &&
@@ -3307,14 +3319,14 @@ function formatRuntimeSummary(value) {
               =
             </button>
             <button
-              class="icon-add-button icon-danger-button"
+              class="icon-add-button icon-danger-button frame-delete-action"
               type="button"
               :aria-label="t('simple.deleteCurrentFrame')"
               :data-tip="t('simple.deleteCurrentFrame')"
               :disabled="frames.length <= 1"
               @click="deleteCurrentFrame"
             >
-              -
+              <EditorActionIcon name="delete-frame" />
             </button>
           </div>
         </div>
@@ -3323,15 +3335,27 @@ function formatRuntimeSummary(value) {
 
     <div v-if="document" class="editor-toolbar">
             <div class="object-actions">
-              <button v-for="tool in ['select', 'brush', 'eraser']" :key="tool"
+              <button v-for="tool in ['select', 'add', 'delete']" :key="tool"
                 class="soft-button compact-button object-icon-button drawing-tool-button"
                 :class="{ active: drawingTool === tool && !selectionMode && !anchorEditMode }"
                 type="button" :data-tool="tool" :disabled="Boolean(busyAction)"
                 :aria-label="t(`simple.tool${tool[0].toUpperCase()}${tool.slice(1)}`)"
-                :data-tip="t(`simple.tool${tool[0].toUpperCase()}${tool.slice(1)}`)"
+                :data-tip="t(`simple.tool${tool[0].toUpperCase()}${tool.slice(1)}`) + (tool === 'add' ? ' (Alt+A)' : tool === 'delete' ? ' (Alt+D)' : '')"
+                :aria-keyshortcuts="tool === 'add' ? 'Alt+A' : tool === 'delete' ? 'Alt+D' : undefined"
                 :aria-pressed="drawingTool === tool && !selectionMode && !anchorEditMode"
                 @click="selectDrawingTool(tool)">
                 <EditorActionIcon :name="tool" />
+              </button>
+              <button v-for="mode in ['point', 'region']" :key="mode"
+                class="soft-button compact-button object-icon-button drawing-tool-button"
+                :class="{ active: editingMode === mode && drawingTool !== 'select' && !selectionMode && !anchorEditMode }"
+                type="button" :data-edit-mode="mode"
+                :disabled="Boolean(busyAction) || drawingTool === 'select' || selectionMode || anchorEditMode"
+                :aria-label="t(mode === 'point' ? 'simple.pointEditing' : 'simple.regionEditing')"
+                :data-tip="t(mode === 'point' ? 'simple.pointEditing' : 'simple.regionEditing')"
+                :aria-pressed="editingMode === mode && drawingTool !== 'select' && !selectionMode && !anchorEditMode"
+                @click="selectEditingMode(mode)">
+                <EditorActionIcon :name="mode === 'point' ? 'brush' : 'region'" />
               </button>
               <template v-if="anchorEditMode">
                 <button
@@ -3443,16 +3467,6 @@ function formatRuntimeSummary(value) {
                   @click="copySelectedObjectToAllFrames"
                 >
                   <EditorActionIcon name="copy-all" />
-                </button>
-                <button
-                  class="soft-button compact-button object-icon-button object-danger-button"
-                  :disabled="!selectedObject"
-                  type="button"
-                  :aria-label="t('simple.delete')"
-                  :title="t('simple.delete')"
-                  @click="deleteSelectedObject"
-                >
-                  <EditorActionIcon name="trash" />
                 </button>
                 <button
                   class="soft-button compact-button object-icon-button"
@@ -3712,10 +3726,9 @@ function formatRuntimeSummary(value) {
 
         <div ref="matrixScrollRef" class="matrix-scroll" @wheel="zoomMatrix">
           <SimpleMatrixCanvas
-            :tool="anchorEditMode || selectionMode ? 'select' : drawingTool"
+            :tool="anchorEditMode || selectionMode ? 'select' : drawingTool !== 'select' && editingMode === 'region' ? 'region' : drawingTool"
             :interaction-enabled="!busyAction"
-            :erase-enabled="!busyAction && drawingTool === 'eraser' && !selectionMode && !anchorEditMode"
-            :interaction-key="`${activeLevelIndex}:${activeFrameIndex}:${panoramaMode}:${selectionMode}:${anchorEditMode}`"
+            :interaction-key="`${activeLevelIndex}:${activeFrameIndex}:${panoramaMode}:${selectionMode}:${anchorEditMode}:${drawingTool}:${editingMode}:${matrixInteractionRevision}`"
             :cells="matrixCells"
             :column-count="matrixColumnCount"
             :row-count="matrixRowCount"
@@ -3725,15 +3738,12 @@ function formatRuntimeSummary(value) {
             :base-patch-version="matrixBasePatchVersion"
             :overlay-highlights="matrixOverlayHighlights"
             :show-overlap-indicator="showOverlapIndicators"
-            :range-create-enabled="!busyAction && drawingTool === 'brush' && !spriteBrushActive && !selectionMode && !anchorEditMode"
+            :range-create-enabled="!busyAction && drawingTool !== 'select' && editingMode === 'region' && !selectionMode && !anchorEditMode"
             :object-drag-enabled="!busyAction && drawingTool === 'select' && !selectionMode && !anchorEditMode"
             :outside-range-layout-enabled="!panoramaMode"
             :outside-range-padding="EDITOR_OUTSIDE_RANGE_PADDING"
-            :outside-range-create-enabled="!busyAction && drawingTool === 'brush' && !spriteBrushActive && !panoramaMode && !selectionMode && !anchorEditMode"
+            :outside-range-create-enabled="!busyAction && drawingTool !== 'select' && editingMode === 'region' && !panoramaMode && !selectionMode && !anchorEditMode"
             @cell-click="handleCellClick"
-            @erase-start="handleEraseStart"
-            @erase-move="handleEraseMove"
-            @erase-end="handleEraseEnd"
             @cell-range-create="handleCellRangeCreate"
             @object-drag-start="handleObjectDragStart"
             @object-drag="handleObjectDrag"
@@ -3853,7 +3863,7 @@ function formatRuntimeSummary(value) {
                   class="sprite-preview-card"
                   :class="{ active: selectedSpriteId === sprite.id }"
                   :style="{ width: `${sprite.width * 13 + 17}px` }"
-                  :disabled="colorSelectionDisabled"
+                  :disabled="colorSelectionDisabled || editingMode === 'region'"
                   type="button"
                   :aria-label="sprite.name"
 

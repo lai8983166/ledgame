@@ -276,7 +276,7 @@ try {
     const before=await read();
     await page.evaluate(()=>window.getComponentSetup().handleCellClick(1,1));
     assert.deepEqual((await read()).matrix,before.matrix);assert.equal((await read()).undo,before.undo);
-    await page.evaluate(()=>{const s=window.getComponentSetup();s.selectColor(1);s.handleCellRangeCreate({cells:[{x:1,y:1}]});});
+    await page.evaluate(()=>{const s=window.getComponentSetup();s.selectColor(1);s.selectEditingMode("region");s.handleCellRangeCreate({cells:[{x:1,y:1}]});});
     assert.equal((await read()).matrix.length,2);
     await page.evaluate(()=>{const s=window.getComponentSetup();s.selectColor(2);s.handleCellRangeCreate({cells:[{x:1,y:1},{x:2,y:1},{x:3,y:1}]});});
     const range=await read(),object=range.matrix.at(-1);

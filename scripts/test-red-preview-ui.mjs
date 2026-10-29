@@ -129,20 +129,20 @@ try {
     await page.evaluate(() => window.getComponentSetup().closeLevelPreview());
   });
 
-  await check('GIF文件图标与JSON导入导出及三种编辑工具清楚区分', async () => {
+  await check('GIF文件图标与JSON导入导出及对象编辑工具清楚区分', async () => {
     await page.evaluate(async () => {
       const { createApp, h } = await import('/node_modules/.vite/deps/vue.js');
       const { default: Icon } = await import('/src/components/EditorActionIcon.vue');
       const host = document.createElement('div'); host.id = 'icon-gallery';
       host.style.cssText = 'position:fixed;inset:40px auto auto 40px;z-index:9999;display:flex;gap:24px;padding:24px;background:#202838;color:#fff';
       document.body.append(host);
-      createApp({ render: () => ['gif', 'import', 'export', 'brush', 'eraser', 'select'].map(name => h('div', { 'data-icon': name }, [h(Icon, { name }), h('span', name)])) }).mount(host);
+      createApp({ render: () => ['gif', 'import', 'export', 'add', 'delete', 'brush', 'region', 'select'].map(name => h('div', { 'data-icon': name }, [h(Icon, { name }), h('span', name)])) }).mount(host);
     });
     const gallery = page.locator('#icon-gallery');
     assert.equal(await gallery.locator('[data-icon="gif"] svg text').textContent(), 'GIF');
     const shapes = await gallery.locator('svg').evaluateAll(nodes => nodes.map(node => node.innerHTML));
-    assert.equal(new Set(shapes).size, 6);
-    assert.equal(await gallery.locator('svg[aria-hidden="true"]').count(), 6);
+    assert.equal(new Set(shapes).size, 8);
+    assert.equal(await gallery.locator('svg[aria-hidden="true"]').count(), 8);
     await page.screenshot({ path: path.join(output, 'distinct-icons.png') });
   });
   assert.deepEqual(errors, []);

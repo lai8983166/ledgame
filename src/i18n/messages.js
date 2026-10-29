@@ -1514,6 +1514,26 @@ for (const [locale, [toolSelect, toolBrush, toolEraser, deleteLevelLabel, switch
   mergedMessages[locale].editorDebug = { ...mergedMessages[locale].editorDebug, switchLevel };
 }
 
+const objectEditingLabels = {
+  'zh-CN': ['选择对象', '添加', '删除', '单点编辑', '区域编辑'],
+  'en-US': ['Select object', 'Add', 'Delete', 'Point editing', 'Region editing'],
+  'es-ES': ['Seleccionar objeto', 'Añadir', 'Eliminar', 'Editar punto', 'Editar región'],
+  'pt-PT': ['Selecionar objeto', 'Adicionar', 'Eliminar', 'Editar ponto', 'Editar região'],
+  'fr-FR': ['Sélectionner un objet', 'Ajouter', 'Supprimer', 'Modifier un point', 'Modifier une zone'],
+  'de-DE': ['Objekt auswählen', 'Hinzufügen', 'Löschen', 'Punkt bearbeiten', 'Bereich bearbeiten'],
+  'pl-PL': ['Wybierz obiekt', 'Dodaj', 'Usuń', 'Edycja punktu', 'Edycja obszaru'],
+  'ru-RU': ['Выбрать объект', 'Добавить', 'Удалить', 'Редактирование точки', 'Редактирование области'],
+  'vi-VN': ['Chọn đối tượng', 'Thêm', 'Xóa', 'Sửa điểm', 'Sửa vùng'],
+  'it-IT': ['Seleziona oggetto', 'Aggiungi', 'Elimina', 'Modifica punto', 'Modifica area'],
+  'cs-CZ': ['Vybrat objekt', 'Přidat', 'Odstranit', 'Úprava bodu', 'Úprava oblasti'],
+  'ko-KR': ['객체 선택', '추가', '삭제', '점 편집', '영역 편집'],
+  'ro-RO': ['Selectare obiect', 'Adaugă', 'Șterge', 'Editare punct', 'Editare regiune'],
+  'ar-SA': ['تحديد كائن', 'إضافة', 'حذف', 'تحرير نقطة', 'تحرير منطقة'],
+};
+for (const [locale, [toolSelect, toolAdd, toolDelete, pointEditing, regionEditing]] of Object.entries(objectEditingLabels)) {
+  mergedMessages[locale].simple = { ...mergedMessages[locale].simple, toolSelect, toolAdd, toolDelete, pointEditing, regionEditing };
+}
+
 export const authoredMessages = Object.fromEntries(
   canonicalLocales.map((locale) => [locale, mergedMessages[locale] || {}]),
 );

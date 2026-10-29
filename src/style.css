@@ -2026,6 +2026,8 @@ html.editor-saving * {
 .frame-sequence-header .frame-tick-row .frame-tick:focus-visible .frame-tick-label { text-decoration: underline; }
 .frame-sequence-header .frame-tick-row .frame-tick.active .frame-tick-dot { background: var(--ui-accent); }
 .frame-sequence-header .frame-icon-actions .icon-add-button { width: 30px; height: 30px; font-size: 20px; }
+.frame-sequence-header .frame-icon-actions .frame-delete-action { display: grid; place-items: center; padding: 2px; }
+.frame-delete-action .editor-action-icon { width: 24px; height: 24px; }
 
 .frame-sequence-header .frame-progress-track,
 .frame-sequence-header .frame-tick-row {
@@ -2873,22 +2875,23 @@ html.editor-saving * {
 
 .object-actions .color-copy-button {
   min-height: 52px;
+  color: var(--color-copy-color);
 }
 
 .object-actions .color-copy-green {
-  color: #3f8c63;
+  --color-copy-color: #3f8c63;
 }
 
 .object-actions .color-copy-blue {
-  color: #4f78bb;
+  --color-copy-color: #4f78bb;
 }
 
 .object-actions .color-copy-red {
-  color: #bc555a;
+  --color-copy-color: #bc555a;
 }
 
 .object-actions .color-copy-pink {
-  color: #a65c91;
+  --color-copy-color: #a65c91;
 }
 
 .anchor-edit-panel {
@@ -3742,9 +3745,9 @@ html.editor-saving * {
   background: var(--ui-card);
   transform: none;
 }
-.editor-toolbar .object-actions .color-copy-button:not(:disabled) { color: #fff; }
+.editor-toolbar .object-actions .color-copy-button,
+.editor-toolbar .object-actions .color-copy-button:not(:disabled):hover { color: var(--color-copy-color); }
 .editor-toolbar .object-actions .drawing-tool-button:not(:disabled) { color: #fff; }
-.editor-toolbar .object-actions .color-copy-button:not(:disabled):hover,
 .editor-toolbar .object-actions .drawing-tool-button:not(:disabled):hover { color: #fff; }
 .editor-toolbar .object-actions .drawing-tool-button.active:not(:disabled) {
   border-color: var(--ui-accent);

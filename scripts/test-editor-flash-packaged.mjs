@@ -50,6 +50,14 @@ try {
     assert.ok(grid.every(([r,g,b])=>r===255&&g===255&&b===255),'对象和空白格边框均为白色');
     for(const palette of await page.locator('.object-action-palette .object-color-button').all())assert.equal(await palette.evaluate(node=>getComputedStyle(node).borderTopWidth),'0px');
     records.push({action:'真实EXE空白/对象格逐格白边及四色画笔无普通边框',passed:true});
+    const colorCopies=page.locator('.color-copy-button');
+    const expectedCopyColors=['rgb(63, 140, 99)','rgb(79, 120, 187)','rgb(188, 85, 90)','rgb(166, 92, 145)'];
+    await expect(colorCopies).toHaveCount(4);
+    for(let index=0;index<4;index++){
+      const control=colorCopies.nth(index);
+      await expect(control).toBeDisabled();
+      await expect(control.locator('svg rect').first()).toHaveCSS('fill',expectedCopyColors[index]);
+    }
   }
   await app.evaluate(({BrowserWindow})=>{
     globalThis.editorFocusCalls=[];
@@ -63,7 +71,19 @@ try {
     }
     await app.evaluate(()=>globalThis.editorFocusCalls=[]);
     const before=await page.locator('.editor-center').boundingBox();
-    await button(action).click();await page.waitForTimeout(120);
+    if(!baseline&&action==='删除')await page.keyboard.press('Delete');
+    else await button(action).click();
+    await page.waitForTimeout(120);
+    if(!baseline&&action==='复制当前帧到后一帧'){
+      const copyRed=page.locator('.color-copy-red');
+      await expect(copyRed).toBeEnabled();
+      await expect(copyRed.locator('svg rect').first()).toHaveCSS('fill','rgb(188, 85, 90)');
+      await copyRed.hover();
+      await expect(copyRed.locator('svg rect').first()).toHaveCSS('fill','rgb(188, 85, 90)');
+      await page.mouse.move(0,0);
+      await page.locator('.editor-toolbar').screenshot({path:path.join(data,'颜色复制图标.png')});
+      records.push({action:'真实EXE四色复制图标、禁用淡化及红色按钮启用/悬停配色',passed:true});
+    }
     const calls=await app.evaluate(()=>globalThis.editorFocusCalls),after=await page.locator('.editor-center').boundingBox();
     records.push({action,calls,before,after});
     assert.deepEqual(after,before,action+' must not move the matrix panel');
@@ -120,6 +140,36 @@ try {
     await page.mouse.move(track.x+track.width-0.1,track.y+track.height/2);await page.mouse.down();await page.mouse.move(track.x+0.1,track.y+track.height/2);await page.mouse.up();
     await expect(page.locator('.frame-tick.active')).toHaveAttribute('title','1');
     records.push({action:'真实EXE 100帧单行刻度、末帧游标对齐和拖动回首帧',passed:true});
+    // Exercise the shipped tool interactions, then inspect the isolated backend's saved points.
+    const tool=name=>page.locator(`[data-tool="${name}"]`);
+    const mode=name=>page.locator(`[data-edit-mode="${name}"]`);
+    const point=async(x,y)=>page.locator('.matrix-overlay-canvas').evaluate((canvas,{x,y})=>{
+      const rect=canvas.getBoundingClientRect(),cell=rect.width/24; // 20 columns + two outside cells per side.
+      return{x:rect.x+(x+2.5)*cell,y:rect.y+(y+2.5)*cell};
+    },{x,y});
+    const clickCell=async(x,y)=>{const p=await point(x,y);await page.mouse.click(p.x,p.y);};
+    const dragCells=async(a,b)=>{const start=await point(...a),end=await point(...b);await page.mouse.move(start.x,start.y);await page.mouse.down();await page.mouse.move(end.x,end.y);await page.mouse.up();};
+    const savedPoints=async()=>{
+      await button('保存').click();await expect(page.locator('.editor-save-dialog h2')).toHaveText('保存成功');await page.locator('.editor-save-dialog button').click();
+      const game=(await request(`/game-editor/${id}`)).data,objects=game.levels[0].frameList[0].matrix;
+      return{objects,points:objects.flatMap(object=>object.points.map(([x,y])=>`${object.x+x},${object.y+y}`)).sort()};
+    };
+    await expect(tool('select')).toHaveAttribute('aria-pressed','true');
+    await expect(mode('point')).toBeDisabled();await expect(mode('region')).toBeDisabled();
+    assert.ok(await tool('select').getAttribute('data-tip'));
+    await page.keyboard.press('Alt+a');await expect(tool('add')).toHaveAttribute('aria-pressed','true');
+    await mode('point').click();await clickCell(1,1);await dragCells([5,5],[6,6]);
+    await mode('region').click();await dragCells([2,2],[3,3]);
+    let saved=await savedPoints();assert.equal(saved.objects.length,2);assert.deepEqual(saved.points,['1,1','2,2','2,3','3,2','3,3']);
+    await page.keyboard.press('Alt+d');await expect(tool('delete')).toHaveAttribute('aria-pressed','true');
+    await mode('point').click();await clickCell(2,2);
+    saved=await savedPoints();assert.equal(saved.objects.length,2);assert.deepEqual(saved.points,['1,1','2,3','3,2','3,3']);
+    await mode('region').click();await dragCells([3,2],[3,3]);
+    saved=await savedPoints();assert.equal(saved.objects.length,1);assert.deepEqual(saved.points,['1,1']);
+    await page.keyboard.press('Control+z');saved=await savedPoints();assert.deepEqual(saved.points,['1,1','2,3','3,2','3,3']);
+    await page.keyboard.press('Control+y');saved=await savedPoints();assert.deepEqual(saved.points,['1,1']);
+    await page.locator('.editor-toolbar').screenshot({path:path.join(data,'对象编辑工具.png')});
+    records.push({action:'真实EXE新工具互斥与提示、Alt+A/D、单点禁止拖画、区域添加、逐点删除、相交整对象删除及撤销重做持久化',passed:true});
   }
   assert.deepEqual(errors,[]);await page.screenshot({path:path.join(data,'验收.png')});
 } catch(error){errors.push(error.stack);await page?.screenshot({path:path.join(data,'失败.png')}).catch(()=>{});throw error;}

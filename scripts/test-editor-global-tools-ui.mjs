@@ -72,6 +72,36 @@ try {
     assert.equal(await button('复制当前帧到所有帧').count(),0);
     for(const name of ['导出当前关卡','导入替换当前关卡']){assert.equal(await page.locator('.editor-toolbar').getByRole('button',{name,exact:true}).count(),1);assert.equal(await page.locator('.frame-icon-actions').getByRole('button',{name,exact:true}).count(),0);}
   });
+  await check('颜色复制图标普通、悬停和禁用均对应绿蓝红紫',async()=>{
+    await page.evaluate(()=>{
+      const editor=window.getComponentSetup();
+      editor.activeFrame.matrix=[0,1,2,3].map(color=>({id:`color-${color}`,x:color,y:0,color,points:[[0,0]]}));
+      editor.frames.push({repeatTimes:1,matrix:[]});
+    });
+    const expected=['rgb(63, 140, 99)','rgb(79, 120, 187)','rgb(188, 85, 90)','rgb(166, 92, 145)'];
+    const waitForColors=()=>page.waitForFunction(expected=>[...document.querySelectorAll('.color-copy-button svg rect:first-child')].every((node,index)=>getComputedStyle(node).fill===expected[index]),expected);
+    await waitForColors();
+    const controls=page.locator('.color-copy-button');
+    assert.equal(await controls.count(),4);
+    for(let index=0;index<4;index++){
+      const control=controls.nth(index),icon=control.locator('svg rect').first();
+      assert.equal(await control.isEnabled(),true);
+      assert.equal(await icon.evaluate(node=>getComputedStyle(node).fill),expected[index]);
+      await control.hover();
+      await waitForColors();
+      assert.equal(await icon.evaluate(node=>getComputedStyle(node).fill),expected[index]);
+      await page.mouse.move(0,0);
+    }
+    await page.locator('.editor-toolbar').screenshot({path:path.join(output,'颜色复制图标.png')});
+    await page.evaluate(()=>window.getComponentSetup().activeFrame.matrix=[]);
+    await waitForColors();
+    for(let index=0;index<4;index++){
+      const control=controls.nth(index);
+      assert.equal(await control.isDisabled(),true);
+      assert.equal(await control.locator('svg rect').first().evaluate(node=>getComputedStyle(node).fill),expected[index]);
+      assert.ok(await control.evaluate(node=>Number(getComputedStyle(node).opacity)<1));
+    }
+  });
   await check('全部帧号单行、进度条首尾及中间刻度对齐，点击拖动对应同一帧',async()=>{
     for(const [width,height] of [[1024,600],[1920,1080]]){
       for(const count of [1,2,10,100,200]){

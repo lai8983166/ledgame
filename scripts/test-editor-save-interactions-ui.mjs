@@ -83,7 +83,7 @@ try {
     await field.fill('设置保存');await dialog.locator('footer .primary').click();await page.locator('.editor-save-dialog').waitFor();await close();
     assert.equal(await page.evaluate(()=>window.saves.at(-1).type),'default');assert.equal(await page.evaluate(()=>window.saves.at(-1).mode),'[2]');
   });
-  await check('选择/画笔游标、对象拖动及点击删除后的即时更新',async()=>{
+  await check('选择/添加游标、对象拖动及Delete删除后的即时更新',async()=>{
     await page.evaluate(()=>window.focusCalls=0);
     const canvas=page.locator('.matrix-overlay-canvas').first();await canvas.waitFor();
     const point=await canvas.evaluate(node=>{const props=node.__vueParentComponent.props,b=node.getBoundingClientRect(),stride=props.cellSize+props.gapSize,pad=props.outsideRangePadding;
@@ -95,7 +95,7 @@ try {
     await page.waitForFunction(()=>document.querySelector('.matrix-overlay-canvas').style.cursor.endsWith('crosshair'));
     await page.locator('[data-tool="select"]').click();await page.mouse.move(point.x+1,point.y+1);
     await page.mouse.down();assert.equal(await canvas.evaluate(node=>getComputedStyle(node).cursor),'grabbing');await page.mouse.up();
-    await page.getByRole('button',{name:'删除',exact:true}).click();
+    await page.keyboard.press('Delete');
     await page.waitForFunction(()=>document.querySelector('.matrix-overlay-canvas').style.cursor==='default');
     assert.equal(await page.evaluate(()=>window.focusCalls),0);
     await page.screenshot({path:path.join(output,'编辑器交互.png')});
