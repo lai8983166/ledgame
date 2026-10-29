@@ -56,6 +56,21 @@ try {
     await save.click();await page.locator('.editor-save-dialog').waitFor();await close();
     assert.deepEqual(await page.evaluate(()=>window.saves.at(-1).levels.map(level=>level.option.rewardPoints)),[1,2,0]);
   });
+  await check('关卡叉号悬停和聚焦可见，取消不切关，删除其他关保留当前帧草稿',async()=>{
+    await page.evaluate(()=>{const s=window.getComponentSetup();s.document.levels[s.activeLevelIndex].frameList.push({repeatTimes:7,matrix:[{id:'draft',x:1,y:1,color:1,points:[[0,0]]}]});s.activeFrameIndex=1;});
+    const target=page.getByRole('button',{name:'删除关卡 A',exact:true});
+    await page.mouse.move(3,3);assert.equal(await target.evaluate(node=>getComputedStyle(node).opacity),'0');
+    await target.focus();assert.equal(await target.evaluate(node=>getComputedStyle(node).opacity),'1');
+    page.once('dialog',dialog=>dialog.dismiss());await target.click();
+    assert.deepEqual(await page.locator('.level-sequence-row .sequence-pill').allTextContents(),['B','C','A']);
+    assert.equal(await page.evaluate(()=>window.getComponentSetup().activeFrameIndex),1);
+    assert.equal(await page.locator('.level-sequence-row .sequence-pill.active').innerText(),'B');
+    page.once('dialog',dialog=>dialog.accept());await target.click();
+    assert.deepEqual(await page.locator('.level-sequence-row .sequence-pill').allTextContents(),['B','C']);
+    assert.equal(await page.evaluate(()=>window.getComponentSetup().activeFrameIndex),1);
+    assert.equal(await page.evaluate(()=>{const s=window.getComponentSetup();return s.document.levels[s.activeLevelIndex].frameList[1].matrix[0].id;}),'draft');
+    await page.locator('.level-tab').first().hover();await page.screenshot({path:path.join(output,'关卡悬停删除.png')});
+  });
   await check('全局配置类型只读、旧模式隐藏、游戏模式仅一个标题及音效按钮间距',async()=>{
     await page.getByRole('button',{name:'全局配置',exact:true}).click();const dialog=page.locator('.global-config-dialog');
     const type=dialog.locator('.global-config-field').filter({has:page.locator('.global-config-label').filter({hasText:/^类型$/})}).locator('input');
@@ -68,17 +83,20 @@ try {
     await field.fill('设置保存');await dialog.locator('footer .primary').click();await page.locator('.editor-save-dialog').waitFor();await close();
     assert.equal(await page.evaluate(()=>window.saves.at(-1).type),'default');assert.equal(await page.evaluate(()=>window.saves.at(-1).mode),'[2]');
   });
-  await check('RGB 空白交叉游标、对象手势游标及点击删除后的即时更新',async()=>{
+  await check('选择/画笔游标、对象拖动及点击删除后的即时更新',async()=>{
+    await page.evaluate(()=>window.focusCalls=0);
     const canvas=page.locator('.matrix-overlay-canvas').first();await canvas.waitFor();
     const point=await canvas.evaluate(node=>{const props=node.__vueParentComponent.props,b=node.getBoundingClientRect(),stride=props.cellSize+props.gapSize,pad=props.outsideRangePadding;
       return{x:b.x+(pad*stride+props.cellSize/2)*b.width/((props.columnCount+pad*2)*stride-props.gapSize),y:b.y+(pad*stride+props.cellSize/2)*b.height/((props.rowCount+pad*2)*stride-props.gapSize)};});
-    await page.mouse.move(point.x,point.y);assert.equal(await canvas.evaluate(node=>getComputedStyle(node).cursor),'crosshair');
+    await page.locator('[data-tool="select"]').click();
+    await page.mouse.move(point.x,point.y);assert.equal(await canvas.evaluate(node=>getComputedStyle(node).cursor),'default');
     // Use the same real painting gesture as an operator; painting creates an occupied cell.
     await page.locator('.object-color-button').first().click();await page.mouse.click(point.x,point.y);await page.mouse.move(point.x+1,point.y+1);
-    await page.waitForFunction(()=>document.querySelector('.matrix-overlay-canvas').style.cursor==='pointer');
+    await page.waitForFunction(()=>document.querySelector('.matrix-overlay-canvas').style.cursor.endsWith('crosshair'));
+    await page.locator('[data-tool="select"]').click();await page.mouse.move(point.x+1,point.y+1);
     await page.mouse.down();assert.equal(await canvas.evaluate(node=>getComputedStyle(node).cursor),'grabbing');await page.mouse.up();
     await page.getByRole('button',{name:'删除',exact:true}).click();
-    await page.waitForFunction(()=>document.querySelector('.matrix-overlay-canvas').style.cursor==='crosshair');
+    await page.waitForFunction(()=>document.querySelector('.matrix-overlay-canvas').style.cursor==='default');
     assert.equal(await page.evaluate(()=>window.focusCalls),0);
     await page.screenshot({path:path.join(output,'编辑器交互.png')});
   });

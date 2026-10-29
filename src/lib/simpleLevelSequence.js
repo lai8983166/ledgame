@@ -9,7 +9,7 @@ export function moveLevelAt(levels, fromIndex, toIndex, activeIndex) {
   return { moved: true, levels: nextLevels, activeIndex: nextLevels.indexOf(activeLevel) };
 }
 
-export function deleteLevelAt(levels, activeIndex) {
+export function deleteLevelAt(levels, activeIndex, selectedIndex = activeIndex) {
   if (!Array.isArray(levels) || levels.length <= 1) {
     return {
       deleted: false,
@@ -28,10 +28,13 @@ export function deleteLevelAt(levels, activeIndex) {
   }
 
   const nextLevels = levels.slice();
+  const selectedLevel = levels[selectedIndex];
   nextLevels.splice(deleteIndex, 1);
   return {
     deleted: true,
     levels: nextLevels,
-    activeIndex: Math.min(deleteIndex, nextLevels.length - 1),
+    activeIndex: nextLevels.includes(selectedLevel)
+      ? nextLevels.indexOf(selectedLevel)
+      : Math.min(deleteIndex, nextLevels.length - 1),
   };
 }

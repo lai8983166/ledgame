@@ -24,6 +24,7 @@ import { insertFrameAfter, visibleFrameIndices } from "../lib/simpleFrameSequenc
 import { deleteLevelAt, moveLevelAt } from "../lib/simpleLevelSequence.js";
 import { normalizeLevelOption, validateLevelOption } from "../lib/simpleLevelOptions.js";
 import { createRgbEditHistory } from "../lib/simpleRgbEditHistory.js";
+import { createObjectEraseStroke, drawingStrokeCells } from "../lib/simpleDrawingTools.js";
 import { createLatestAsyncTaskGuard } from "../lib/latestAsyncTask.js";
 import { applySimpleGlobalConfigPatch, saveSimpleGlobalConfigDocument } from "../lib/simpleGlobalConfig.js";
 import { normalizePixelLightWiring } from "../lib/pixelLightLayout.js";
@@ -119,6 +120,7 @@ const document = ref(null);
 const activeLevelIndex = ref(0);
 const activeFrameIndex = ref(0);
 const selectedColor = ref(0);
+const drawingTool = ref("select");
 const spriteBrushActive = ref(false);
 const spriteSearchText = ref("");
 const spriteFilterColors = ref([0, 1, 2, 3]);
@@ -174,6 +176,8 @@ let matrixResizeObserver = null;
 const matrixBasePatchVersion = ref(0);
 const matrixBasePatchCells = ref([]);
 const objectDragPreview = ref(null);
+const erasePreviewFrame = ref(null);
+let eraseStrokeState = null;
 let matrixFrameCache = new WeakMap();
 let frameOccupancyCache = new WeakMap();
 let matrixCacheWarmupHandle = 0;
@@ -303,11 +307,11 @@ watch(selectedEditorSprite, sprite => {
 });
 const matrixCells = computed(() => {
   matrixCacheRevision.value;
-  const frame = previewFrame.value;
+  const frame = erasePreviewFrame.value || previewFrame.value;
   return frame ? getOrCreateMatrixCells(frame) : [];
 });
 const matrixOverlayHighlights = computed(() => {
-  const frame = previewFrame.value;
+  const frame = erasePreviewFrame.value || previewFrame.value;
   if (!frame) {
     return [];
   }
@@ -499,6 +503,7 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+  cancelEraseStroke();
   editorMounted = false;
   editorLoadGuard.invalidate();
   levelPreviewSnapshot.value = null;
@@ -574,6 +579,7 @@ async function loadEditor() {
     activeLevelIndex.value = 0;
     activeFrameIndex.value = 0;
     selectedColor.value = 0;
+    drawingTool.value = "select";
     spriteBrushActive.value = false;
     spriteSearchText.value = "";
     selectedSpriteId.value = "";
@@ -1644,6 +1650,7 @@ function cloneRgbMatrix(matrix) {
 }
 
 function runRgbEdit(targets, action, mutation, { recenter = true } = {}) {
+  cancelEraseStroke();
   const before = captureRgbHistorySnapshot(targets);
   const selection = { mode: selectionMode.value, ids: [...mergeSelectionIds.value] };
   const result = mutation();
@@ -1671,11 +1678,13 @@ function runRgbEdit(targets, action, mutation, { recenter = true } = {}) {
 }
 
 function clearRgbEditHistory() {
+  cancelEraseStroke();
   rgbEditHistory.clear();
   rgbHistoryRevision.value += 1;
 }
 
 function undoRgbEdit() {
+  cancelEraseStroke();
   if (busyAction.value || !rgbEditHistory.canUndo) {
     return false;
   }
@@ -1687,6 +1696,7 @@ function undoRgbEdit() {
 }
 
 function redoRgbEdit() {
+  cancelEraseStroke();
   if (busyAction.value || !rgbEditHistory.canRedo) {
     return false;
   }
@@ -1721,6 +1731,7 @@ function clampIndex(value, length) {
 }
 
 function selectLevel(index) {
+  cancelEraseStroke();
   activeLevelIndex.value = index;
   activeFrameIndex.value = 0;
   ensureActiveFrame();
@@ -1729,6 +1740,7 @@ function selectLevel(index) {
 }
 
 function selectFrame(index) {
+  cancelEraseStroke();
   previewFrameIndex.value = null;
   draggingFrameProgress.value = false;
   activeFrameIndex.value = index;
@@ -1824,29 +1836,30 @@ function dropLevel(index) {
   resetMatrixFrameCache();
 }
 
-function deleteCurrentLevel() {
-  const level = activeLevel.value;
-  if (!level || !canDeleteActiveLevel.value) {
+function deleteCurrentLevel(index = activeLevelIndex.value) {
+  const level = document.value?.levels?.[index];
+  if (busyAction.value || anchorEditMode.value || draggingLevelIndex.value !== null || !level || !canDeleteActiveLevel.value) {
     return;
   }
-  const levelName = level.label || `Level ${activeLevelIndex.value + 1}`;
+  const levelName = level.label || `Level ${index + 1}`;
   const frameCount = level.frameList?.length || 0;
   if (!confirmWithRendererFocus(t("simple.deleteLevelConfirm", { name: levelName, count: frameCount }))) {
     return;
   }
 
-  const result = deleteLevelAt(document.value.levels, activeLevelIndex.value);
+  const deletingActive = index === activeLevelIndex.value;
+  const result = deleteLevelAt(document.value.levels, index, activeLevelIndex.value);
   if (!result.deleted) {
     return;
   }
   document.value.levels = result.levels;
   activeLevelIndex.value = result.activeIndex;
-  activeFrameIndex.value = 0;
+  if (deletingActive) activeFrameIndex.value = 0;
   resetMatrixFrameCache();
   clearRgbEditHistory();
   stopSelectionMode();
   syncSelectedObject();
-  scheduleMatrixCacheWarmup(0);
+  scheduleMatrixCacheWarmup(activeFrameIndex.value);
   statusMessage.value = t("simple.levelDeleted", { name: levelName });
 }
 
@@ -1919,12 +1932,62 @@ function selectColor(index) {
   spriteBrushActive.value = false;
   selectedSpriteId.value = '';
   selectedColor.value = index;
+  selectDrawingTool("brush");
 }
 
 function selectEditorSprite(sprite) {
   if (colorSelectionDisabled.value || !sprite) return;
   selectedSpriteId.value = sprite.id;
   spriteBrushActive.value = true;
+  selectDrawingTool("brush");
+}
+
+function selectDrawingTool(tool) {
+  if (busyAction.value) return;
+  cancelEraseStroke();
+  drawingTool.value = tool;
+  objectDragState = null;
+  objectDragPreview.value = null;
+  hoveredObjectId.value = "";
+  stopSelectionMode();
+  stopAnchorEdit();
+}
+
+function cancelEraseStroke() {
+  eraseStrokeState = null;
+  erasePreviewFrame.value = null;
+}
+
+function handleEraseStart(cell) {
+  cancelEraseStroke();
+  if (busyAction.value || drawingTool.value !== "eraser" || selectionMode.value || anchorEditMode.value) return;
+  const frame = activeFrame.value;
+  if (!frame) return;
+  eraseStrokeState = { frame, targets: currentFrameRgbHistoryTargets(), eraser: createObjectEraseStroke(frame.matrix), lastCell: null };
+  handleEraseMove(cell);
+}
+
+function handleEraseMove(cell) {
+  const stroke = eraseStrokeState;
+  if (!stroke || stroke.frame !== activeFrame.value) { cancelEraseStroke(); return; }
+  if (!cell) { stroke.lastCell = null; return; }
+  const cells = stroke.lastCell ? drawingStrokeCells(stroke.lastCell, cell).slice(1) : [{ x: cell.x, y: cell.y }];
+  stroke.lastCell = { x: cell.x, y: cell.y };
+  if (stroke.eraser.visit(cells)) {
+    erasePreviewFrame.value = { ...stroke.frame, matrix: stroke.frame.matrix.filter(object => !stroke.eraser.removedIds.has(object.id)) };
+  }
+}
+
+function handleEraseEnd(payload) {
+  if (payload?.cancelled) { cancelEraseStroke(); return; }
+  if (payload?.current) handleEraseMove(payload.current);
+  const stroke = eraseStrokeState;
+  cancelEraseStroke();
+  if (!stroke || stroke.frame !== activeFrame.value || busyAction.value || !stroke.eraser.removedIds.size) return;
+  runRgbEdit(stroke.targets, "erase-objects", () => {
+    stroke.frame.matrix = stroke.frame.matrix.filter(object => !stroke.eraser.removedIds.has(object.id));
+    if (stroke.eraser.removedIds.has(selectedObjectId.value)) selectedObjectId.value = "";
+  }, { recenter: false });
 }
 
 function handleCellClick(x, y) {
@@ -1940,11 +2003,16 @@ function handleCellClick(x, y) {
     return;
   }
   const topObject = getTopOccupancyEntry(existing?.occupants)?.object;
-  if (topObject?.id) {
+  if (drawingTool.value === "select") {
+    if (topObject?.id) {
       selectObject(topObject.id);
       statusMessage.value = t("simple.objectSelected");
+    } else {
+      selectedObjectId.value = "";
+    }
     return;
   }
+  if (drawingTool.value !== "brush") return;
   if (!panoramaMode.value && !isRealCell(x, y)) {
     statusMessage.value = t("simple.realCellsOnly");
     return;
@@ -1979,7 +2047,7 @@ function handleCellClick(x, y) {
 }
 
 function handleCellRangeCreate(payload) {
-  if (busyAction.value || spriteBrushActive.value || anchorEditMode.value || selectionMode.value) {
+  if (busyAction.value || drawingTool.value !== "brush" || spriteBrushActive.value || anchorEditMode.value || selectionMode.value) {
     return;
   }
   const frame = ensureActiveFrame();
@@ -2009,7 +2077,7 @@ function handleCellRangeCreate(payload) {
 }
 
 function handleObjectDragStart(cell) {
-  if (busyAction.value || selectionMode.value || anchorEditMode.value) {
+  if (busyAction.value || drawingTool.value !== "select" || selectionMode.value || anchorEditMode.value) {
     return;
   }
   const existing = getExpandedCellAt(cell?.x, cell?.y);
@@ -2042,6 +2110,7 @@ function handleObjectDragStart(cell) {
 
 function handleCellHover(cell) {
   if (
+    drawingTool.value !== "select" ||
     selectionMode.value ||
     anchorEditMode.value ||
     objectDragState ||
@@ -2503,6 +2572,7 @@ function togglePanoramaMode() {
 }
 
 function enterSelectionMode() {
+  drawingTool.value = "select";
   if (!panoramaMode.value) {
     panoramaMode.value = true;
   }
@@ -2975,7 +3045,9 @@ function cancelZoomFrame() {
 }
 
 function syncSelectedObject() {
-  const frame = ensureActiveFrame();
+  cancelEraseStroke();
+  // Selection reconciliation must not re-center a restored history snapshot.
+  const frame = activeFrame.value || ensureActiveFrame();
   objectDragState = null;
   objectDragPreview.value = null;
   hoveredObjectId.value = "";
@@ -3001,6 +3073,7 @@ function canTriggerGlobalShortcut(event) {
 }
 
 function handleGlobalKeydown(event) {
+  if (event.key === "Escape" && eraseStrokeState) { cancelEraseStroke(); event.preventDefault(); return; }
   if (levelMediaPicker.value) return;
   const tagName = event.target?.tagName?.toLowerCase();
   if (["input", "textarea", "select", "audio"].includes(tagName) || event.target?.isContentEditable) {
@@ -3135,11 +3208,16 @@ function formatRuntimeSummary(value) {
       <div v-if="document" class="level-sequence-row">
         <div class="level-structure-actions">
           <button class="icon-add-button" type="button" :aria-label="t('simple.addLevel')" :title="t('simple.addLevel')" @click="addLevel">+</button>
-          <button class="icon-add-button icon-danger-button" type="button" :aria-label="t('simple.deleteCurrentLevel')" :data-tip="t('simple.deleteCurrentLevel')" :disabled="Boolean(busyAction) || !canDeleteActiveLevel" @click="deleteCurrentLevel">-</button>
         </div>
         <div class="sequence-list">
-          <button v-for="(level,index) in levels" :key="`level-${index}`" class="sequence-pill" :class="{active:activeLevelIndex===index,'level-drop-target':levelDropIndex===index}" type="button" :draggable="!busyAction && !anchorEditMode"
-            @dragstart="startLevelDrag($event, index)" @dragover.prevent="draggingLevelIndex!==null&&(levelDropIndex=index)" @drop.prevent="dropLevel(index)" @dragend="endLevelDrag" @click="selectLevel(index)">{{level.label||`Level ${index+1}`}}</button>
+          <div v-for="(level,index) in levels" :key="`level-${index}`" class="level-tab" :class="{'level-drop-target':levelDropIndex===index}"
+            @dragover.prevent="draggingLevelIndex!==null&&(levelDropIndex=index)" @drop.prevent="dropLevel(index)">
+            <button class="sequence-pill" :class="{active:activeLevelIndex===index}" type="button" :draggable="!busyAction && !anchorEditMode"
+              @dragstart="startLevelDrag($event, index)" @dragend="endLevelDrag" @click="selectLevel(index)">{{level.label||`Level ${index+1}`}}</button>
+            <button class="level-tab-delete" type="button" :aria-label="t('simple.deleteLevelLabel', {name:level.label||`Level ${index+1}`})"
+              :title="t('simple.deleteLevelLabel', {name:level.label||`Level ${index+1}`})" :disabled="Boolean(busyAction) || !canDeleteActiveLevel || anchorEditMode || draggingLevelIndex !== null"
+              @pointerdown.stop @click.stop="deleteCurrentLevel(index)" @dragstart.prevent.stop>×</button>
+          </div>
         </div>
       </div>
       </div>
@@ -3245,6 +3323,16 @@ function formatRuntimeSummary(value) {
 
     <div v-if="document" class="editor-toolbar">
             <div class="object-actions">
+              <button v-for="tool in ['select', 'brush', 'eraser']" :key="tool"
+                class="soft-button compact-button object-icon-button drawing-tool-button"
+                :class="{ active: drawingTool === tool && !selectionMode && !anchorEditMode }"
+                type="button" :data-tool="tool" :disabled="Boolean(busyAction)"
+                :aria-label="t(`simple.tool${tool[0].toUpperCase()}${tool.slice(1)}`)"
+                :data-tip="t(`simple.tool${tool[0].toUpperCase()}${tool.slice(1)}`)"
+                :aria-pressed="drawingTool === tool && !selectionMode && !anchorEditMode"
+                @click="selectDrawingTool(tool)">
+                <EditorActionIcon :name="tool" />
+              </button>
               <template v-if="anchorEditMode">
                 <button
                   class="soft-button compact-button object-icon-button"
@@ -3422,7 +3510,7 @@ function formatRuntimeSummary(value) {
 <button class="soft-button compact-button object-icon-button" type="button" :aria-label="t('simple.exportCurrentLevel')" :data-tip="t('simple.exportCurrentLevelJson')" :title="t('simple.exportCurrentLevelJson')" :disabled="Boolean(busyAction) || !activeLevel" @click="exportCurrentLevel"><EditorActionIcon name="export" /></button>
 <button class="soft-button compact-button object-icon-button" type="button" :aria-label="t('simple.importReplaceLevel')" :data-tip="t('simple.importReplaceLevelJson')" :title="t('simple.importReplaceLevelJson')" :disabled="Boolean(busyAction) || !activeLevel" @click="importCurrentLevel"><EditorActionIcon name="import" /></button>
 <button class="soft-button compact-button object-icon-button" type="button" :aria-label="t('simple.openPreview')" :title="t('simple.openPreview')" :disabled="Boolean(busyAction) || !activeLevel" @click="openPreview"><EditorActionIcon name="preview" /></button>
-<button class="soft-button compact-button object-icon-button" type="button" :aria-label="t('simple.exportGif')" :title="t('simple.exportGif')" :disabled="Boolean(busyAction) || !activeLevel?.frameList?.length" @click="exportCurrentLevelGif"><EditorActionIcon name="export" /></button>
+<button class="soft-button compact-button object-icon-button" type="button" :aria-label="t('simple.exportGif')" :title="t('simple.exportGif')" :disabled="Boolean(busyAction) || !activeLevel?.frameList?.length" @click="exportCurrentLevelGif"><EditorActionIcon name="gif" /></button>
 <button class="soft-button compact-button object-icon-button" type="button" :aria-label="t('pixelLight.open')" :title="t('pixelLight.open')" :disabled="Boolean(busyAction) || !document" @click="openPixelLightLayout"><EditorActionIcon name="pixel-light" /></button>
 <button class="soft-button compact-button object-icon-button" type="button" :aria-label="t('effect.open')" :title="t('effect.open')" :disabled="Boolean(busyAction) || !activeFrame" @click="openEffectDialog"><EditorActionIcon name="effect" /></button>
             </div>
@@ -3624,6 +3712,10 @@ function formatRuntimeSummary(value) {
 
         <div ref="matrixScrollRef" class="matrix-scroll" @wheel="zoomMatrix">
           <SimpleMatrixCanvas
+            :tool="anchorEditMode || selectionMode ? 'select' : drawingTool"
+            :interaction-enabled="!busyAction"
+            :erase-enabled="!busyAction && drawingTool === 'eraser' && !selectionMode && !anchorEditMode"
+            :interaction-key="`${activeLevelIndex}:${activeFrameIndex}:${panoramaMode}:${selectionMode}:${anchorEditMode}`"
             :cells="matrixCells"
             :column-count="matrixColumnCount"
             :row-count="matrixRowCount"
@@ -3633,12 +3725,15 @@ function formatRuntimeSummary(value) {
             :base-patch-version="matrixBasePatchVersion"
             :overlay-highlights="matrixOverlayHighlights"
             :show-overlap-indicator="showOverlapIndicators"
-            :range-create-enabled="!busyAction && !spriteBrushActive && !selectionMode && !anchorEditMode"
-            :object-drag-enabled="!busyAction && !selectionMode && !anchorEditMode"
+            :range-create-enabled="!busyAction && drawingTool === 'brush' && !spriteBrushActive && !selectionMode && !anchorEditMode"
+            :object-drag-enabled="!busyAction && drawingTool === 'select' && !selectionMode && !anchorEditMode"
             :outside-range-layout-enabled="!panoramaMode"
             :outside-range-padding="EDITOR_OUTSIDE_RANGE_PADDING"
-            :outside-range-create-enabled="!busyAction && !spriteBrushActive && !panoramaMode && !selectionMode && !anchorEditMode"
+            :outside-range-create-enabled="!busyAction && drawingTool === 'brush' && !spriteBrushActive && !panoramaMode && !selectionMode && !anchorEditMode"
             @cell-click="handleCellClick"
+            @erase-start="handleEraseStart"
+            @erase-move="handleEraseMove"
+            @erase-end="handleEraseEnd"
             @cell-range-create="handleCellRangeCreate"
             @object-drag-start="handleObjectDragStart"
             @object-drag="handleObjectDrag"
@@ -3832,7 +3927,14 @@ function formatRuntimeSummary(value) {
 
 <style scoped>
 .sequence-pill[draggable="true"] { cursor: grab; }
-.sequence-pill.level-drop-target { outline: 2px solid var(--ui-accent); outline-offset: -2px; }
+.level-tab { position: relative; display: flex; flex-shrink: 0; }
+.level-tab .sequence-pill { padding-right: 28px; }
+.level-tab.level-drop-target { outline: 2px solid var(--ui-accent); outline-offset: -2px; }
+.level-tab-delete { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); display: flex; align-items: center; justify-content: center; width: 20px; height: 20px; padding: 0; border: 0; border-radius: 3px; background: var(--ui-surface); color: var(--ui-text); font-size: 18px; line-height: 1; cursor: pointer; opacity: 0; }
+.level-tab:hover .level-tab-delete, .level-tab:focus-within .level-tab-delete { opacity: 1; }
+.level-tab-delete:hover, .level-tab-delete:focus-visible { background: var(--ui-error); color: #fff; }
+.level-tab-delete:disabled { cursor: default; opacity: 0; }
+.level-tab:hover .level-tab-delete:disabled, .level-tab:focus-within .level-tab-delete:disabled { opacity: .35; }
 .editor-level-media{display:grid;gap:14px;min-width:0}
 .editor-circle-countdown{display:grid;gap:8px;margin:12px 0;min-width:0}
 .editor-circle-countdown label{display:flex;align-items:center;gap:10px}

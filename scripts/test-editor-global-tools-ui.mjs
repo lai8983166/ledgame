@@ -127,7 +127,7 @@ try {
     await page.evaluate(()=>{Object.assign(window.fixture.doc,{name:'internal',displayName:'展示名称',type:'rank',minPlayers:1,maxPlayers:2,palette:['#00D9FF','#FF3CAC']});window.fixture.doc.levels=[{label:'Type 1',type:1,rewardPoints:0,durationSeconds:60,bounds:{minX:0,minY:0,maxX:17,maxY:39},targetsPerPlayerMin:3,targetsPerPlayerMax:4,bombMin:0,bombMax:1,bombWarningDelaySeconds:3,bombWarningDurationSeconds:1,refreshSeconds:6,earlyRefresh:true,startGif:'old.gif',gameplayIntro:'old-voice.mp3',backgroundVoice:'old-bg.mp3'}];});
     await mount('RankGameEditorView');assert.equal(await page.locator('.sequence-pill.active').innerText(),'Ranking');
     await assertHeadingIcons();
-    assert.deepEqual((await page.locator('.rank-config-editor>label>span').allTextContents()).slice(0,12),['关卡名','玩法介绍','本关获胜积分','时间限制（秒）','游戏说明','语音说明','关卡背景音乐','最小 X','最大 X','最小 Y','最大 Y','类型']);
+    assert.deepEqual((await page.locator('.rank-config-editor>label>span').allTextContents()).slice(0,10),['关卡名','玩法介绍','本关获胜积分','时间限制（秒）','游戏说明','语音说明','关卡背景音乐','X 范围','Y 范围','类型']);
     assert.equal(await page.locator('.rank-actions button').count(),3);for(const name of ['导入 JSON','导出 JSON','内部名称','显示名称'])assert.equal(await page.getByText(name,{exact:true}).count(),0);
     await page.locator('[data-rank-field="level.rewardPoints"]').fill('55');
     await button('全局配置').click();assert.equal(await field('名称').inputValue(),'展示名称');await field('名称').fill('统一名称');
@@ -160,9 +160,9 @@ try {
     const pills=page.locator('.sequence-pill');await pills.nth(0).dragTo(pills.nth(1));
     assert.deepEqual(await pills.allTextContents(),['第二关','Ranking']);assert.equal(await page.locator('.sequence-pill.active').innerText(),'第二关');
     assert.equal(await page.locator('.rank-intro-preview').getAttribute('src'),'led-media://preview/intro.gif');
-    page.once('dialog',dialog=>dialog.dismiss());await button('删除当前关卡').click();assert.equal(await pills.count(),2);
-    page.once('dialog',dialog=>dialog.accept());await button('删除当前关卡').click();assert.equal(await pills.count(),1);
-    assert.equal(await pills.first().innerText(),'Ranking');assert.equal(await button('删除当前关卡').isDisabled(),true);
+    page.once('dialog',dialog=>dialog.dismiss());await page.locator('.rank-level-delete').first().click();assert.equal(await pills.count(),2);
+    page.once('dialog',dialog=>dialog.accept());await page.locator('.rank-level-delete').first().click();assert.equal(await pills.count(),1);
+    assert.equal(await pills.first().innerText(),'Ranking');assert.equal(await page.locator('.rank-level-delete').first().isDisabled(),true);
   });
   await check('Rank类型专属音效选择试听、取消与切关独立，全局保存不覆盖且主保存可回读',async()=>{
     await page.evaluate(()=>{

@@ -4,8 +4,8 @@ import { useI18n } from "vue-i18n";
 import {
   advanceLevelPreviewState,
   createLevelPreviewState,
+  drawLevelPreviewFrame,
   normalizePreviewRepeatTimes,
-  rasterizeLevelPreviewFrame,
   SIMPLE_TICK_MS,
 } from "../lib/simpleLevelPreview.js";
 
@@ -19,8 +19,10 @@ const emit = defineEmits(["close"]);
 const { t } = useI18n({ useScope: "global" });
 
 const canvasRef = ref(null);
+const stageRef = ref(null);
 const playbackState = ref(createLevelPreviewState(props.snapshot.frames));
 let timer = null;
+let resizeObserver = null;
 
 const frames = computed(() => props.snapshot.frames || []);
 const currentFrame = computed(() => {
@@ -32,11 +34,14 @@ const currentFrame = computed(() => {
 const currentRepeatTotal = computed(() => normalizePreviewRepeatTimes(currentFrame.value?.repeatTimes));
 
 onMounted(() => {
+  resizeObserver = new ResizeObserver(drawCurrentFrame);
+  if (stageRef.value) resizeObserver.observe(stageRef.value);
   restartPlayback();
 });
 
 onBeforeUnmount(() => {
   stopPlayback();
+  resizeObserver?.disconnect();
 });
 
 watch(
@@ -76,14 +81,21 @@ function drawCurrentFrame() {
   }
   const width = props.snapshot.width;
   const height = props.snapshot.height;
-  canvas.width = width;
-  canvas.height = height;
+  const stage = stageRef.value;
+  if (!stage) return;
+  const style = window.getComputedStyle(stage);
+  const availableWidth = stage.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+  const availableHeight = stage.clientHeight - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom);
+  const ratio = window.devicePixelRatio || 1;
+  const cellSize = Math.max(2, Math.floor(Math.min(availableWidth / width, availableHeight / height) * ratio));
+  const displayScale = Math.min(availableWidth / (width * cellSize), availableHeight / (height * cellSize), 1 / ratio);
+  canvas.style.width = `${width * cellSize * displayScale}px`;
+  canvas.style.height = `${height * cellSize * displayScale}px`;
   const context = canvas.getContext("2d", { alpha: false });
   if (!context) {
     return;
   }
-  const pixels = rasterizeLevelPreviewFrame(frame, props.snapshot);
-  context.putImageData(new ImageData(pixels, width, height), 0, 0);
+  drawLevelPreviewFrame(context, frame, props.snapshot, cellSize, Math.max(1, Math.round(ratio)));
 }
 
 function close() {
@@ -109,7 +121,7 @@ function close() {
           <button autofocus type="button" :aria-label="t('simple.closePreview')" @click="close">×</button>
         </header>
 
-        <div v-if="playbackState" class="simple-level-preview-stage">
+        <div v-if="playbackState" ref="stageRef" class="simple-level-preview-stage">
           <canvas
             ref="canvasRef"
             class="simple-level-preview-canvas"
@@ -193,7 +205,9 @@ function close() {
 }
 
 .simple-level-preview-stage {
-  flex: 1;
+  flex: 0 1 auto;
+  height: min(62vh, 620px);
+  max-height: calc(100vh - 210px);
   min-height: 0;
   display: grid;
   place-items: center;
@@ -208,10 +222,8 @@ function close() {
 
 .simple-level-preview-canvas {
   display: block;
-  width: auto;
-  height: min(62vh, 620px);
   max-width: 100%;
-  max-height: calc(100vh - 190px);
+  max-height: 100%;
   image-rendering: pixelated;
   image-rendering: crisp-edges;
   pointer-events: none;

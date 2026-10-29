@@ -83,17 +83,19 @@ test("RGB history restores only matrices and refreshes derived editor state", ()
   assert.match(restore, /resetMatrixFrameCache\(\)/);
   assert.match(restore, /syncSelectedObject\(\)/);
   assert.match(restore, /scheduleMatrixCacheWarmup/);
+  const sync = functionSource("syncSelectedObject", "canTriggerGlobalShortcut");
+  assert.match(sync, /const frame = activeFrame\.value \|\| ensureActiveFrame\(\)/,
+    "selection refresh must preserve arbitrary restored object anchors");
 });
 
 test("level deletion is confirmed and disabled when only one level remains", () => {
   const deletion = functionSource("deleteCurrentLevel", "addFrame");
   assert.match(deletion, /confirmWithRendererFocus\(t\("simple\.deleteLevelConfirm"/);
-  assert.match(deletion, /deleteLevelAt\(document\.value\.levels, activeLevelIndex\.value\)/);
+  assert.match(deletion, /deleteLevelAt\(document\.value\.levels, index, activeLevelIndex\.value\)/);
   assert.match(deletion, /activeFrameIndex\.value = 0/);
   assert.match(deletion, /clearRgbEditHistory\(\)/);
-  assert.match(editorSource, /:disabled="Boolean\(busyAction\) \|\| !canDeleteActiveLevel"/);
-  assert.match(editorSource, /@click="deleteCurrentLevel"/);
-  assert.match(editorSource, /class="level-structure-actions"[\s\S]*@click="deleteCurrentLevel"/);
+  assert.match(editorSource, /:disabled="Boolean\(busyAction\) \|\| !canDeleteActiveLevel \|\| anchorEditMode \|\| draggingLevelIndex !== null"/);
+  assert.match(editorSource, /class="level-tab-delete"[\s\S]*@click\.stop="deleteCurrentLevel\(index\)"/);
   assert.match(
     styleSource,
     /\.level-sequence-row\s*\{[^}]*grid-template-columns:\s*auto minmax\(0, 1fr\)/s,

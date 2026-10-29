@@ -36,6 +36,7 @@ const options=reactive({userCount:props.game.minPlayers || 1,startLevel:Math.min
 const blank=()=>Array.from({length:props.game.siteSizeHeight},()=>Array.from({length:props.game.siteSizeWidth},()=>({r:0,g:0,b:0})));
 const pixels=ref(blank());
 const active=computed(()=>sessionId.value && state.value.sessionId===sessionId.value && ['STARTING','RUNNING','SETTLING','PAUSED'].includes(state.value.engineState));
+const canSwitchLevel=computed(()=>active.value && ['RUNNING','PAUSED'].includes(state.value.engineState));
 const preparation=computed(()=>state.value.preparation?.sessionId===sessionId.value?state.value.preparation:null);
 const participants=computed(()=>state.value.playerAccesses || []);
 const balanceNow=ref(Date.now());
@@ -57,10 +58,10 @@ const countdown=computed(()=>{
 let removeState,removeFrame,balanceTimer,alive=true,scanBuffer='';
 function apply(result){const data=result?.data || result;if(data && (!sessionId.value || data.sessionId===sessionId.value || isDebugRuntimeAvailable(data))){state.value=data;if(data.gameTime)lastGameTime.value=data.gameTime;}}
 async function action(fn){if(busy.value)return;busy.value=true;error.value='';try{return await fn();}catch(e){const key=wristbandErrorMessageKey(e);error.value=e.message?.startsWith('editorDebug.')?t(e.message):key?t(key):e.message;}finally{busy.value=false;}}
-async function prepare(){
+async function prepare(payload=debugLaunchPayload(props.game,options)){
   const current=(await api.gameState())?.data;
   if(!isDebugRuntimeAvailable(current))throw new Error('editorDebug.busy');
-  const result=await api.createEditorPreparation(debugLaunchPayload(props.game,options));
+  const result=await api.createEditorPreparation(payload);
   const data=result?.data || result;
   sessionId.value=data.preparation?.sessionId;
   if(!sessionId.value)throw new Error('editorDebug.prepareFailed');
@@ -90,7 +91,7 @@ async function cleanup(){
   if(!isDebugRuntimeAvailable(after))throw new Error('editorDebug.cleanupFailed');
   sessionId.value=null;scanOpen.value=false;scanBuffer='';
 }
-async function restart(){const needsScan=await action(async()=>{await cleanup();await prepare();if(enough.value)apply(await api.confirmPreparation(sessionId.value));else return true;});if(needsScan)await openScan();}
+async function restart(){const needsScan=await action(async()=>{const payload=debugLaunchPayload(props.game,options);await cleanup();await prepare(payload);if(enough.value)apply(await api.confirmPreparation(sessionId.value));else return true;});if(needsScan)await openScan();}
 async function exit(){return Boolean(await action(async()=>{await cleanup();emit('exit');return true;}));}
 defineExpose({exit});
 async function command(name){await action(async()=>{apply(await api.sendDebugCommand({command:name,sessionId:sessionId.value}));});}
@@ -121,10 +122,10 @@ onBeforeUnmount(()=>{alive=false;clearTimeout(hardwareNoticeTimer);clearInterval
       <aside class="debug-workspace-controls">
         <label><span>{{t('editorDebug.method')}}</span><select v-model="options.launchMethod" :disabled="busy || active || !!preparation"><option value="debug">{{t('editorDebug.direct')}}</option><option value="wristband">{{t('editorDebug.wristband')}}</option></select></label>
         <label><span>{{t('editorDebug.players')}}</span><input v-model.number="options.userCount" type="number" :min="game.minPlayers || 1" :max="game.maxPlayers || game.participants || 1" :disabled="busy || active || !!preparation" /></label>
-        <label><span>{{t('editorDebug.level')}}</span><input v-model.number="options.startLevel" type="number" min="1" :max="game.levels?.length || 1" :disabled="busy || active || !!preparation" /></label>
+        <label><span>{{t('editorDebug.level')}}</span><input v-model.number="options.startLevel" data-debug-field="startLevel" type="number" min="1" :max="game.levels?.length || 1" :disabled="busy || (active && !canSwitchLevel) || !!preparation" /></label>
         <label><span>{{t('editorDebug.failurePolicy')}}</span><select v-model="options.stageFailurePolicy" :disabled="busy || active || !!preparation"><option value="END_GAME">{{t('rank.endGame')}}</option><option value="RETRY">{{t('rank.retry')}}</option></select></label>
         <div v-if="options.launchMethod==='wristband'" class="debug-participants"><button class="soft-button" :disabled="busy || active || enough" @click="scan">{{t('editorDebug.scan')}}</button><p>{{participants.length}} / {{options.userCount}}</p><p v-for="player in participants" :key="player.access.uid">{{player.member?.name}} · {{player.access.uid}}<br/>{{t('editorDebug.balance')}} {{playerAccessRemainingSeconds(player,balanceNow) ?? '—'}}s</p><small>{{t('editorDebug.balanceHint')}}</small></div>
-        <div class="debug-workspace-actions"><button class="action-button primary" :disabled="busy || active" @click="start">{{t('editorDebug.start')}}</button><button class="soft-button" :disabled="busy || !active" @click="command(state.engineState==='PAUSED'?'resume':'pause')">{{t(state.engineState==='PAUSED'?'editorDebug.resume':'editorDebug.pause')}}</button><button class="soft-button" :disabled="busy || !sessionId" @click="restart">{{t('editorDebug.restart')}}</button></div>
+        <div class="debug-workspace-actions"><button class="action-button primary" :disabled="busy || active" @click="start">{{t('editorDebug.start')}}</button><button class="soft-button" :disabled="busy || !active" @click="command(state.engineState==='PAUSED'?'resume':'pause')">{{t(state.engineState==='PAUSED'?'editorDebug.resume':'editorDebug.pause')}}</button><button class="soft-button" :disabled="busy || !sessionId" @click="restart">{{t('editorDebug.restart')}}</button><button class="soft-button" :disabled="busy || !canSwitchLevel" @click="restart">{{t('editorDebug.switchLevel')}}</button></div>
         <p v-if="error" class="error-line" role="alert">{{error}}</p><p v-if="hardwareWarning" class="error-line">{{hardwareWarning}}</p>
         <dl><dt>{{t('editorDebug.state')}}</dt><dd>{{state.engineState || '—'}}</dd><dt>{{t('editorDebug.score')}}</dt><dd>{{gameplay.score ?? '—'}}</dd><dt>{{t('editorDebug.life')}}</dt><dd>{{game.type==='rank'?'—':gameplay.life ?? '—'}}</dd><dt>{{t('editorDebug.points')}}</dt><dd>{{gameplay.memberPoints ?? '—'}}</dd><dt>{{t('editorDebug.time')}}</dt><dd>{{countdown}}</dd><dt>{{t('editorDebug.currentLevel')}}</dt><dd>{{state.currentStageIndex==null?'—':state.currentStageIndex+1}}</dd></dl>
         <article v-for="player in gameplay.players || []" :key="player.playerNumber" class="debug-player"><i :style="{background:player.color || '#888'}"></i><span>{{player.playerNumber}} · {{player.totalScore ?? player.score}} / {{t('editorDebug.points')}} {{player.memberPoints ?? 0}}</span></article>

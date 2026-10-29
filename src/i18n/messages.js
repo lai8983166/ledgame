@@ -1492,6 +1492,28 @@ for (const [locale,[secondaryIdleTopTitle,secondaryIdleBottomTitle,coinCount]] o
   mergedMessages[locale].applicationSettings = {...mergedMessages[locale].applicationSettings,secondaryIdleTopTitle,secondaryIdleBottomTitle,coinCount};
 }
 
+const redChecklistLabels = {
+  'zh-CN': ['选择', '画笔', '橡皮', '删除关卡 {name}', '切换关卡', 'X 范围', 'Y 范围'],
+  'en-US': ['Select', 'Brush', 'Eraser', 'Delete level {name}', 'Switch level', 'X range', 'Y range'],
+  'es-ES': ['Seleccionar', 'Pincel', 'Goma', 'Eliminar nivel {name}', 'Cambiar de nivel', 'Intervalo X', 'Intervalo Y'],
+  'pt-PT': ['Selecionar', 'Pincel', 'Borracha', 'Eliminar nível {name}', 'Mudar de nível', 'Intervalo X', 'Intervalo Y'],
+  'fr-FR': ['Sélection', 'Pinceau', 'Gomme', 'Supprimer le niveau {name}', 'Changer de niveau', 'Plage X', 'Plage Y'],
+  'de-DE': ['Auswählen', 'Pinsel', 'Radierer', 'Level {name} löschen', 'Level wechseln', 'X-Bereich', 'Y-Bereich'],
+  'pl-PL': ['Zaznacz', 'Pędzel', 'Gumka', 'Usuń poziom {name}', 'Zmień poziom', 'Zakres X', 'Zakres Y'],
+  'ru-RU': ['Выбор', 'Кисть', 'Ластик', 'Удалить уровень {name}', 'Сменить уровень', 'Диапазон X', 'Диапазон Y'],
+  'vi-VN': ['Chọn', 'Cọ vẽ', 'Tẩy', 'Xóa màn {name}', 'Chuyển màn', 'Phạm vi X', 'Phạm vi Y'],
+  'it-IT': ['Seleziona', 'Pennello', 'Gomma', 'Elimina livello {name}', 'Cambia livello', 'Intervallo X', 'Intervallo Y'],
+  'cs-CZ': ['Výběr', 'Štětec', 'Guma', 'Odstranit úroveň {name}', 'Přepnout úroveň', 'Rozsah X', 'Rozsah Y'],
+  'ko-KR': ['선택', '브러시', '지우개', '{name} 단계 삭제', '단계 전환', 'X 범위', 'Y 범위'],
+  'ro-RO': ['Selectare', 'Pensulă', 'Radieră', 'Șterge nivelul {name}', 'Schimbă nivelul', 'Interval X', 'Interval Y'],
+  'ar-SA': ['تحديد', 'فرشاة', 'ممحاة', 'حذف المرحلة {name}', 'تبديل المرحلة', 'نطاق X', 'نطاق Y'],
+};
+for (const [locale, [toolSelect, toolBrush, toolEraser, deleteLevelLabel, switchLevel, xRange, yRange]] of Object.entries(redChecklistLabels)) {
+  mergedMessages[locale].simple = { ...mergedMessages[locale].simple, toolSelect, toolBrush, toolEraser, deleteLevelLabel };
+  mergedMessages[locale].rank = { ...mergedMessages[locale].rank, xRange, yRange, deleteLevel: deleteLevelLabel };
+  mergedMessages[locale].editorDebug = { ...mergedMessages[locale].editorDebug, switchLevel };
+}
+
 export const authoredMessages = Object.fromEntries(
   canonicalLocales.map((locale) => [locale, mergedMessages[locale] || {}]),
 );

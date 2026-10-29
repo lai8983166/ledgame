@@ -268,8 +268,8 @@ async function dropCard(id, kind) {
       <div>
         <h1>{{ selectedCategory ? selectedCategory.name : t(section === 'home' ? 'gameCategories.homeTitle' : 'games.title') }}</h1>
       </div>
-      <div v-if="section === 'list' || selectedCategory" class="catalog-toolbar">
-        <button v-if="section === 'list'" class="soft-button" type="button" @click="beginCreateGame('import')">{{ t('catalogMaintenance.import') }}</button>
+      <div class="catalog-toolbar">
+        <button class="soft-button" type="button" @click="beginCreateGame('import')">{{ t('catalogMaintenance.import') }}</button>
         <button class="action-button primary" type="button" @click="beginCreateGame()">{{ t('gameCreation.create') }}</button>
       </div>
     </div>

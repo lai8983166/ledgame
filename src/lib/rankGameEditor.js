@@ -34,11 +34,37 @@ export function createRankLevel(width = 16, height = 36, index = 0) {
     bombWarningDelaySeconds: 3, bombWarningDurationSeconds: 1, refreshSeconds: 6, earlyRefresh: true };
 }
 
-export function parseRankRange(value, minimum = 0) {
+export function parseRankRange(value, minimum = 0, maximum = Infinity) {
   const match = /^\s*(\d+)\s*[,，]\s*(\d+)\s*$/.exec(String(value));
   if (!match) return null;
   const range = match.slice(1).map(Number);
-  return range.every(Number.isSafeInteger) && range[0] >= minimum && range[0] <= range[1] ? range : null;
+  return range.every(Number.isSafeInteger) && range[0] >= minimum && range[0] <= range[1] && range[1] <= maximum ? range : null;
+}
+
+export const RANK_RANGE_FIELDS = Object.freeze({
+  targets: ['targetsPerPlayerMin', 'targetsPerPlayerMax'],
+  bombs: ['bombMin', 'bombMax'],
+  x: ['minX', 'maxX'],
+  y: ['minY', 'maxY'],
+});
+
+export function parseRankEditorRange(kind, text, document) {
+  return parseRankRange(text, kind === 'bombs' ? 0 : 1,
+    kind === 'x' ? Number(document.siteSizeWidth) : kind === 'y' ? Number(document.siteSizeHeight) : Infinity);
+}
+
+export function rankRangeText(level, kind, drafts) {
+  const values = kind === 'x' || kind === 'y' ? level?.bounds : level;
+  return drafts.get(level)?.[kind] ?? RANK_RANGE_FIELDS[kind].map(key => values?.[key] ?? '').join(',');
+}
+
+export function setRankRangeDraft(level, kind, text, document, drafts) {
+  drafts.set(level, { ...drafts.get(level), [kind]: text });
+  const parsed = parseRankEditorRange(kind, text, document);
+  if (parsed) {
+    const values = kind === 'x' || kind === 'y' ? level.bounds : level;
+    RANK_RANGE_FIELDS[kind].forEach((key, index) => { values[key] = parsed[index]; });
+  }
 }
 
 export function normalizeRankEditorDocument(value) {

@@ -67,3 +67,30 @@ export function rasterizeLevelPreviewFrame(frame, snapshot) {
   });
   return new Uint8ClampedArray(pixels);
 }
+
+// The display grid belongs only to the preview; GIFs keep the original pixels.
+export function drawLevelPreviewFrame(context, frame, snapshot, cellSize = 16, lineWidth = 1) {
+  const width = Math.max(1, Math.floor(Number(snapshot?.width) || 1));
+  const height = Math.max(1, Math.floor(Number(snapshot?.height) || 1));
+  const size = Math.max(2, Math.floor(Number(cellSize) || 16));
+  const border = Math.min(size - 1, Math.max(1, Math.floor(Number(lineWidth) || 1)));
+  const pixels = rasterizeLevelPreviewFrame(frame, snapshot);
+  const canvasWidth = width * size;
+  const canvasHeight = height * size;
+  context.canvas.width = canvasWidth;
+  context.canvas.height = canvasHeight;
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const offset = (y * width + x) * 4;
+      context.fillStyle = `rgb(${pixels[offset]}, ${pixels[offset + 1]}, ${pixels[offset + 2]})`;
+      context.fillRect(x * size, y * size, size, size);
+    }
+  }
+  context.fillStyle = "#ffffff";
+  for (let x = 0; x <= width; x += 1) {
+    context.fillRect(Math.min(x * size, canvasWidth - border), 0, border, canvasHeight);
+  }
+  for (let y = 0; y <= height; y += 1) {
+    context.fillRect(0, Math.min(y * size, canvasHeight - border), canvasWidth, border);
+  }
+}

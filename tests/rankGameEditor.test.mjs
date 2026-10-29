@@ -6,6 +6,30 @@ import { fileURLToPath } from "node:url";
 
 import { createRankEditorPayload, createRankLevel, normalizeRankEditorDocument, parseRankRange, applyRankGlobalConfig } from "../src/lib/rankGameEditor.js";
 import { RANK_BOMB_TYPES } from "../src/lib/rankGameEditor.js";
+import { parseRankEditorRange, rankRangeText, setRankRangeDraft } from '../src/lib/rankGameEditor.js';
+import { moveLevelAt } from '../src/lib/simpleLevelSequence.js';
+
+test('Rank coordinate ranges enforce displayed bounds and preserve drafts by level through reorder and deletion',()=>{
+  const one=createRankLevel(16,36),two=createRankLevel(16,36,1);
+  const doc={siteSizeWidth:16,siteSizeHeight:36,levels:[one,two]},drafts=new Map();
+  for(const text of ['0,2','1,17','4,2','1.5,2','1,','1e0,2'])assert.equal(parseRankEditorRange('x',text,doc),null);
+  assert.deepEqual(parseRankEditorRange('x','1，16',doc),[1,16]);
+  assert.deepEqual(parseRankEditorRange('y','2,36',doc),[2,36]);
+  assert.equal(parseRankEditorRange('y','2,37',doc),null);
+  setRankRangeDraft(one,'x','3,8',doc,drafts);setRankRangeDraft(one,'y','2,',doc,drafts);
+  setRankRangeDraft(two,'x','7,12',doc,drafts);
+  assert.deepEqual(one.bounds,{minX:3,maxX:8,minY:1,maxY:36});
+  const moved=moveLevelAt(doc.levels,1,0,0);doc.levels=moved.levels;
+  assert.equal(doc.levels[moved.activeIndex],one);
+  assert.equal(rankRangeText(doc.levels[0],'x',drafts),'7,12');
+  assert.equal(rankRangeText(doc.levels[1],'y',drafts),'2,');
+  doc.levels.splice(0,1);drafts.delete(two);
+  assert.equal(rankRangeText(doc.levels[0],'y',drafts),'2,');
+  setRankRangeDraft(one,'y','2,36',doc,drafts);
+  assert.deepEqual(createRankEditorPayload(doc,7).levels[0].bounds,{minX:2,maxX:7,minY:1,maxY:35});
+  assert.equal(one.bounds.minX,3);
+  doc.siteSizeWidth=6;assert.equal(parseRankEditorRange('x',rankRangeText(one,'x',drafts),doc),null);
+});
 
 test('all bomb sizes keep their subtype, bounds and independent audio in editor payloads',()=>{
   assert.deepEqual(RANK_BOMB_TYPES,[1,2,3]);

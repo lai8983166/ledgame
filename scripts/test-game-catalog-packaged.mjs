@@ -45,7 +45,9 @@ async function create(family, name) {
     document.gif = {...document.gif,standby:'idle.gif',gameFailure:'fail.gif',gameOver:'over.gif'};
     document.levels[0].option.rewardPoints = 10;
     document.levels[0].option.passLevelScore = 999;
-    document.levels[0].frameList[0].matrix = [{ id: 'blue-target', x: 8, y: 18, color: 1, points: [[0, 0]] }];
+    document.levels[0].option.lifeLimitMode = 'LIMITED'; document.levels[0].option.lifeLimitValue = 5;
+    document.levels[0].frameList[0].matrix = [{ id: 'blue-target', x: 8, y: 18, color: 1, points: [[0, 0], [1, 0]] }, { id: 'red-hazard', x: 10, y: 18, color: 2, points: [[0, 0]] }];
+    document.levels.push({ ...structuredClone(document.levels[0]), label: '第二关' });
   }
   const saved = (await request(family === 'ranked' ? '/rank-game-editor' : '/game-editor', 'POST', document)).data;
   assert.equal((await request(`/game/${saved.gameId}`)).data.childModeVisible, false);
@@ -72,6 +74,7 @@ try {
   await check('分类标题、新建弹窗白底黑字及导航白字', async () => {
     await expect(page.locator('.page-heading h1')).toHaveText('维护验收分类');
     await expect(page.locator('.page-heading p, .game-category-breadcrumb span')).toHaveCount(0);
+    await expect(button('导入游戏')).toBeVisible();
     await expect(page.getByTestId('game-menu-button')).toHaveCSS('color', 'rgb(255, 255, 255)');
     await button('新建游戏').click();
     await expect(page.locator('.game-creation-dialog')).toHaveCSS('background-color', 'rgb(255, 255, 255)');
@@ -88,7 +91,7 @@ try {
       return card.getBoundingClientRect().left - grid.left <= 3 && copy.top >= cover.bottom - 1 && actions.bottom <= cover.bottom + 1;
     }), 'packaged card is left-aligned with a separate cover and title');
   });
-  await check('分类内卡片直接调试并返回原分类，无 Touch/DebugPanel 窗口', async () => {
+  await check('分类内卡片调试、运行和暂停切关重置本局并返回原分类', async () => {
     await card.hover(); await card.getByRole('button', { name: '调试游戏', exact: true }).click();
     await expect(page.locator('.editor-debug-workspace')).toBeVisible();
     assert.equal(await page.locator('.simple-editor-fit-viewport').count(), 0);
@@ -100,6 +103,17 @@ try {
     await button('暂停').click(); await expect.poll(async () => (await request('/engine/game/state')).data.engineState).toBe('PAUSED');
     await request(`/game/${simple}`, 'DELETE', undefined, false);
     await button('继续').click(); await page.locator('.editor-debug-workspace canvas').click({ position: { x: 20, y: 20 } });
+    const initial = (await request('/engine/game/state')).data;
+    await api('sendDebugCommand', { command: 'tileinput', sessionId: initial.sessionId, x: 8, y: 18 });
+    await api('sendDebugCommand', { command: 'tileinput', sessionId: initial.sessionId, x: 10, y: 18 });
+    await expect.poll(async () => { const state = (await request('/engine/game/state')).data; return [state.gameplay.score, state.gameplay.life]; }).toEqual([1, 4]);
+    await button('暂停').click(); await page.locator('[data-debug-field=startLevel]').fill('2'); await button('切换关卡').click();
+    await expect.poll(async () => { const state = (await request('/engine/game/state')).data; return state.engineState === 'RUNNING' ? state.currentStageIndex : null; }).toBe(1);
+    const switched = (await request('/engine/game/state')).data;
+    assert.notEqual(switched.sessionId, initial.sessionId); assert.equal(switched.gameplay.score, 0); assert.equal(switched.gameplay.life, 5);
+    assert.ok(switched.gameplay.globalElapsedTime < 3000); assert.ok(switched.gameTime.remainingMillis > 110000);
+    await page.locator('[data-debug-field=startLevel]').fill('1'); await button('切换关卡').click();
+    await expect.poll(async () => { const state = (await request('/engine/game/state')).data; return state.engineState === 'RUNNING' ? state.currentStageIndex : null; }).toBe(0);
     await button('退出调试，返回游戏列表').click();
     await expect(page.locator('.page-heading h1')).toHaveText('维护验收分类'); await expect(card).toBeVisible();
   });
@@ -163,6 +177,16 @@ try {
     await expect(categoryCard).toHaveCount(0); assert.equal((await request(`/game/${simple}`)).data.firstCatalog, '');
     const replacement = (await request('/game-categories', 'POST', { name: '保存验收分类' })).data;
     await select('游戏列表'); await card.hover(); await card.getByRole('button', { name: '编辑', exact: true }).click();
+    await page.locator('.simple-editor-fit-shell.ready').waitFor();
+    await button('显示对象列表').click(); await expect(page.locator('.object-row')).toHaveCount(2);
+    await page.locator('[data-tool=eraser]').click();
+    const board = await page.locator('.matrix-base-canvas').boundingBox();
+    await page.mouse.click(board.x + board.width * 8.5 / 16, board.y + board.height * 18.5 / 36);
+    await expect(page.locator('.object-row')).toHaveCount(1);
+    await button('撤销 RGB 编辑').click(); await expect(page.locator('.object-row')).toHaveCount(2);
+    await button('重做 RGB 编辑').click(); await expect(page.locator('.object-row')).toHaveCount(1);
+    await button('撤销 RGB 编辑').click(); await expect(page.locator('.object-row')).toHaveCount(2);
+    await expect(page.locator('.level-tab-delete')).toHaveCount(2);
     await button('全局配置').click();
     await page.locator('.global-config-field').filter({ has: page.locator('.global-config-label').filter({ hasText: /^一级菜单$/ }) }).locator('select').selectOption(String(replacement.id));
     const visibility = page.locator('.global-config-field').filter({ hasText: '触屏显示' }).locator('input'); await visibility.uncheck();
@@ -199,12 +223,13 @@ try {
     await expect(page.locator('.editor-save-dialog h2')).toHaveText('保存成功');
     await page.locator('.editor-save-dialog button').click();
     await button('添加关卡').click();await page.locator('[data-rank-field="level.type"]').selectOption('3');
+    await page.locator('[data-rank-field="level.bounds.x"]').fill('2,15'); await page.locator('[data-rank-field="level.bounds.y"]').fill('3,34');
     await page.locator('[data-rank-field="level.label"]').fill('第二关验收');await page.locator('[data-rank-field="level.durationSeconds"]').fill('1');await page.locator('[data-rank-field="level.rewardPoints"]').fill('11');
     const explosion=page.locator('[data-rank-field="level.bombExplosionAudio"]');
     await explosion.getByRole('button',{name:'选择',exact:true}).click();
     await page.locator('.media-picker-row[data-path="危险来袭.mp3"]').click();await page.locator('.media-picker-actions .primary').click();
     await page.locator('.rank-actions .primary').click();await expect(page.locator('.editor-save-dialog h2')).toHaveText('保存成功');await page.locator('.editor-save-dialog button').click();
-    const persisted=(await request(`/rank-game-editor/${rank}`)).data;assert.equal(persisted.levels.length,2);assert.equal(persisted.levels[1].label,'第二关验收');assert.equal(persisted.levels[1].rewardPoints,11);assert.equal(persisted.levels[1].bounds.maxY,35);
+    const persisted=(await request(`/rank-game-editor/${rank}`)).data;assert.equal(persisted.levels.length,2);assert.equal(persisted.levels[1].label,'第二关验收');assert.equal(persisted.levels[1].rewardPoints,11);assert.deepEqual(persisted.levels[1].bounds,{minX:1,maxX:14,minY:2,maxY:33});
     assert.deepEqual(persisted.levels.map(level=>level.type),[2,3]);
     assert.equal(persisted.levels[0].bombWarningAudio,'危险来袭.mp3');assert.equal(persisted.levels[0].bombExplosionAudio,'Ranking/bomb.mp3');assert.equal(persisted.levels[1].bombExplosionAudio,'危险来袭.mp3');
     await button('返回列表').click();

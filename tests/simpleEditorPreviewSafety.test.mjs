@@ -23,7 +23,7 @@ test("Open Preview snapshots the active level without runtime or Debug Panel IPC
 });
 
 test("level preview is a read-only Canvas with bounded timer lifecycle", () => {
-  assert.match(previewSource, /rasterizeLevelPreviewFrame\(frame, props\.snapshot\)/);
+  assert.match(previewSource, /drawLevelPreviewFrame\(context, frame, props\.snapshot,/);
   assert.match(previewSource, /window\.setInterval[\s\S]*SIMPLE_TICK_MS/);
   assert.match(previewSource, /onBeforeUnmount[\s\S]*stopPlayback/);
   assert.match(previewSource, /playbackState\.value\?\.frameIndex/);

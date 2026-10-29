@@ -88,6 +88,20 @@ defineProps({
       <path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12Z" />
       <circle cx="12" cy="12" r="3" />
     </template>
+    <template v-else-if="name === 'gif'">
+      <path d="M4 2h11l5 5v15H4V2ZM15 2v5h5" />
+      <text x="12" y="16" text-anchor="middle" font-size="7" font-family="Arial, sans-serif" font-weight="800">GIF</text>
+    </template>
+    <template v-else-if="name === 'brush'">
+      <path d="m10 14 9-11 3 3-11 9M10 14l1 1" />
+      <path d="M10 15c-5-3-3 5-8 5 5 3 11 0 8-5Z" />
+    </template>
+    <template v-else-if="name === 'eraser'">
+      <path d="m3 14 10-11a2 2 0 0 1 3 0l5 5a2 2 0 0 1 0 3L11 21H8l-5-5a1.5 1.5 0 0 1 0-2ZM8 9l9 8M11 21h10" />
+    </template>
+    <template v-else-if="name === 'select'">
+      <path d="m5 3 14 10-7 1-3 7L5 3Z" />
+    </template>
     <template v-else-if="name === 'export'">
       <rect x="3" y="4" width="18" height="16" rx="2" />
       <path d="m5 16 4-4 3 3M12 19l5-6 4 4M16 3v6m-3-3 3 3 3-3" />

@@ -2,8 +2,13 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { drawTwoPhaseCanvasPatch } from "../lib/simpleCanvasPatch.js";
+import { drawingToolCursor } from "../lib/simpleDrawingTools.js";
 
 const props = defineProps({
+  tool: { type: String, default: "select" },
+  interactionEnabled: { type: Boolean, default: true },
+  eraseEnabled: { type: Boolean, default: false },
+  interactionKey: { type: String, default: "" },
   cells: {
     type: Array,
     required: true,
@@ -73,6 +78,9 @@ const emit = defineEmits([
   "object-drag-end",
   "cell-hover",
   "matrix-contextmenu",
+  "erase-start",
+  "erase-move",
+  "erase-end",
 ]);
 const { t } = useI18n();
 
@@ -82,6 +90,8 @@ let hoverCell = null;
 let dragStartCell = null;
 let dragCurrentCell = null;
 let draggingObject = false;
+let erasing = false;
+let activePointerId = null;
 let pointerOrigin = null;
 let pointerMoved = false;
 let baseAnimationFrame = 0;
@@ -127,11 +137,15 @@ const overlayCanvasStyle = computed(() => ({
 }));
 
 onMounted(() => {
+  window.addEventListener("blur", cancelPointerInteraction);
+  refreshCursor();
   scheduleBaseDraw();
   scheduleOverlayDraw();
 });
 
 onBeforeUnmount(() => {
+  cancelPointerInteraction();
+  window.removeEventListener("blur", cancelPointerInteraction);
   if (baseAnimationFrame) {
     window.cancelAnimationFrame(baseAnimationFrame);
   }
@@ -141,6 +155,12 @@ onBeforeUnmount(() => {
   emptyGridCanvas = null;
   emptyGridSignature = "";
 });
+
+watch(
+  () => [props.tool, props.interactionEnabled, props.eraseEnabled, props.interactionKey],
+  () => { cancelPointerInteraction(); refreshCursor(); },
+  { flush: "sync" },
+);
 
 watch(
   () => [
@@ -171,7 +191,7 @@ watch(
     props.overlayHighlights,
   ],
   () => {
-    if (!props.rangeCreateEnabled && !props.objectDragEnabled) {
+    if (!props.rangeCreateEnabled && !props.objectDragEnabled && !props.eraseEnabled) {
       dragStartCell = null;
       dragCurrentCell = null;
       draggingObject = false;
@@ -431,7 +451,7 @@ function drawRoundedRect(context, left, top, width, height, radius) {
 }
 
 function handlePointerDown(event) {
-  if (event.button !== 0) {
+  if (event.button !== 0 || !props.interactionEnabled || dragStartCell) {
     return;
   }
   const cell = getCellFromPointer(event);
@@ -440,22 +460,34 @@ function handlePointerDown(event) {
   }
   event.preventDefault();
   overlayCanvasRef.value?.setPointerCapture?.(event.pointerId);
+  activePointerId = event.pointerId;
   dragStartCell = cell;
   dragCurrentCell = cell;
   pointerOrigin = { x: event.clientX, y: event.clientY };
   pointerMoved = false;
   draggingObject = props.objectDragEnabled && Boolean(cell.objectId);
+  erasing = props.eraseEnabled;
   updateHoverCell(cell);
-  if (draggingObject) {
+  if (erasing) {
+    emit("erase-start", cell);
+  } else if (draggingObject) {
     emit("object-drag-start", cell);
   }
   scheduleOverlayDraw();
 }
 
 function handlePointerMove(event) {
+  if (dragStartCell && event.pointerId !== activePointerId) return;
   if (dragStartCell && pointerOrigin && Math.hypot(event.clientX - pointerOrigin.x, event.clientY - pointerOrigin.y) > 4) pointerMoved = true;
   const cell = getCellFromPointer(event);
   updateHoverCell(cell);
+  if (erasing) {
+    if ((dragCurrentCell?.key || "") !== (cell?.key || "")) {
+      dragCurrentCell = cell;
+      emit("erase-move", cell);
+    }
+    return;
+  }
   if (draggingObject && dragStartCell && cell) {
     event.preventDefault();
     if (dragCurrentCell?.key === cell.key) {
@@ -481,14 +513,16 @@ function handlePointerMove(event) {
 }
 
 function handlePointerUp(event) {
-  if (!dragStartCell) {
+  if (!dragStartCell || event.pointerId !== activePointerId) {
     return;
   }
-  overlayCanvasRef.value?.releasePointerCapture?.(event.pointerId);
   const startCell = dragStartCell;
-  const endCell = getCellFromPointer(event) || dragCurrentCell || startCell;
+  const pointerCell = getCellFromPointer(event);
+  const endCell = pointerCell || dragCurrentCell || startCell;
   const moved = pointerMoved || startCell.key !== endCell.key;
   const wasDraggingObject = draggingObject;
+  const wasErasing = erasing;
+  if (wasErasing) emit("erase-end", { current: pointerCell, cancelled: false });
   if (wasDraggingObject) {
     emit("object-drag-end", {
       objectId: startCell.objectId || "",
@@ -499,10 +533,13 @@ function handlePointerUp(event) {
   dragStartCell = null;
   dragCurrentCell = null;
   draggingObject = false;
+  erasing = false;
+  activePointerId = null;
   pointerOrigin = null;
+  overlayCanvasRef.value?.releasePointerCapture?.(event.pointerId);
   refreshCursor();
   scheduleOverlayDraw();
-  if (wasDraggingObject) {
+  if (wasDraggingObject || wasErasing) {
     return;
   }
   if (!endCell) {
@@ -521,6 +558,12 @@ function handlePointerUp(event) {
 }
 
 function handlePointerCancel(event) {
+  if (event && activePointerId !== null && event.pointerId !== activePointerId) return;
+  cancelPointerInteraction();
+}
+
+function cancelPointerInteraction() {
+  if (erasing) emit("erase-end", { cancelled: true });
   if (draggingObject && dragStartCell) {
     emit("object-drag-end", {
       objectId: dragStartCell.objectId || "",
@@ -529,11 +572,16 @@ function handlePointerCancel(event) {
       cancelled: true,
     });
   }
-  overlayCanvasRef.value?.releasePointerCapture?.(event.pointerId);
+  const pointerId = activePointerId;
   dragStartCell = null;
   dragCurrentCell = null;
   draggingObject = false;
+  erasing = false;
+  activePointerId = null;
   pointerOrigin = null;
+  if (pointerId !== null && overlayCanvasRef.value?.hasPointerCapture?.(pointerId)) {
+    overlayCanvasRef.value.releasePointerCapture(pointerId);
+  }
   refreshCursor();
   scheduleOverlayDraw();
 }
@@ -587,7 +635,7 @@ function updateCanvasTitle(title) {
 }
 
 function setCursor(cell) {
-  if (overlayCanvasRef.value) overlayCanvasRef.value.style.cursor = draggingObject ? 'grabbing' : cell?.objectId ? 'pointer' : 'crosshair';
+  if (overlayCanvasRef.value) overlayCanvasRef.value.style.cursor = drawingToolCursor(props.tool, Boolean(cell?.objectId), draggingObject);
 }
 
 function refreshCursor() {
@@ -679,7 +727,7 @@ function getCellsInRange(startCell, endCell) {
 }
 
 function drawDragSelection(context) {
-  if (!props.rangeCreateEnabled || draggingObject || !dragStartCell || !dragCurrentCell) {
+  if (!props.rangeCreateEnabled || draggingObject || erasing || !dragStartCell || !dragCurrentCell) {
     return;
   }
   const startPosition = getOverlayCellPosition(dragStartCell);
@@ -839,6 +887,7 @@ function dedupePatchCells(cells) {
       @pointermove="handlePointerMove"
       @pointerup="handlePointerUp"
       @pointercancel="handlePointerCancel"
+      @lostpointercapture="handlePointerCancel"
       @mouseleave="clearHover"
     ></canvas>
   </div>

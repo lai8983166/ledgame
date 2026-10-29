@@ -42,3 +42,16 @@ test("deleting the only level or an invalid index is rejected", () => {
   assert.equal(invalidResult.deleted, false);
   assert.equal(invalidResult.levels.length, 2);
 });
+
+test("deleting another level keeps the selected level and its unsaved data", () => {
+  const levels = ['A', 'B', 'C'].map(label => ({ label, frameList: [{ matrix: [label] }] }));
+  const before = structuredClone(levels);
+  const preceding = deleteLevelAt(levels, 0, 1);
+  assert.deepEqual(preceding.levels, [levels[1], levels[2]]);
+  assert.equal(preceding.activeIndex, 0);
+  assert.equal(preceding.levels[preceding.activeIndex], levels[1]);
+  const following = deleteLevelAt(levels, 2, 1);
+  assert.equal(following.activeIndex, 1);
+  assert.equal(following.levels[following.activeIndex], levels[1]);
+  assert.deepEqual(levels, before);
+});

@@ -3742,10 +3742,15 @@ html.editor-saving * {
   background: var(--ui-card);
   transform: none;
 }
-.editor-toolbar .object-actions .color-copy-green { color: #3f8c63 !important; }
-.editor-toolbar .object-actions .color-copy-blue { color: #4f78bb !important; }
-.editor-toolbar .object-actions .color-copy-red { color: #bc555a !important; }
-.editor-toolbar .object-actions .color-copy-pink { color: #a65c91 !important; }
+.editor-toolbar .object-actions .color-copy-button:not(:disabled) { color: #fff; }
+.editor-toolbar .object-actions .drawing-tool-button:not(:disabled) { color: #fff; }
+.editor-toolbar .object-actions .color-copy-button:not(:disabled):hover,
+.editor-toolbar .object-actions .drawing-tool-button:not(:disabled):hover { color: #fff; }
+.editor-toolbar .object-actions .drawing-tool-button.active:not(:disabled) {
+  border-color: var(--ui-accent);
+  background: var(--ui-active);
+  box-shadow: var(--ui-selected-shadow);
+}
 .editor-toolbar .object-actions .object-danger-button { color: var(--ui-error) !important; }
 .editor-toolbar .object-actions .object-sprite-button { color: var(--ui-purple) !important; }
 .editor-toolbar .object-actions .object-sprite-button.active { color: #dfbcff !important; }

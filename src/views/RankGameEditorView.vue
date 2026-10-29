@@ -2,14 +2,14 @@
 import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { extractErrorMessage } from '../lib/gameFlowState.js';
-import { RANK_BOMB_TYPES, createRankEditorPayload, createRankLevel, normalizeRankEditorDocument, applyRankGlobalConfig, parseRankRange } from '../lib/rankGameEditor.js';
+import { RANK_BOMB_TYPES, RANK_RANGE_FIELDS, createRankEditorPayload, createRankLevel, normalizeRankEditorDocument, applyRankGlobalConfig, parseRankEditorRange, rankRangeText, setRankRangeDraft } from '../lib/rankGameEditor.js';
 import { confirmWithRendererFocus } from '../lib/rendererFocus.js';
 import { normalizeGameCategoryList } from '../lib/gameCategories.js';
 import { buildMediaPreviewUrl } from '../lib/mediaPreview.js';
 import { requiredEditorFields } from '../lib/editorRequiredFields.js';
 import { withEditorSavingCursor } from '../lib/editorSavingCursor.js';
 import { saveGameWiring } from '../lib/gameWiring.js';
-import { moveLevelAt } from '../lib/simpleLevelSequence.js';
+import { deleteLevelAt, moveLevelAt } from '../lib/simpleLevelSequence.js';
 import EditorActionIcon from '../components/EditorActionIcon.vue';
 import EditorSaveDialog from '../components/EditorSaveDialog.vue';
 import MediaPickerDialog from '../components/MediaPickerDialog.vue';
@@ -27,6 +27,8 @@ const globalConfigOpen=ref(false), globalConfigDraft=ref({}), globalSaving=ref(f
 const gameWiringOpen=ref(false), gameWiringSaving=ref(false), gameWiringError=ref(''), mediaPicker=ref(null);
 const canSave=computed(()=>!!document.value&&!busy.value&&!globalSaving.value&&!gameWiringSaving.value);
 const rangeDrafts=reactive(new Map());
+const levelKeys=new WeakMap();let nextLevelKey=0;
+function levelKey(level){if(!levelKeys.has(level))levelKeys.set(level,++nextLevelKey);return levelKeys.get(level);}
 let hydrating=false;
 watch(document,()=>{if(!hydrating&&document.value)dirty.value=true;},{deep:true});
 onMounted(async()=>{
@@ -44,10 +46,11 @@ function addLevel(){
   document.value.levels.push(createRankLevel(document.value.siteSizeWidth,document.value.siteSizeHeight,levels.value.length));
   activeLevelIndex.value=levels.value.length-1;
 }
-function deleteLevel(){
-  if(!canSave.value||levels.value.length<2||!confirmWithRendererFocus(t('rank.deleteLevelConfirm',{name:type1Config.value?.label})))return;
-  rangeDrafts.delete(type1Config.value); document.value.levels.splice(activeLevelIndex.value,1);
-  activeLevelIndex.value=Math.min(activeLevelIndex.value,levels.value.length-1);
+function deleteLevel(index){
+  const target=levels.value[index];
+  if(!canSave.value||draggingLevelIndex.value!==null||!target||levels.value.length<2||!confirmWithRendererFocus(t('rank.deleteLevelConfirm',{name:target.label})))return;
+  const result=deleteLevelAt(levels.value,index,activeLevelIndex.value);
+  rangeDrafts.delete(target);document.value.levels=result.levels;activeLevelIndex.value=result.activeIndex;
 }
 function dropLevel(index){
   if(!canSave.value||draggingLevelIndex.value===null)return;
@@ -55,16 +58,12 @@ function dropLevel(index){
   document.value.levels=result.levels;activeLevelIndex.value=result.activeIndex;endDrag();
 }
 function endDrag(){draggingLevelIndex.value=null;levelDropIndex.value=null;}
-const rangeFields={targets:['targetsPerPlayerMin','targetsPerPlayerMax'],bombs:['bombMin','bombMax']};
-function rangeText(kind){const level=type1Config.value;return rangeDrafts.get(level)?.[kind]??rangeFields[kind].map(key=>level?.[key]??'').join(',');}
+function rangeText(kind){return rankRangeText(type1Config.value,kind,rangeDrafts);}
 function setRange(kind,text){
-  const level=type1Config.value;
-  rangeDrafts.set(level,{...rangeDrafts.get(level),[kind]:text});
-  const parsed=parseRankRange(text,kind==='targets'?1:0);
-  if(parsed)rangeFields[kind].forEach((key,index)=>level[key]=parsed[index]);
+  setRankRangeDraft(type1Config.value,kind,text,document.value,rangeDrafts);
   dirty.value=true;
 }
-function rangeInvalid(kind){return !parseRankRange(rangeText(kind),kind==='targets'?1:0);}
+function rangeInvalid(kind){return !parseRankEditorRange(kind,rangeText(kind),document.value);}
 function mediaValue(field){return type1Config.value?.[field]||'';}
 function chooseMedia(field,accept,label){mediaPicker.value={level:type1Config.value,field,accept,label};}
 function applyMedia(path){if(mediaPicker.value&&levels.value.includes(mediaPicker.value.level))mediaPicker.value.level[mediaPicker.value.field]=path;mediaPicker.value=null;}
@@ -73,7 +72,7 @@ async function validatePayload(payload){
   const missing=requiredEditorFields(document.value,true);
   if(missing.length)throw Error(t('editorSave.required')+'\n'+missing.map(field=>t(field.label)).join('\n'));
   for(const [index,level] of levels.value.entries()){
-    const invalid=!RANK_BOMB_TYPES.includes(level?.type)||Object.entries(rangeDrafts.get(level)||{}).some(([kind,text])=>!parseRankRange(text,kind==='targets'?1:0));
+    const invalid=!RANK_BOMB_TYPES.includes(level?.type)||Object.keys(RANK_RANGE_FIELDS).some(kind=>!parseRankEditorRange(kind,rankRangeText(level,kind,rangeDrafts),document.value));
     if(invalid){activeLevelIndex.value=index;throw Error(`${level?.label||index+1}: ${t(!RANK_BOMB_TYPES.includes(level?.type)?'rank.selectType':'rank.rangeInvalid')}`);}
   }
   const result=await api.validateRankGameEditor(payload), validation=result?.data??result;
@@ -138,11 +137,14 @@ function goBack(){if(!dirty.value||confirmWithRendererFocus(t('rank.confirmLeave
       <div v-if="document" class="level-sequence-row">
         <div class="level-structure-actions">
           <button class="icon-add-button" type="button" :aria-label="t('simple.addLevel')" :title="t('simple.addLevel')" :disabled="!canSave" @click="addLevel">+</button>
-          <button class="icon-add-button icon-danger-button" type="button" :aria-label="t('simple.deleteCurrentLevel')" :title="t('simple.deleteCurrentLevel')" :disabled="!canSave||levels.length<2" @click="deleteLevel">−</button>
         </div>
         <div class="sequence-list">
-          <button v-for="(level,index) in levels" :key="index" class="sequence-pill" type="button" :class="{active:activeLevelIndex===index,'level-drop-target':levelDropIndex===index}"
-            :disabled="!canSave" :draggable="canSave" @dragstart="draggingLevelIndex=index" @dragover.prevent="draggingLevelIndex!==null&&(levelDropIndex=index)" @drop.prevent="dropLevel(index)" @dragend="endDrag" @click="activeLevelIndex=index">{{level?.label||`Level ${index+1}`}}</button>
+          <div v-for="(level,index) in levels" :key="levelKey(level)" class="rank-level-tab">
+            <button class="sequence-pill" type="button" :class="{active:activeLevelIndex===index,'level-drop-target':levelDropIndex===index}"
+              :disabled="!canSave" :draggable="canSave" @dragstart="draggingLevelIndex=index" @dragover.prevent="draggingLevelIndex!==null&&(levelDropIndex=index)" @drop.prevent="dropLevel(index)" @dragend="endDrag" @click="activeLevelIndex=index">{{level?.label||`Level ${index+1}`}}</button>
+            <button class="rank-level-delete" type="button" :aria-label="t('rank.deleteLevel',{name:level?.label||`Level ${index+1}`})" :title="t('rank.deleteLevel',{name:level?.label||`Level ${index+1}`})"
+              :disabled="!canSave||levels.length<2||draggingLevelIndex!==null" draggable="false" @pointerdown.stop @dragstart.prevent.stop @click.stop="deleteLevel(index)">×</button>
+          </div>
         </div>
       </div>
     </header>
@@ -161,7 +163,10 @@ function goBack(){if(!dirty.value||confirmWithRendererFocus(t('rank.confirmLeave
         <div class="rank-media-control"><input :value="mediaValue(field.key)" :placeholder="t('globalConfig.notSelected')" readonly /><button class="soft-button compact-button" type="button" @click="chooseMedia(field.key,'audio',t(field.label))">{{t('globalConfig.choose')}}</button><button class="soft-button compact-button" type="button" :disabled="!mediaValue(field.key)" @click="type1Config[field.key]=''">{{t('globalConfig.clear')}}</button></div>
         <audio v-if="mediaValue(field.key)" :key="mediaValue(field.key)" :src="buildMediaPreviewUrl(mediaValue(field.key))" controls preload="none" />
       </div></label>
-      <label v-for="field in ['minX','maxX','minY','maxY']" :key="field"><span>{{t(`rank.${field}`)}}</span><input v-model.number="type1Config.bounds[field]" :data-rank-field="`level.bounds.${field}`" type="number" min="1" :max="field.endsWith('X')?document.siteSizeWidth:document.siteSizeHeight" /></label>
+      <label v-for="kind in ['x','y']" :key="kind"><span>{{t(`rank.${kind}Range`)}}</span><div>
+        <input :value="rangeText(kind)" :data-rank-field="`level.bounds.${kind}`" :placeholder="t('rank.rangePlaceholder')" :aria-invalid="rangeInvalid(kind)" @input="setRange(kind,$event.target.value)" />
+        <small v-if="rangeInvalid(kind)" class="field-error">{{t('rank.rangeInvalid')}}</small>
+      </div></label>
       <label><span class="editor-required-label">{{t('globalConfig.type')}}</span><select v-model="type1Config.type" data-rank-field="level.type"><option :value="null" disabled>{{t('rank.selectType')}}</option><option v-for="type in RANK_BOMB_TYPES" :key="type" :value="type">{{t(`rank.type${type}`)}}</option></select></label>
       <template v-if="RANK_BOMB_TYPES.includes(type1Config.type)">
         <label v-for="field in [{key:'targets',label:'rank.targetRange'},{key:'bombs',label:'rank.bombRange'}]" :key="field.key"><span>{{t(field.label)}}</span><div>
@@ -197,5 +202,12 @@ input[type=checkbox]{width:20px;height:20px;margin:8px 0}
 .rank-intro-preview{display:block;max-width:220px;max-height:220px;margin-top:8px;object-fit:contain;image-rendering:pixelated}
 audio{display:block;width:100%;height:32px;margin-top:6px}.field-error{display:block;margin-top:4px;color:var(--ui-error)}
 .level-drop-target{outline:2px solid var(--ui-accent)}
+.rank-level-tab{position:relative;display:flex;flex-shrink:0}
+.rank-level-tab .sequence-pill{padding-right:28px}
+.rank-level-delete{position:absolute;right:4px;top:50%;transform:translateY(-50%);display:flex;align-items:center;justify-content:center;width:20px;height:20px;padding:0;border:0;border-radius:3px;background:var(--ui-surface);color:var(--ui-text);font-size:18px;line-height:1;cursor:pointer;opacity:0}
+.rank-level-tab:hover .rank-level-delete,.rank-level-tab:focus-within .rank-level-delete{opacity:1}
+.rank-level-delete:hover,.rank-level-delete:focus-visible{background:var(--ui-error);color:#fff}
+.rank-level-delete:disabled{cursor:default;opacity:0}
+.rank-level-tab:hover .rank-level-delete:disabled,.rank-level-tab:focus-within .rank-level-delete:disabled{opacity:.35}
 @media(max-width:700px){.rank-config-editor{padding:12px}.rank-config-editor>label{grid-template-columns:120px minmax(0,1fr)}}
 </style>
