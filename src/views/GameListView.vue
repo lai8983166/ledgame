@@ -4,6 +4,7 @@ import CatalogDeleteDialog from "../components/CatalogDeleteDialog.vue";
 import GameCreationDialog from "../components/GameCreationDialog.vue";
 import GameCategoryCard from "../components/GameCategoryCard.vue";
 import GameCategoryEditDialog from "../components/GameCategoryEditDialog.vue";
+import GameCategoryGamePickerDialog from "../components/GameCategoryGamePickerDialog.vue";
 import SimpleGameCard from "../components/SimpleGameCard.vue";
 import { useI18n } from "vue-i18n";
 import { extractErrorMessage, unwrapBackendData } from "../lib/gameFlowState.js";
@@ -69,6 +70,12 @@ const dragSource = ref(null);
 const dragKind = ref('');
 const dropTarget = ref(null);
 const selectedCategory = ref(null);
+const gamePickerOpen = ref(false);
+const gamePickerSaving = ref(false);
+const gamePickerError = ref("");
+const categoryCandidateGames = computed(() => games.value.filter((game) =>
+  !isDemoGame(game) && String(game.firstCatalog ?? '') !== String(selectedCategory.value?.id ?? ''),
+));
 const categoryDialogOpen = ref(false);
 const editingCategory = ref(null);
 const categoryName = ref("");
@@ -85,6 +92,7 @@ watch(
   () => props.section,
   () => {
     selectedCategory.value = null;
+    gamePickerOpen.value = false;
     endDrag();
   },
 );
@@ -139,7 +147,7 @@ async function createGame(family) {
     const game = unwrapBackendData(await api.newGameDraft(family));
     if (!game || game.id != null || !['default', 'rank'].includes(game.type)) throw new Error(t('gameCreation.invalidResponse'));
     creationOpen.value = false;
-    emit('open-game', { ...game, draft: game });
+    emit('open-game', { ...game, draft: game, openGlobalConfigOnEntry: true });
   } catch (error) {
     creationError.value = extractErrorMessage(error, t('gameCreation.failed'));
   } finally { creationSaving.value = false; }
@@ -166,6 +174,32 @@ function openCategory(category) {
   selectedCategory.value = category;
   section.value = "home";
   endDrag();
+}
+
+function openGamePicker() {
+  if (!selectedCategory.value || gamePickerSaving.value) return;
+  gamePickerError.value = '';
+  gamePickerOpen.value = true;
+}
+
+async function addGamesToCategory(gameIds) {
+  if (!selectedCategory.value || gamePickerSaving.value) return;
+  const firstCatalog = String(selectedCategory.value.id);
+  const candidates = new Set(categoryCandidateGames.value.map((game) => game.id));
+  gamePickerSaving.value = true;
+  gamePickerError.value = '';
+  try {
+    for (const gameId of gameIds.filter((id) => candidates.has(id))) {
+      const response = await api.updateGameMetadata(gameId, { firstCatalog });
+      if (response?.code && response.code !== 200) throw new Error(response.message);
+      games.value = games.value.map((game) => game.id === gameId ? { ...game, firstCatalog } : game);
+    }
+    gamePickerOpen.value = false;
+  } catch (error) {
+    gamePickerError.value = extractErrorMessage(error, t('catalogMaintenance.failed'));
+  } finally {
+    gamePickerSaving.value = false;
+  }
 }
 
 function beginAddCategory() {
@@ -321,7 +355,9 @@ async function dropCard(id, kind) {
       <div v-if="loading" class="editor-loading">{{ t("games.loading") }}</div>
       <div v-else-if="!displayGames.length && !errorMessage" class="editor-loading">
         <p>{{ selectedCategory ? t("gameCategories.noGames") : t("games.noSupportedGames") }}</p>
-        <button class="soft-button" type="button" @click="loadGames">{{ t("games.reload") }}</button>
+        <button v-if="selectedCategory" class="icon-add-button category-add-games" type="button"
+          :title="t('gameCategories.addGames')" :aria-label="t('gameCategories.addGames')" @click="openGamePicker">+</button>
+        <button v-else class="soft-button" type="button" @click="loadGames">{{ t("games.reload") }}</button>
       </div>
       <div v-else class="game-card-grid">
           <SimpleGameCard
@@ -345,6 +381,9 @@ async function dropCard(id, kind) {
 
     <GameCreationDialog v-if="creationOpen" :mode="creationMode" :saving="creationSaving" :error="creationError"
       @cancel="creationOpen = false" @create="createGame" />
+
+    <GameCategoryGamePickerDialog v-if="gamePickerOpen" :games="categoryCandidateGames" :saving="gamePickerSaving" :error="gamePickerError"
+      @cancel="gamePickerOpen = false" @save="addGamesToCategory" />
 
 
     <CatalogDeleteDialog v-if="deleting"

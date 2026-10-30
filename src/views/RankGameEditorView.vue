@@ -16,7 +16,7 @@ import MediaPickerDialog from '../components/MediaPickerDialog.vue';
 import GameGlobalConfigDialog from '../components/GameGlobalConfigDialog.vue';
 import GameWiringDialog from '../components/GameWiringDialog.vue';
 
-const props=defineProps({ gameId:{type:[Number,String],default:null}, initialDocument:{type:Object,default:null}, gameName:{type:String,default:''} });
+const props=defineProps({ gameId:{type:[Number,String],default:null}, initialDocument:{type:Object,default:null}, gameName:{type:String,default:''}, openGlobalConfigOnEntry:{type:Boolean,default:false} });
 const emit=defineEmits(['back']);
 const {t}=useI18n({useScope:'global'}), api=window.ledGame;
 const document=ref(null), loading=ref(true), busy=ref(null), dirty=ref(false), errorMessage=ref(''), saveFeedback=ref(null);
@@ -39,6 +39,7 @@ onMounted(async()=>{
   }catch(error){errorMessage.value=extractErrorMessage(error,t('rank.loadFailed'));}
   finally{hydrating=false;loading.value=false;}
   if(api?.listGameCategories)try{gameCategories.value=normalizeGameCategoryList(await api.listGameCategories());}catch{gameCategories.value=[];}
+  if(document.value&&props.openGlobalConfigOnEntry)openGlobalConfig();
 });
 
 function addLevel(){

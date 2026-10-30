@@ -3,12 +3,31 @@ import {createRequire} from 'node:module';
 import {mkdir,mkdtemp,writeFile} from 'node:fs/promises';
 import path from 'node:path';
 import net from 'node:net';
+import {execFileSync} from 'node:child_process';
+import {createHash} from 'node:crypto';
 import {fileURLToPath} from 'node:url';
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 const require=createRequire(path.join(root,'../ledGame-platform/package.json'));
 const {_electron}=require('playwright');const expect=require('@playwright/test').expect.configure({timeout:30000});
 await mkdir(path.join(root,'.build'),{recursive:true});
 const data=await mkdtemp(path.join(root,'.build/editor-debug-packaged-'));
+const gifHashSource=path.join(data,'StandbyHashes.java');
+await writeFile(gifHashSource,`import com.ledgame.GameApp.Runtime.GIFUtils;
+import java.nio.file.Path;
+import java.security.MessageDigest;
+import java.util.HexFormat;
+public class StandbyHashes { public static void main(String[] args) throws Exception {
+ var frames=GIFUtils.readFramesStrict(Path.of(args[0]),16,36);
+ System.out.print("[");boolean first=true;
+ for(var frame:frames){var digest=MessageDigest.getInstance("SHA-256");
+  for(var row:frame)for(var pixel:row)digest.update(new byte[]{(byte)pixel.getR(),(byte)pixel.getG(),(byte)pixel.getB()});
+  if(!first)System.out.print(",");first=false;System.out.print("\\\""+HexFormat.of().formatHex(digest.digest())+"\\\"");
+ }System.out.print("]"); }}
+`);
+const java=process.env.JAVA_HOME?path.join(process.env.JAVA_HOME,'bin/java.exe'):'java';
+const gifHashes=new Set(JSON.parse(execFileSync(java,['--class-path',path.join(root,'../ledGame-backend/target/classes'),gifHashSource,path.join(root,'release/win-unpacked/resources/media/彩虹效果16x36.gif')],{encoding:'utf8'})));
+assert.ok(gifHashes.size>1);
+const frameHash=frame=>createHash('sha256').update(Buffer.from(frame.rgb)).digest('hex');
 async function port(){const s=net.createServer();await new Promise(r=>s.listen(0,'127.0.0.1',r));const p=s.address().port;await new Promise(r=>s.close(r));return p;}
 const backendPort=await port(),rgbPort=await port();
 await mkdir(path.join(data,'settings'),{recursive:true});
@@ -47,8 +66,28 @@ try{
     const card=page.locator(`.game-card[data-id="${game.gameId}"]`);
     await card.hover();await card.getByRole('button',{name:'编辑',exact:true}).click();
     await button('地砖布线').click();await button('取消').click();
-    if(game.type==='rank')await page.locator('.rank-title .icon-action').click();else await button('返回列表').click();
+    await button('返回列表').click();
     await card.hover();await card.getByRole('button',{name:'调试游戏',exact:true}).click();
+    await expect.poll(async()=>(await state()).engineState).toBe('IDLE');
+    await expect.poll(async()=>{const frame=await page.evaluate(()=>window.ledGame.latestFrame());return frame?.width===16&&frame?.height===36&&gifHashes.has(frameHash(frame));}).toBe(true);
+    const firstFrame=frameHash(await page.evaluate(()=>window.ledGame.latestFrame()));
+    await expect.poll(async()=>frameHash(await page.evaluate(()=>window.ledGame.latestFrame()))).not.toBe(firstFrame);
+    const canvasFrame=await page.locator('.editor-debug-workspace canvas').evaluate(canvas=>canvas.toDataURL());
+    await expect.poll(()=>page.locator('.editor-debug-workspace canvas').evaluate(canvas=>canvas.toDataURL())).not.toBe(canvasFrame);
+    await page.screenshot({path:path.join(data,`${game.type==='rank'?'rank':'simple'}-${dimensions.join('x')}-GIF待机.png`)});
+    passed.push(`${game.name} ${dimensions.join('×')}：待机实时帧匹配媒体GIF像素且调试画布持续变化`);
+    if(game.type!=='rank'){
+      await page.locator('.debug-workspace-controls select').first().selectOption('wristband');
+      await button('请刷手环').click();await expect.poll(async()=>(await state()).engineState).toBe('PREPARING');
+      await expect.poll(async()=>{const frame=await page.evaluate(()=>window.ledGame.latestFrame());return frame?.width===16&&frame?.height===36&&gifHashes.has(frameHash(frame));}).toBe(true);
+      await button('取消').click();
+      const preparingCanvas=await page.locator('.editor-debug-workspace canvas').evaluate(canvas=>canvas.toDataURL());
+      await expect.poll(()=>page.locator('.editor-debug-workspace canvas').evaluate(canvas=>canvas.toDataURL())).not.toBe(preparingCanvas);
+      await button('退出调试，返回游戏列表').click();await expect.poll(async()=>(await state()).engineState).toBe('IDLE');
+      await card.hover();await card.getByRole('button',{name:'调试游戏',exact:true}).click();
+      await expect(page.locator('.editor-debug-workspace')).toBeVisible();
+      passed.push('真实PREPARING扫码配置持续显示媒体GIF，退出取消后恢复IDLE');
+    }
     await page.locator('.editor-debug-workspace').waitFor();
     await expect(page.locator('.debug-workspace-controls .error-line')).toContainText('SDK 未启用');
     assert.equal(await page.locator('.debug-hardware-dialog').count(),0);

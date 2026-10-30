@@ -53,6 +53,7 @@ const levelDropIndex = ref(null);
 
 const props = defineProps({
   initialDocument: { type: Object, default: null },
+  openGlobalConfigOnEntry: { type: Boolean, default: false },
   gameId: {
     type: [Number, String],
     default: null,
@@ -68,6 +69,7 @@ const busyAction = ref("");
 const errorMessage = ref("");
 const statusMessage = ref("");
 const globalConfigOpen = ref(false);
+let initialGlobalConfigOpened = false;
 const levelMediaPicker = ref(null);
 const levelBackgroundMusic = computed(() => activeLevel.value?.option?.bgVoice || '');
 function selectLevelMedia(value) {
@@ -602,6 +604,11 @@ async function loadEditor() {
     }
     await stabilizeEditorFitBeforeReveal(3, loadTicket);
   }, () => isCurrentEditorLoad(loadTicket));
+  if (isCurrentEditorLoad(loadTicket) && document.value && !errorMessage.value &&
+      props.openGlobalConfigOnEntry && !initialGlobalConfigOpened) {
+    initialGlobalConfigOpened = true;
+    openGlobalConfig();
+  }
 }
 
 function isCurrentEditorLoad(ticket) {
@@ -1862,7 +1869,7 @@ function addFrame() {
     return;
   }
   level.frameList ||= [];
-  level.frameList.push(createBlankFrame());
+  level.frameList.push(createBlankFrame(level.frameList.at(-1)));
   invalidateMatrixFrame(level.frameList[level.frameList.length - 1]);
   activeFrameIndex.value = level.frameList.length - 1;
   clearRgbEditHistory();
@@ -1876,7 +1883,7 @@ function addFrameAfterCurrent() {
     return;
   }
   level.frameList ||= [];
-  const result = insertFrameAfter(level.frameList, activeFrameIndex.value, createBlankFrame());
+  const result = insertFrameAfter(level.frameList, activeFrameIndex.value, createBlankFrame(activeFrame.value));
   if (!result.inserted) {
     return;
   }
@@ -2450,7 +2457,7 @@ function executeWholeFrameCopy(mode) {
 
   const sourceFrame = ensureActiveFrame();
   if (plan.createIndex !== null) {
-    level.frameList.splice(plan.createIndex, 0, createBlankFrame());
+    level.frameList.splice(plan.createIndex, 0, createBlankFrame(level.frameList[plan.createIndex - 1]));
   }
   for (const targetIndex of plan.targetIndices) {
     const targetFrame = level.frameList[targetIndex];
@@ -2693,7 +2700,7 @@ function ensureActiveFrame() {
     document.value = ensureEditableShape(document.value);
   }
   if (!activeLevel.value.frameList[activeFrameIndex.value]) {
-    activeLevel.value.frameList[activeFrameIndex.value] = { repeatTimes: 1, matrix: [] };
+    activeLevel.value.frameList[activeFrameIndex.value] = createBlankFrame(activeLevel.value.frameList[activeFrameIndex.value - 1]);
   }
   activeLevel.value.frameList[activeFrameIndex.value].matrix ||= [];
   activeLevel.value.frameList[activeFrameIndex.value].matrix =
@@ -2703,9 +2710,9 @@ function ensureActiveFrame() {
   return activeLevel.value.frameList[activeFrameIndex.value];
 }
 
-function createBlankFrame() {
+function createBlankFrame(previousFrame) {
   return {
-    repeatTimes: 1,
+    repeatTimes: Math.max(1, toInteger(previousFrame?.repeatTimes, 1)),
     matrix: [],
   };
 }
@@ -3574,10 +3581,11 @@ function formatRuntimeSummary(value) {
             </select>
           </label>
           <label v-if="activeLevel.option.timeLimitMode !== 'UNLIMITED'">
-            <span class="editor-required-label">{{ t("simple.levelTimeValue") }}</span>
+            <span class="editor-required-label">{{ t(activeLevel.option.timeLimitMode === 'CYCLE_COUNT' ? 'simple.levelCycleCountValue' : 'simple.levelTimeValue') }}</span>
             <input
               v-model.number="activeLevel.option.timeLimitValue"
               min="1"
+              step="1"
               type="number"
               :class="{ invalid: activeLevelOptionErrors.has('timeLimitValue') }"
             />

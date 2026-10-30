@@ -64,7 +64,7 @@ test("inserting after the last frame appends and supports an empty sequence", ()
 
 test("editor inserts a blank frame through the existing selection and cache paths", () => {
   const insertion = functionSource("addFrameAfterCurrent", "deleteCurrentFrame");
-  assert.match(insertion, /insertFrameAfter\(level\.frameList, activeFrameIndex\.value, createBlankFrame\(\)\)/);
+  assert.match(insertion, /insertFrameAfter\(level\.frameList, activeFrameIndex\.value, createBlankFrame\(activeFrame\.value\)\)/);
   assert.match(insertion, /invalidateMatrixFrame\(level\.frameList\[result\.index\]\)/);
   assert.match(insertion, /clearRgbEditHistory\(\)/);
   assert.match(insertion, /selectFrame\(result\.index\)/);
@@ -73,7 +73,7 @@ test("editor inserts a blank frame through the existing selection and cache path
 test("copying a frame remounts repeat input and selects a newly created next frame", () => {
   const copy = functionSource("executeWholeFrameCopy", "replaceFrameObjects");
   assert.match(copy, /if \(plan\.createIndex !== null\)/);
-  assert.match(copy, /level\.frameList\.splice\(plan\.createIndex, 0, createBlankFrame\(\)\)/);
+  assert.match(copy, /level\.frameList\.splice\(plan\.createIndex, 0, createBlankFrame\(level\.frameList\[plan\.createIndex - 1\]\)\)/);
   assert.match(copy, /if \(mode === "next"\) \{[\s\S]*selectFrame\(plan\.targetIndices\[0\]\)/);
   assert.match(editorSource, /:key="`repeat-\$\{activeLevelIndex\}-\$\{activeFrameIndex\}`"/);
 });

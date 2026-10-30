@@ -268,8 +268,9 @@ onBeforeUnmount(() => {
 .game-info-cover-preview {
   display: grid;
   place-items: center;
-  width: 183px;
-  height: 308px;
+  width: min(100%, 308px);
+  height: auto;
+  min-height: 64px;
   overflow: hidden;
   border: 1px solid var(--ui-border);
   border-radius: 6px;
@@ -279,8 +280,8 @@ onBeforeUnmount(() => {
 
 .game-info-cover-preview img {
   width: 100%;
-  height: 100%;
-  object-fit: cover;
+  height: auto;
+  object-fit: contain;
   object-position: center;
 }
 

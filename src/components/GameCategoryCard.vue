@@ -12,13 +12,17 @@ const props = defineProps({
 const emit = defineEmits(["open", "edit", "delete", "reorder-start", "reorder-over", "reorder-drop", "reorder-end"]);
 const { t } = useI18n({ useScope: "global" });
 const coverFailed = ref(false);
+const coverRatio = ref(2 / 1);
 const coverUrl = computed(() => coverFailed.value ? "" : buildMediaPreviewUrl(props.category.cover));
 
-watch(() => props.category.cover, () => { coverFailed.value = false; });
+watch(() => props.category.cover, () => { coverFailed.value = false; coverRatio.value = 2 / 1; });
+function onCoverLoaded({ target }) {
+  if (target.naturalWidth && target.naturalHeight) coverRatio.value = target.naturalWidth / target.naturalHeight;
+}
 </script>
 
 <template>
-  <article class="game-category-card" :data-id="category.id" :class="{ 'catalog-dragging': dragging, 'catalog-drop-target': dropTarget }"
+  <article class="game-category-card" :data-id="category.id" :style="{ '--game-cover-ratio': coverRatio }" :class="{ 'catalog-dragging': dragging, 'catalog-drop-target': dropTarget }"
     @dragover.prevent="emit('reorder-over', category.id)" @drop.prevent.stop="emit('reorder-drop', category.id)">
     <button class="catalog-drag-handle" type="button" :draggable="!orderBlocked" :disabled="orderBlocked"
       v-bind="{ title: t('management.reorder'), 'aria-label': t('management.reorder') }"
@@ -27,7 +31,7 @@ watch(() => props.category.cover, () => { coverFailed.value = false; });
     </button>
     <button class="game-category-card-main" type="button" :disabled="dragging || orderBlocked" @dragstart.prevent @click="emit('open', category)">
       <span class="game-category-card-cover">
-        <img v-if="coverUrl" :src="coverUrl" :alt="category.name" @error="coverFailed = true" />
+        <img v-if="coverUrl" :src="coverUrl" :alt="category.name" @load="onCoverLoaded" @error="coverFailed = true; coverRatio = 2 / 1" />
         <span v-else class="game-card-cover-placeholder">
           <span class="game-card-mark" aria-hidden="true"></span>
           <span>{{ t(coverFailed ? "games.coverUnavailable" : "games.noCover") }}</span>

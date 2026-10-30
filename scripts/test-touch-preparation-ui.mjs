@@ -27,7 +27,7 @@ await context.addInitScript(()=>{
   };window.fixture.reset();
   window.appLanguage={get:async()=> 'zh-CN',onChanged:()=>()=>{}};
   window.appSettings={get:async()=>({entryMethod:window.fixture.entryMethod,mode:'game'}),onChanged:()=>()=>{}};
-  window.mediaLibrary={getPreviewUrl:async p=>({url:'/build-resources/media/'+p})};
+  window.mediaLibrary={getPreviewUrl:async p=>({url:'data:image/svg+xml,'+encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="${p.includes('mode')?400:100}" height="${p.includes('mode')?100:300}"><rect width="100%" height="100%" fill="cyan"/></svg>`)})};
   window.ledGame={
     touchPresentationMode:async()=> 'game',touchGameState:async()=>({data:structuredClone(state)}),
     onEngineState:fn=>{stateListener=fn;return()=>{stateListener=null;};},onWristbandScanned:fn=>{scanListener=fn;return()=>{scanListener=null;};},
@@ -61,6 +61,18 @@ try{
     await page.evaluate(()=>window.fixture.scan('101'));await page.getByTestId('game-error').waitFor();await step('wristband');await shot('刷卡-两人');
     await page.evaluate(()=>window.fixture.scan('102'));await step('game');
     assert.equal(await page.getByTestId('game-preparation-step-timeout').locator('strong').innerText(),'20');
+  });
+  await check('操作刷新20秒倒计时，横竖封面与容器比例一致且不裁切',async()=>{
+    const shell=page.locator('.touch-shell'),clock=page.getByTestId('game-preparation-step-timeout').locator('strong');
+    for(const [name,detail] of [['pointermove',{pointerId:1}],['wheel',{deltaY:1}],['keydown',{key:'Tab'}],['input',{}],['click',{}]]){
+      await page.waitForTimeout(1100);assert.ok(Number(await clock.innerText())<20);
+      await shell.dispatchEvent(name,detail);assert.equal(await clock.innerText(),'20',name);
+    }
+    const images=page.locator('.touch-category-card img,.touch-carousel-card img');
+    await page.waitForFunction(()=>[...document.querySelectorAll('.touch-category-card img,.touch-carousel-card img')].every(node=>node.naturalWidth>0));
+    const sizes=await images.evaluateAll(nodes=>nodes.map(image=>{const card=image.parentElement,style=getComputedStyle(card);return{fit:getComputedStyle(image).objectFit,ratio:Number(style.getPropertyValue('--touch-cover-ratio')),renderedRatio:parseFloat(style.width)/parseFloat(style.height),natural:image.naturalWidth/image.naturalHeight};}));
+    assert.ok(sizes.length>2);for(const size of sizes){assert.equal(size.fit,'contain');assert.ok(Math.abs(size.ratio-size.natural)<.001,JSON.stringify(size));assert.ok(Math.abs(size.renderedRatio-size.natural)<.04,JSON.stringify(size));}
+    await shot('封面与操作刷新');
   });
   await check('分类封面轮播、点当前游戏进关卡、真实全局参数和关卡启动',async()=>{
     assert.equal(await page.locator('.touch-category-card').count(),2);

@@ -56,7 +56,7 @@ const countdown=computed(()=>{
   return props.game.globalTimeLimit?props.game.globalTimeLimitValue:t('editorDebug.unlimited');
 });
 let removeState,removeFrame,balanceTimer,alive=true,scanBuffer='';
-function apply(result){const data=result?.data || result;if(data && (!sessionId.value || data.sessionId===sessionId.value || isDebugRuntimeAvailable(data))){state.value=data;if(data.gameTime)lastGameTime.value=data.gameTime;}}
+function apply(result){const data=result?.data || result;if(data && (!sessionId.value || data.sessionId===sessionId.value || isDebugRuntimeAvailable(data))){state.value=data;if(data.gameTime)lastGameTime.value=data.gameTime;if(active.value && (pixels.value.length!==props.game.siteSizeHeight || pixels.value[0]?.length!==props.game.siteSizeWidth))pixels.value=blank();}}
 async function action(fn){if(busy.value)return;busy.value=true;error.value='';try{return await fn();}catch(e){const key=wristbandErrorMessageKey(e);error.value=e.message?.startsWith('editorDebug.')?t(e.message):key?t(key):e.message;}finally{busy.value=false;}}
 async function prepare(payload=debugLaunchPayload(props.game,options)){
   const current=(await api.gameState())?.data;
@@ -65,7 +65,7 @@ async function prepare(payload=debugLaunchPayload(props.game,options)){
   const data=result?.data || result;
   sessionId.value=data.preparation?.sessionId;
   if(!sessionId.value)throw new Error('editorDebug.prepareFailed');
-  lastGameTime.value=null;apply(result);pixels.value=blank();
+  lastGameTime.value=null;apply(result);
 }
 async function start(){const needsScan=await action(async()=>{
   if(!preparation.value)await prepare();
@@ -98,10 +98,18 @@ async function command(name){await action(async()=>{apply(await api.sendDebugCom
 function hoverCell(x,y){hover.value={x,y};}
 async function clickCell(x,y){if(!active.value||state.value.engineState!=='RUNNING')return;await action(async()=>{apply(await api.sendDebugCommand({command:'tileinput',sessionId:sessionId.value,x,y}));});}
 async function clickCircle(circleIndex){if(!active.value||state.value.engineState!=='RUNNING')return;await action(async()=>{apply(await api.sendDebugCommand({command:'circleinput',sessionId:sessionId.value,circleIndex}));});}
+function displayFrame(frame){
+  if(!alive)return;
+  const standby=(state.value.engineState==='IDLE' && isDebugRuntimeAvailable(state.value)) || preparation.value;
+  // Standby has a fixed source size; transport inference may still carry the selected game's shape.
+  const value=standby ? pixelsFromDebugFrame({...frame,width:16,height:36},16,36)
+    : active.value ? pixelsFromDebugFrame(frame,props.game.siteSizeWidth,props.game.siteSizeHeight) : null;
+  if(value)pixels.value=value;
+}
 onMounted(async()=>{
   balanceTimer=setInterval(()=>balanceNow.value=Date.now(),1000);
   removeState=api.onEngineState?.(apply);
-  removeFrame=api.onLedFrame?.(frame=>{if(alive && active.value){const value=pixelsFromDebugFrame(frame,props.game.siteSizeWidth,props.game.siteSizeHeight);if(value)pixels.value=value;}});
+  removeFrame=api.onLedFrame?.(displayFrame);
   window.addEventListener('keydown',scanKey);
   await action(async()=>{
     apply(await api.gameState());if(!isDebugRuntimeAvailable(state.value))throw new Error('editorDebug.busy');
@@ -111,6 +119,7 @@ onMounted(async()=>{
       entryHardwareWarning.value=hardwareMessage(e);
       if(/ELC408_NO_CONTROLLERS|SEARCH_NO_CONTROLLERS/.test(e.message || ''))await showHardwareNotice();
     }
+    if(alive){apply(await api.gameState());displayFrame(await api.latestFrame?.());}
   });
 });
 onBeforeUnmount(()=>{alive=false;clearTimeout(hardwareNoticeTimer);clearInterval(balanceTimer);removeState?.();removeFrame?.();window.removeEventListener('keydown',scanKey);});

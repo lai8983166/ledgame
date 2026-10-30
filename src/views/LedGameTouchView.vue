@@ -61,6 +61,11 @@ const TOUCH_GAME_BACKGROUND_ASSET = "touch/background.png";
 const runtimeState = ref(normalizeRuntimeState(null));
 const games = ref([]);
 const coverUrls = ref({});
+const coverRatios = ref({});
+function onCoverLoaded(id, event) {
+  const { naturalWidth, naturalHeight } = event.target;
+  if (naturalWidth && naturalHeight) coverRatios.value[id] = naturalWidth / naturalHeight;
+}
 const categories = ref([]);
 const categoryCoverUrls = ref({});
 const categoryError = ref("");
@@ -403,6 +408,12 @@ watch(
   { immediate: true },
 );
 
+function handlePreparationActivity() {
+  if (preparationStepTimeoutVisible.value && preparation.value?.sessionId && !preparationStepTimeoutPending.value) {
+    startPreparationStepTimeout(preparation.value.sessionId, gamePreparationStep.value);
+  }
+}
+
 function startPreparationStepTimeout(sessionId, step) {
   stopPreparationStepTimeout();
   preparationStepSecondsRemaining.value =
@@ -695,6 +706,7 @@ function handleWristbandScanned(payload) {
   }
   const wristbandId = String(payload?.wristbandId || "").trim();
   if (!wristbandId) return;
+  handlePreparationActivity();
   wristbandRead.value = {
     wristbandId,
   };
@@ -1350,7 +1362,13 @@ async function confirmReturnToIdle() {
     :class="{ 'touch-game-presentation': isGamePresentation }"
     :data-state="view"
     :data-preparation-step="gamePreparationStep"
-    @pointerup.capture="handleReturnIdleEdgeTap"
+    @pointerdown.capture="handlePreparationActivity"
+    @pointermove.capture.passive="handlePreparationActivity"
+    @pointerup.capture="handlePreparationActivity(); handleReturnIdleEdgeTap($event)"
+    @keydown.capture="handlePreparationActivity"
+    @wheel.capture.passive="handlePreparationActivity"
+    @input.capture="handlePreparationActivity"
+    @click.capture="handlePreparationActivity"
   >
     <TouchMatrixCanvas
       v-if="view !== 'PREPARING' && (view !== 'IDLE' || idleVideoFailed)"
@@ -1545,6 +1563,7 @@ async function confirmReturnToIdle() {
               :key="slot.key"
               :data-testid="`game-carousel-${slot.item.id}`"
               class="touch-carousel-card"
+              :style="{ '--touch-cover-ratio': coverRatios[slot.item.id] || 183 / 308 }"
               :class="{
                 current: slot.offset === 0,
                 previous: slot.offset < 0,
@@ -1560,6 +1579,7 @@ async function confirmReturnToIdle() {
                 :src="coverUrls[slot.item.id]"
                 :alt="slot.item.displayName || slot.item.name"
                 draggable="false"
+                @load="onCoverLoaded(slot.item.id, $event)"
               />
               <span v-else class="touch-carousel-fallback">
                 {{ (slot.item.displayName || slot.item.name).slice(0, 1) }}
@@ -2933,8 +2953,8 @@ async function confirmReturnToIdle() {
 .touch-carousel-card {
   position: relative;
   justify-self: center;
-  width: min(100%, 250px);
-  aspect-ratio: 183 / 308;
+  width: min(100%, 250px, calc(var(--touch-cover-ratio, .594) * clamp(160px, 40vh, 360px)));
+  aspect-ratio: var(--touch-cover-ratio, 183 / 308);
   padding: 7px;
   overflow: hidden;
   border: 2px solid rgba(81, 234, 255, 0.72);
@@ -2962,6 +2982,8 @@ async function confirmReturnToIdle() {
   transform: scale(1.06);
 }
 
+.touch-carousel-card { min-height: 0; line-height: 0; }
+
 .touch-carousel-card img,
 .touch-carousel-fallback {
   display: grid;
@@ -2969,7 +2991,7 @@ async function confirmReturnToIdle() {
   width: 100%;
   height: 100%;
   border-radius: 5px;
-  object-fit: cover;
+  object-fit: contain;
   pointer-events: none;
 }
 
@@ -3389,8 +3411,9 @@ async function confirmReturnToIdle() {
 .touch-game-card img,
 .touch-cover-fallback {
   width: 104px;
-  height: 104px;
-  object-fit: cover;
+  height: auto;
+  min-height: 104px;
+  object-fit: contain;
   background: #162f3e;
 }
 
@@ -4074,7 +4097,7 @@ fieldset:disabled {
 .touch-game-panel .touch-wizard-heading h1{font-size:clamp(28px,3.2vw,62px);margin:0;line-height:1.1;color:#e1ffff;}
 .touch-game-panel .touch-carousel-shell{width:100%;min-height:0;height:100%;grid-template-columns:40px minmax(0,1fr) 40px;}
 .touch-game-panel .touch-game-carousel{height:100%;min-height:0;padding:12px 16px;gap:8px;grid-template-columns:1.05fr .9fr .55fr;perspective:1000px;overflow:hidden;}
-.touch-game-panel .touch-carousel-card{max-width:100%;width:auto;height:min(100%,49vh);aspect-ratio:183/308;border-radius:0;clip-path:polygon(9% 0,92% 0,100% 5%,100% 95%,92% 100%,9% 100%,0 94%,0 6%);border-color:#844fbc;padding:7px;opacity:.9;}
+.touch-game-panel .touch-carousel-card{max-width:100%;width:min(100%,calc(var(--touch-cover-ratio,.594) * min(49vh,400px)));height:auto;aspect-ratio:var(--touch-cover-ratio,183 / 308);border-radius:0;clip-path:none;border-color:#844fbc;padding:7px;opacity:.9;}
 .touch-game-panel .touch-carousel-card.current{order:1;transform:scale(.96);filter:drop-shadow(0 0 14px #0af5ff66);border-color:#d866e5;background:#664c9f;}
 .touch-game-panel .touch-carousel-card.next{order:2;transform:scale(.88) rotateY(-24deg);}
 .touch-game-panel .touch-carousel-card.previous{order:3;transform:scale(.78) rotateY(-55deg);}

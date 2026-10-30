@@ -170,6 +170,37 @@ try {
     await page.keyboard.press('Control+y');saved=await savedPoints();assert.deepEqual(saved.points,['1,1']);
     await page.locator('.editor-toolbar').screenshot({path:path.join(data,'对象编辑工具.png')});
     records.push({action:'真实EXE新工具互斥与提示、Alt+A/D、单点禁止拖画、区域添加、逐点删除、相交整对象删除及撤销重做持久化',passed:true});
+    await page.locator('.repeat-times-control input').fill('7');
+    await button('在当前帧后添加帧').click();
+    await expect(page.locator('.repeat-times-control input')).toHaveValue('7');
+    const timeMode=page.locator('select').filter({has:page.locator('option[value="CYCLE_COUNT"]')});
+    await timeMode.selectOption('CYCLE_COUNT');
+    const cycles=page.locator('label').filter({has:page.locator('span.editor-required-label').getByText('次数',{exact:true})}).locator('input');
+    await expect(cycles).toHaveAttribute('step','1');await cycles.fill('3');
+    await savedPoints();
+    const feedbackSaved=(await request(`/game-editor/${id}`)).data;
+    assert.equal(feedbackSaved.levels[0].frameList[1].repeatTimes,7);
+    assert.equal(feedbackSaved.levels[0].option.timeLimitMode,'CYCLE_COUNT');assert.equal(feedbackSaved.levels[0].option.timeLimitValue,3);
+    await button('全局配置').click();
+    const categorySelect=page.locator('.global-config-field').filter({has:page.getByText('一级菜单',{exact:true})}).locator('select');
+    assert.ok(!(await categorySelect.locator('option').allTextContents()).includes('验收'));
+    await page.locator('.global-config-dialog').getByRole('button',{name:'取消',exact:true}).click();
+    await button('返回列表').click();
+    await button('新建游戏').click();await page.locator('.game-creation-dialog footer .primary').click();
+    await page.locator('.global-config-dialog').waitFor();
+    await page.locator('.global-config-dialog').getByRole('button',{name:'取消',exact:true}).click();
+    await button('返回列表').click();
+    records.push({action:'真实EXE新帧继承7次、循环次数保存回读、未知分类选项隐藏及新建先弹配置',passed:true});
+    const category=(await request('/game-categories','POST',{name:'七项反馈空分类'})).data;
+    await page.locator('.nav-tab').filter({hasText:/^媒体库$/}).click();
+    await page.getByTestId('game-menu-button').click();await page.getByRole('menuitem',{name:'首页',exact:true}).click();
+    await page.locator(`.game-category-card[data-id="${category.id}"] .game-category-card-main`).click();
+    await expect(button('重新加载')).toHaveCount(0);await expect(button('添加游戏')).toHaveText('+');
+    await button('添加游戏').click();await page.getByRole('checkbox',{name:'闪屏隔离验收',exact:true}).check();await button('确认').click();
+    await expect(page.locator('.category-game-picker-dialog')).toHaveCount(0);
+    await expect(page.locator(`.game-card[data-id="${id}"]`)).toBeVisible();
+    assert.equal((await request(`/game-editor/${id}`)).data.firstCatalog,String(category.id));
+    records.push({action:'真实EXE空分类加号挑选已有游戏并通过IPC保存分类归属',passed:true});
   }
   assert.deepEqual(errors,[]);await page.screenshot({path:path.join(data,'验收.png')});
 } catch(error){errors.push(error.stack);await page?.screenshot({path:path.join(data,'失败.png')}).catch(()=>{});throw error;}

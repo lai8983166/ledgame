@@ -2258,7 +2258,7 @@ ipcMain.handle('game:metadata-update', async (_event, gameId, patch) => {
     method: 'PATCH',
     body: JSON.stringify(patch || {}),
   })
-  if (typeof patch?.childModeVisible === 'boolean') {
+  if (typeof patch?.childModeVisible === 'boolean' || Object.hasOwn(patch || {}, 'firstCatalog')) {
     for (const window of BrowserWindow.getAllWindows()) {
       if (!window.isDestroyed()) window.webContents.send('game-catalog-changed', { gameId })
     }

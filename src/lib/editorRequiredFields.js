@@ -32,7 +32,7 @@ export function requiredEditorFields(document, rank = false) {
   for (const [index, level] of (document.levels || []).entries()) {
     const fields = [['rewardPoints', 'management.simpleReward'], ['timeLimitMode', 'simple.levelTimeLimit']];
     if (!document.globalLifeLimit) fields.push(['lifeLimitMode', 'simple.levelLifeLimit']);
-    if (level.option?.timeLimitMode && level.option.timeLimitMode !== 'UNLIMITED') fields.push(['timeLimitValue', 'simple.levelTimeValue']);
+    if (level.option?.timeLimitMode && level.option.timeLimitMode !== 'UNLIMITED') fields.push(['timeLimitValue', level.option.timeLimitMode === 'CYCLE_COUNT' ? 'simple.levelCycleCountValue' : 'simple.levelTimeValue']);
     if (!document.globalLifeLimit && level.option?.lifeLimitMode === 'LIMITED') fields.push(['lifeLimitValue', 'simple.levelLifeValue']);
     for (const [path, label] of fields) {
       if (blank(level.option?.[path])) errors.push({ path: `levels[${index}].option.${path}`, label, level: index + 1 });

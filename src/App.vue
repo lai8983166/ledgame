@@ -351,7 +351,7 @@ function exitGameDebug() {
 
 function openGameEditor(game) {
   selectedEditorGame.value = game
-    ? { id: game.id, name: game.name, displayName: game.displayName, type: game.type, draft: game.draft }
+    ? { id: game.id, name: game.name, displayName: game.displayName, type: game.type, draft: game.draft, openGlobalConfigOnEntry: game.openGlobalConfigOnEntry === true }
     : null;
   if (game?.type === "rank") {
     activeView.value = "rank-editor";
@@ -853,6 +853,7 @@ function formatRuntimeValue(value, fallback = "-") {
       :game-id="selectedEditorGame?.id"
       :game-name="selectedEditorGame?.name"
       :initial-document="selectedEditorGame?.draft"
+      :open-global-config-on-entry="selectedEditorGame?.openGlobalConfigOnEntry"
       @back="backToGameList"
     />
 
@@ -861,6 +862,7 @@ function formatRuntimeValue(value, fallback = "-") {
       :game-id="selectedEditorGame?.id"
       :game-name="selectedEditorGame?.displayName || selectedEditorGame?.name"
       :initial-document="selectedEditorGame?.draft"
+      :open-global-config-on-entry="selectedEditorGame?.openGlobalConfigOnEntry"
       @back="backToGameList"
     />
 

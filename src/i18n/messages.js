@@ -1534,6 +1534,20 @@ for (const [locale, [toolSelect, toolAdd, toolDelete, pointEditing, regionEditin
   mergedMessages[locale].simple = { ...mergedMessages[locale].simple, toolSelect, toolAdd, toolDelete, pointEditing, regionEditing };
 }
 
+const feedbackCatalogLabels = {
+  'zh-CN': ['添加游戏', '次数'], 'en-US': ['Add games', 'Cycle count'],
+  'es-ES': ['Añadir juegos', 'Número de ciclos'], 'pt-PT': ['Adicionar jogos', 'Número de ciclos'],
+  'fr-FR': ['Ajouter des jeux', 'Nombre de cycles'], 'de-DE': ['Spiele hinzufügen', 'Anzahl der Zyklen'],
+  'pl-PL': ['Dodaj gry', 'Liczba cykli'], 'ru-RU': ['Добавить игры', 'Количество циклов'],
+  'vi-VN': ['Thêm trò chơi', 'Số lần lặp'], 'it-IT': ['Aggiungi giochi', 'Numero di cicli'],
+  'cs-CZ': ['Přidat hry', 'Počet cyklů'], 'ko-KR': ['게임 추가', '반복 횟수'],
+  'ro-RO': ['Adaugă jocuri', 'Număr de cicluri'], 'ar-SA': ['إضافة ألعاب', 'عدد الدورات'],
+};
+for (const [locale, [addGames, levelCycleCountValue]] of Object.entries(feedbackCatalogLabels)) {
+  mergedMessages[locale].gameCategories = { ...mergedMessages[locale].gameCategories, addGames };
+  mergedMessages[locale].simple = { ...mergedMessages[locale].simple, levelCycleCountValue };
+}
+
 export const authoredMessages = Object.fromEntries(
   canonicalLocales.map((locale) => [locale, mergedMessages[locale] || {}]),
 );

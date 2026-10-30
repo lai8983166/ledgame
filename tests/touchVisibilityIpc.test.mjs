@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import vm from 'node:vm';
 
-test('metadata IPC broadcasts visibility only after successful persistence to all live windows', async () => {
+test('metadata IPC broadcasts visibility and category changes only after successful persistence to all live windows', async () => {
   const main = await readFile(new URL('../electron/main.cjs', import.meta.url), 'utf8');
   const registration = main.match(/ipcMain\.handle\('game:metadata-update',[\s\S]*?\n\}\)/)[0];
   let handler, fail = false, requests = [], notifications = [];
@@ -19,8 +19,13 @@ test('metadata IPC broadcasts visibility only after successful persistence to al
   assert.deepEqual(JSON.parse(requests[0][1].body), { childModeVisible: false });
   assert.equal(notifications.length, 2);
   assert.equal(notifications[0][0], 'game-catalog-changed');
+  notifications = [];
+  await handler(null, 7, { firstCatalog: '8' });
+  assert.deepEqual(JSON.parse(requests.at(-1)[1].body), { firstCatalog: '8' });
+  assert.equal(notifications.length, 2);
   notifications = []; fail = true;
   await assert.rejects(handler(null, 7, { childModeVisible: true }));
+  await assert.rejects(handler(null, 7, { firstCatalog: '9' }));
   assert.equal(notifications.length, 0);
   fail = false; await handler(null, 7, { name: 'draft' });
   assert.equal(notifications.length, 0);

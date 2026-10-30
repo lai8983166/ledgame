@@ -17,13 +17,14 @@ await context.addInitScript(()=>{
     levels:[{label:'第一关',frameList:[{repeatTimes:1,matrix:[]}]}]};
   const rank={id:4,name:'Rank测试',displayName:'Rank测试',type:'rank',siteSizeWidth:8,siteSizeHeight:8,minPlayers:1,maxPlayers:3,
     palette:['#ff0000','#00ff00','#0000ff'],levels:[{type:1,bounds:{minX:0,minY:0,maxX:7,maxY:7}}]};
-  let state={engineState:'IDLE',queueSummary:{waiting:[]}},stateListeners=[],frameListeners=[],sequence=0;
+  let state={engineState:'IDLE',queueSummary:{waiting:[]}},stateListeners=[],frameListeners=[],sequence=0,lastFrame=null;
   const clone=structuredClone,ret=()=>({data:clone(state)});
   window.fixture={simple,rank,requests:[],hardwareError:'',failStop:false,failSave:false,update(stateValue){state=clone(stateValue);stateListeners.forEach(f=>f(clone(state)));},
-    frame(frame){frameListeners.forEach(f=>f(frame));},listeners(){return [stateListeners.length,frameListeners.length];}};
+    frame(frame){lastFrame=frame;frameListeners.forEach(f=>f(frame));},listeners(){return [stateListeners.length,frameListeners.length];}};
   window.appLanguage={get:async()=>'zh-CN',set:async v=>v,onChanged:()=>()=>{}};
   window.ledGame={
-    prepareEditorDebugHardware:async()=>{window.fixture.requests.push(['hardware']);if(window.fixture.deferHardware)await new Promise(resolve=>window.fixture.resolveHardware=resolve);if(window.fixture.hardwareError)throw Error(window.fixture.hardwareError);return {data:{controllerCount:1}};},
+    prepareEditorDebugHardware:async()=>{window.fixture.requests.push(['hardware']);if(window.fixture.deferHardware)await new Promise(resolve=>window.fixture.resolveHardware=resolve);if(state.engineState==='STOPPED'){state={engineState:'IDLE',queueSummary:{waiting:[]}};stateListeners.forEach(f=>f(clone(state)));}if(window.fixture.hardwareError)throw Error(window.fixture.hardwareError);return {data:{controllerCount:1}};},
+    latestFrame:async()=>clone(lastFrame),
     gameState:async()=>ret(),onEngineState:f=>{stateListeners.push(f);return()=>{stateListeners=stateListeners.filter(x=>x!==f);};},
     state:async()=>ret(),customTitleBarEnabled:true,
     listManageableGames:async()=>({data:[simple,rank].map(game=>({...clone(game),gameId:game.id}))}),
@@ -59,6 +60,24 @@ try{
     const events=await page.evaluate(()=>window.componentEvents);assert.equal(events[0][0],'save');assert.equal(events[0][1].runtimeEnabled,true);assert.deepEqual(events[0][1].lines,[[[0,0],[1,0]],[]]);
     await button('取消').click();assert.equal((await page.evaluate(()=>window.componentEvents)).at(-1)[0],'cancel');
     await mount('GameWiringDialog',{width:8,height:8});await button('保存此游戏布线').waitFor();await button('保存此游戏布线').click();assert.deepEqual((await page.evaluate(()=>window.componentEvents))[0][1].lines,[[]]);
+  });
+  await check('待机和本页准备显示16x36实时动画，最新帧初始化、无硬件预览及运行尺寸隔离',async()=>{
+    await page.evaluate(()=>{window.fixture.update({engineState:'STOPPED',queueSummary:{waiting:[]}});window.fixture.hardwareError='ELC408_RUNTIME_DISABLED';window.fixture.frame({width:16,height:36,rgb:Array(16*36*3).fill(40)});});
+    const game=await page.evaluate(()=>window.fixture.rank);await mount('EditorDebugWorkspace',{game});
+    await page.waitForFunction(()=>window.getComponentSetup().pixels.length===36&&window.getComponentSetup().pixels[0][0].r===40);
+    await page.evaluate(()=>window.fixture.frame({width:16,height:36,rgb:Array(16*36*3).fill(80)}));
+    assert.equal(await page.evaluate(()=>window.getComponentSetup().pixels[0][0].r),80);
+    await page.locator('.debug-workspace-controls select').first().selectOption('wristband');await button('启动游戏').click();
+    await page.evaluate(()=>window.fixture.frame({width:24,height:24,rgb:Array(16*36*3).fill(100)}));
+    assert.equal(await page.evaluate(()=>window.getComponentSetup().pixels[0][0].r),100);
+    await page.keyboard.type('12345');await page.keyboard.press('Enter');await page.locator('.debug-scan-backdrop').waitFor({state:'hidden'});await button('启动游戏').click();
+    await page.evaluate(()=>window.fixture.frame({width:8,height:8,rgb:Array(8*8*3).fill(120)}));
+    assert.deepEqual(await page.evaluate(()=>[window.getComponentSetup().pixels[0].length,window.getComponentSetup().pixels.length,window.getComponentSetup().pixels[0][0].r]),[8,8,120]);
+    await page.evaluate(()=>window.fixture.frame({width:16,height:36,rgb:Array(16*36*3).fill(200)}));
+    assert.equal(await page.evaluate(()=>window.getComponentSetup().pixels[0][0].r),120);
+    await button('退出调试，返回编辑').click();
+    await page.evaluate(()=>{window.fixture.update({engineState:'IDLE',queueSummary:{waiting:[]}});window.fixture.hardwareError='';window.fixture.requests=[];});
+    await mount('GameListView');assert.deepEqual(await page.evaluate(()=>window.fixture.listeners()),[0,0]);
   });
   await check('单页启动、方形 RGB、暂停恢复、重启、退出失败可重试、监听释放',async()=>{
     const game=await page.evaluate(()=>window.fixture.simple);await mount('EditorDebugWorkspace',{game});await button('启动游戏').click();

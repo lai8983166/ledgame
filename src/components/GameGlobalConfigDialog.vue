@@ -286,17 +286,11 @@ onBeforeUnmount(() => {
 
               <select
                 v-else-if="field.kind === 'category'"
-                :value="String(getPath(field.path) || '')"
+                :value="props.categories.some((category) => String(category.id) === String(getPath(field.path))) ? String(getPath(field.path)) : ''"
                 :disabled="saving"
                 @change="setPath(field.path, $event.target.value)"
               >
                 <option value="">{{ t("gameCategories.unassigned") }}</option>
-                <option
-                  v-if="getPath(field.path) && !props.categories.some((category) => String(category.id) === String(getPath(field.path)))"
-                  :value="String(getPath(field.path))"
-                >
-                  {{ getPath(field.path) }}
-                </option>
                 <option v-for="category in props.categories" :key="category.id" :value="String(category.id)">
                   {{ category.name }}
                 </option>
