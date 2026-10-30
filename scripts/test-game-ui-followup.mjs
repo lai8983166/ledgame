@@ -44,7 +44,7 @@ try{
     assert.equal(await page.locator('.sprite-preview-card strong,.sprite-preview-card small').count(),0);
     assert.equal(await page.locator('.sprite-preview-card').first().evaluate(node=>getComputedStyle(node).borderTopWidth),'0px');
     for(const color of [0,1,2,3])await page.locator(`.sprite-color-filters input[value="${color}"]`).uncheck();
-    assert.equal(await page.locator('.sprite-preview-card').count(),0);
+    assert.equal(await page.locator('.sprite-preview-card').count(),4);
     await page.locator('.sprite-color-filters input[value="2"]').check();
     await page.locator('.sprite-dimension-search').fill('3 2');assert.equal(await page.locator('.sprite-preview-card').count(),1);
     await page.locator('.sprite-preview-card').click();assert.equal(await page.locator('.sprite-preview-card.active').count(),1);

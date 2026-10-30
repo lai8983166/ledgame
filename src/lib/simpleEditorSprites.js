@@ -5,9 +5,10 @@ export const COMMON_EDITOR_SPRITES = Object.freeze([
   ...EFFECT_SPRITE_NAMES[3], ...EFFECT_SPRITE_NAMES[2],
 ]);
 
-export function filterEditorSprites(sprites, text, colors = [0, 1, 2, 3]) {
-  sprites = sprites.filter(sprite => colors.includes(Number(sprite.color ?? 0)));
+export function filterEditorSprites(sprites, text, colors = []) {
+  if (colors.length) sprites = sprites.filter(sprite => colors.includes(Number(sprite.color ?? 0)));
   const query = String(text || '').trim();
+  if (!query && colors.length) return sprites;
   if (!query) return COMMON_EDITOR_SPRITES
     .map(name => sprites.find(sprite => sprite.name === name))
     .filter(Boolean);

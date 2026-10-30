@@ -570,12 +570,11 @@ button:disabled {
 
 .media-library-layout {
   display: grid;
-  grid-template-columns: 500px max-content;
+  grid-template-columns: minmax(220px, 500px) minmax(0, 990px);
   align-items: start;
   gap: 22px;
   width: 100%;
   min-height: 0;
-  overflow-x: auto;
   padding-bottom: 4px;
 }
 
@@ -592,8 +591,8 @@ button:disabled {
 .media-tree-panel {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
-  width: 500px;
-  height: 990px;
+  width: 100%;
+  height: min(990px, max(240px, calc(100dvh - 290px)));
   overflow: hidden;
 }
 
@@ -711,7 +710,7 @@ button:disabled {
 .media-preview-panel {
   display: grid;
   align-self: start;
-  width: 990px;
+  width: 100%;
   min-height: 0;
   overflow: hidden;
 }
@@ -719,6 +718,7 @@ button:disabled {
 .media-preview-content {
   display: grid;
   grid-template-rows: auto auto;
+  min-width: 0;
   min-height: 0;
 }
 
@@ -749,8 +749,10 @@ button:disabled {
 .media-preview-stage {
   display: grid;
   place-items: center;
-  width: 990px;
-  height: 990px;
+  width: 100%;
+  max-width: max(160px, calc(100dvh - 360px));
+  aspect-ratio: 1;
+  margin-inline: auto;
   min-height: 0;
   padding: 0;
   background:
@@ -763,8 +765,8 @@ button:disabled {
 .media-preview-stage video {
   width: 100%;
   height: 100%;
-  max-width: 990px;
-  max-height: 990px;
+  min-width: 0;
+  min-height: 0;
   border-radius: 10px;
   object-fit: contain;
   box-shadow: var(--ui-shadow);
@@ -782,16 +784,19 @@ button:disabled {
 }
 
 .media-preview-stage.audio {
-  width: 990px;
-  height: 180px;
-  min-height: 180px;
-  align-items: center;
-  justify-content: center;
-  padding: 24px;
+  position: relative;
+  width: 100%;
+  max-width: none;
+  aspect-ratio: 990 / 180;
+  overflow: hidden;
 }
 
 .media-audio-player {
-  width: min(880px, 100%);
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 880px;
+  transform: translate(-50%, -50%) scale(var(--media-preview-scale, 1));
   display: grid;
   grid-template-columns: minmax(160px, 1fr) minmax(460px, 2.4fr);
   align-items: center;
@@ -3593,7 +3598,6 @@ html.editor-saving * {
 
   .media-preview-stage {
     width: 100%;
-    height: min(990px, 92vw);
   }
 
   .media-tree-list {

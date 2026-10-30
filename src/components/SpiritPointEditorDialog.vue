@@ -35,7 +35,7 @@ let paintMode = "on";
 let lastPaintKey = "";
 
 const pointCount = computed(() => pointKeys.value.size);
-const canSave = computed(() => !props.saving && (!props.creating || name.value.trim().length > 0));
+const canSave = computed(() => !props.saving && name.value.trim().length > 0);
 
 function resetDraft() {
   name.value = props.spirit?.name || "";
@@ -162,12 +162,13 @@ function handlePointerUp(event) {
 }
 
 function handleSave() {
+  if (!canSave.value) return;
   const points = [...pointKeys.value].map((key) => key.split(":").map(Number));
   emit(
     "save",
     props.creating
       ? createSpiritCreatePayload(name.value, width.value, height.value, points, color.value)
-      : createSpiritUpdatePayload(width.value, height.value, points),
+      : createSpiritUpdatePayload(width.value, height.value, points, name.value),
   );
 }
 
@@ -240,7 +241,7 @@ onBeforeUnmount(() => {
         <button class="inline-symbol-button" type="button" :title="t('common.close')" :disabled="saving" @click="emit('cancel')">×</button>
       </header>
 
-      <label v-if="creating" class="spirit-editor-name">
+      <label class="spirit-editor-name">
         {{ t("spiritEditor.name") }}
         <input v-model="name" type="text" maxlength="255" :disabled="saving" autofocus />
       </label>
@@ -281,3 +282,7 @@ onBeforeUnmount(() => {
     </section>
   </div>
 </template>
+
+<style scoped>
+.spirit-editor-dialog:not(.creating) { grid-template-rows:auto auto auto minmax(0,1fr) auto auto; }
+</style>

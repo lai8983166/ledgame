@@ -11,6 +11,7 @@ test("effect dialog exposes all configuration controls and local preview", () =>
   }
   assert.match(source, /value="insert"/);
   assert.match(source, /value="after"/);
+  assert.match(source, /value="overwrite"/);
   assert.doesNotMatch(source, /<option value="merge"/);
   assert.doesNotMatch(source, /@click="drawPreview"/);
   assert.match(source, /draft\.useSprite/);

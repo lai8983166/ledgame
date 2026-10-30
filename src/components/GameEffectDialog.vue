@@ -341,7 +341,7 @@ onBeforeUnmount(() => {
             </label>
             <label>
               <span>{{ t("effect.step") }}</span>
-              <input v-model.number="draft.step" type="number" min="0.01" step="0.01" :disabled="saving" />
+              <input v-model.number="draft.step" type="number" min="1" step="1" :disabled="saving" />
               <small v-if="fieldError('step')" class="game-effect-field-error">{{ errorMessage('step') }}</small>
             </label>
             <label>
@@ -349,6 +349,7 @@ onBeforeUnmount(() => {
               <select v-model="draft.mode" :disabled="saving">
                 <option value="insert">{{ t("effect.insert") }}</option>
                 <option value="after">{{ t("effect.insertAfter") }}</option>
+                <option value="overwrite">{{ t("effect.overwrite") }}</option>
               </select>
             </label>
           </div>

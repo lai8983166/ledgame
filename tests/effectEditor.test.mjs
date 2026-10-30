@@ -133,3 +133,19 @@ test("normalization preserves explicit merge mode and sprite flag", () => {
   assert.deepEqual(normalizeEffectConfig({ isMerge: true, useSprite: 1 }).mode, "merge");
   assert.equal(normalizeEffectConfig({ useSprite: 0 }).useSprite, false);
 });
+
+test('overwrite replaces complete frames from current, appends overflow and preserves untouched tail', () => {
+  const source = Array.from({length: 5}, (_, index) => ({repeatTimes:index + 2, matrix:[{id:'old-' + index, x:index, y:0, color:0, points:[[0,0]]}]}));
+  const frames = [{repeatTimes:1,matrix:[{id:'effect',x:0,y:1,color:2,points:[[0,0]]}]}, {repeatTimes:1,matrix:[]}];
+  const before = structuredClone({source,frames});
+  const result = applyEffectToFrameList(source,1,frames,'overwrite');
+  assert.deepEqual(result.frameList,[source[0],...frames,...source.slice(3)]);
+  assert.equal(result.selectedFrameIndex,2);
+  const overflow = applyEffectToFrameList(source,4,frames,'overwrite');
+  assert.deepEqual(overflow.frameList,[...source.slice(0,4),...frames]);
+  assert.equal(overflow.selectedFrameIndex,5);
+  assert.deepEqual(applyEffectToFrameList([],0,frames,'overwrite').frameList,frames);
+  result.frameList[1].matrix[0].points[0][0] = 99;
+  assert.deepEqual({source,frames},before);
+  assert.equal(normalizeEffectConfig({mode:'overwrite'}).mode,'overwrite');
+});

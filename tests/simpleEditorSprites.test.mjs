@@ -19,9 +19,9 @@ test('exact dimensions filter all library entries, incomplete input never shows 
   assert.deepEqual(filterEditorSprites(library,' 3   2 '),[library[1]]);
   for(const input of ['3','3 x 2','0 2','-3 2','3 2 1','9007199254740992 2'])assert.deepEqual(filterEditorSprites(library,input),[]);
 });
-test('sprite color checkboxes intersect defaults and dimensions, empty selection shows none',()=>{
-  const sprites=[{name:'安全块',color:0,width:3,height:2},{name:'得分块',color:1,width:3,height:2},{name:'陷阱块',color:2,width:3,height:2}];
-  assert.deepEqual(filterEditorSprites(sprites,'',[0,2]),[sprites[0],sprites[2]]);
+test('sprite color selection shows every matching library entry and intersects dimensions',()=>{
+  const sprites=[{name:'安全块',color:0,width:3,height:2},{name:'得分块',color:1,width:3,height:2},{name:'陷阱块',color:2,width:3,height:2},{name:'自定义红色',color:2,width:1,height:1}];
+  assert.deepEqual(filterEditorSprites(sprites,'',[0,2]),[sprites[0],sprites[2],sprites[3]]);
   assert.deepEqual(filterEditorSprites(sprites,'3 2',[1]),[sprites[1]]);
-  assert.deepEqual(filterEditorSprites(sprites,'',[]),[]);
+  assert.deepEqual(filterEditorSprites(sprites,'',[]),sprites.slice(0,3));
 });

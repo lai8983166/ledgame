@@ -14,6 +14,9 @@ const errorMessage = ref("");
 const noticeMessage = ref("");
 const rootExists = ref(true);
 const audioElement = ref(null);
+const previewPanel = ref(null);
+const previewScale = ref(1);
+let previewResizeObserver;
 const isOpeningFolder = ref(false);
 const targetFolder = ref('');
 const isWriting = ref(false);
@@ -274,9 +277,14 @@ function handleAudioError() {
 onMounted(() => {
   mounted = true;
   loadMedia();
+  previewResizeObserver = new ResizeObserver(([entry]) => {
+    previewScale.value = Math.min(1, entry.contentRect.width / 990);
+  });
+  if (previewPanel.value) previewResizeObserver.observe(previewPanel.value);
 });
 
 onBeforeUnmount(() => {
+  previewResizeObserver?.disconnect();
   stopAudioPreview();
   mounted = false;
   previewLoader.invalidate();
@@ -350,7 +358,7 @@ onBeforeUnmount(() => {
         </div>
       </aside>
 
-      <section class="media-preview-panel" :aria-label="t('media.previewLabel')">
+      <section ref="previewPanel" class="media-preview-panel" :style="{ '--media-preview-scale': previewScale }" :aria-label="t('media.previewLabel')">
         <div v-if="!preview" class="media-preview-empty">
           <div class="empty-glyph" aria-hidden="true"></div>
           <p>{{ t("media.choosePreview") }}</p>

@@ -42,10 +42,11 @@ export function cropSpiritPoints(points, width, height) {
     .sort(([leftX, leftY], [rightX, rightY]) => leftY - rightY || leftX - rightX);
 }
 
-export function createSpiritUpdatePayload(width, height, points) {
+export function createSpiritUpdatePayload(width, height, points, name) {
   const safeWidth = clampSpiritDimension(width);
   const safeHeight = clampSpiritDimension(height);
   return {
+    ...(name === undefined ? {} : { name: String(name || "").trim() }),
     width: safeWidth,
     height: safeHeight,
     points: cropSpiritPoints(points, safeWidth, safeHeight),

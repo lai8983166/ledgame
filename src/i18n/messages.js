@@ -342,6 +342,7 @@ const baseMessages = {
       mode: "写入方式",
       insert: "当前帧前插入",
       insertAfter: "从当前帧后插入",
+      overwrite: "从当前帧开始覆盖",
       merge: "从当前帧开始合并",
       useSprite: "使用精灵",
       sprite: "精灵",
@@ -988,6 +989,7 @@ const baseMessages = {
       mode: "Write mode",
       insert: "Insert before current frame",
       insertAfter: "Insert after current frame",
+      overwrite: "Overwrite from current frame",
       merge: "Merge from current frame",
       useSprite: "Use sprite",
       sprite: "Sprite",
@@ -1546,6 +1548,25 @@ const feedbackCatalogLabels = {
 for (const [locale, [addGames, levelCycleCountValue]] of Object.entries(feedbackCatalogLabels)) {
   mergedMessages[locale].gameCategories = { ...mergedMessages[locale].gameCategories, addGames };
   mergedMessages[locale].simple = { ...mergedMessages[locale].simple, levelCycleCountValue };
+}
+
+// Effect write mode added by client feedback.
+const effectOverwriteCopy = {
+  "es-ES": "Sobrescribir desde el fotograma actual",
+  "pt-PT": "Substituir a partir do fotograma atual",
+  "fr-FR": "Écraser à partir de l’image actuelle",
+  "de-DE": "Ab aktuellem Bild überschreiben",
+  "pl-PL": "Nadpisz od bieżącej klatki",
+  "ru-RU": "Перезаписать с текущего кадра",
+  "vi-VN": "Ghi đè từ khung hình hiện tại",
+  "it-IT": "Sovrascrivi dal fotogramma corrente",
+  "cs-CZ": "Přepsat od aktuálního snímku",
+  "ko-KR": "현재 프레임부터 덮어쓰기",
+  "ro-RO": "Suprascrie de la cadrul curent",
+  "ar-SA": "الكتابة فوق الإطارات بدءًا من الإطار الحالي",
+};
+for (const [locale, overwrite] of Object.entries(effectOverwriteCopy)) {
+  mergedMessages[locale] = mergeCatalog(mergedMessages[locale] || {}, { effect: { overwrite } });
 }
 
 export const authoredMessages = Object.fromEntries(

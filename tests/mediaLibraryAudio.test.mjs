@@ -14,14 +14,14 @@ test("media library renders a non-autoplay audio preview with native controls", 
 
 test("audio preview uses a wide, low horizontal player layout", async () => {
   const style = await readFile(new URL("../src/style.css", import.meta.url), "utf8");
-  assert.match(style, /\.media-preview-stage\.audio\s*\{[^}]*width:\s*990px[^}]*height:\s*180px/s);
+  assert.match(style, /\.media-preview-stage\.audio\s*\{[^}]*width:\s*100%[^}]*aspect-ratio:\s*990 \/ 180/s);
   assert.match(style, /\.media-audio-player\s*\{[^}]*grid-template-columns:/s);
 });
 
 test("media library stops audio on selection, refresh, and unmount", () => {
   assert.match(viewSource, /async function selectNode\(node\) \{\s*stopAudioPreview\(\)/);
   assert.match(viewSource, /async function loadMedia\(\) \{\s*stopAudioPreview\(\)/);
-  assert.match(viewSource, /onBeforeUnmount\(\(\) => \{\s*stopAudioPreview\(\)/);
+  assert.match(viewSource, /onBeforeUnmount\(\(\) => \{[\s\S]*stopAudioPreview\(\)/);
   assert.match(viewSource, /player\.pause\(\)/);
   assert.match(viewSource, /player\.removeAttribute\("src"\)/);
 });

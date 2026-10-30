@@ -34,3 +34,13 @@ test("createSpiritCreatePayload trims name and reuses shape normalization", () =
     points: [[1, 1]],
   });
 });
+
+test("createSpiritUpdatePayload can rename without changing legacy shape-only callers", () => {
+  assert.deepEqual(createSpiritUpdatePayload(2, 2, [[1, 1]], "  Renamed spirit  "), {
+    name: "Renamed spirit",
+    width: 2,
+    height: 2,
+    points: [[1, 1]],
+  });
+  assert.equal(Object.hasOwn(createSpiritUpdatePayload(1, 1, []), "name"), false);
+});

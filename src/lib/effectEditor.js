@@ -147,7 +147,7 @@ export function filterEffectSprites(spirits, color) {
 
 export function normalizeEffectConfig(value = {}) {
   const source = value && typeof value === "object" ? value : {};
-  const mode = source.mode === 'after' ? 'after' : source.mode === "merge" || source.isMerge === true ? "merge" : "insert";
+  const mode = ['after', 'overwrite'].includes(source.mode) ? source.mode : source.mode === "merge" || source.isMerge === true ? "merge" : "insert";
   return {
     ...DEFAULT_EFFECT_CONFIG,
     ...source,
@@ -210,7 +210,7 @@ export function validateEffectConfig(value, options = {}) {
   if (!Number.isInteger(config.height) || config.height < 1) {
     errors.push({ field: "height", code: "DIMENSION_INVALID" });
   }
-  if (!['insert', 'after', 'merge'].includes(config.mode)) {
+  if (!['insert', 'after', 'overwrite', 'merge'].includes(config.mode)) {
     errors.push({ field: "mode", code: "MODE_INVALID" });
   }
   if (config.useSprite) {
@@ -366,6 +366,10 @@ export function applyEffectToFrameList(frameList, currentIndex, generatedFrames,
     return { frameList: next, selectedFrameIndex: index + generated.length - 1 };
   }
   const next = source.map(cloneFrame);
+  if (mode === 'overwrite') {
+    next.splice(index, generated.length, ...generated);
+    return { frameList: next, selectedFrameIndex: index + generated.length - 1 };
+  }
   const insertionIndex = mode === 'after' ? Math.min(source.length, index + 1) : index;
   next.splice(insertionIndex, 0, ...generated);
   return { frameList: next, selectedFrameIndex: insertionIndex + generated.length - 1 };
