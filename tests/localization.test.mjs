@@ -109,7 +109,7 @@ test("language preference store rejects unknown locale and recovers damaged JSON
 
 test("preload exposes removable language listeners without filesystem access", async () => {
   const preload = await readFile(new URL("../electron/preload.cjs", import.meta.url), "utf8");
-  assert.match(preload, /exposeInMainWorld\('appLanguage'/);
+  assert.match(preload, /exposeApi\('appLanguage'/);
   assert.match(preload, /app-language:get/);
   assert.match(preload, /app-language:set/);
   assert.match(preload, /removeListener\('app-language-changed'/);
@@ -222,6 +222,7 @@ test("Vue UI keeps Han interface copy inside the locale catalog", async () => {
     "i18n/elc408-messages.js",
     "i18n/kiosk-messages.js",
     "i18n/rank-messages.js",
+    "i18n/feedback23.js",
     "lib/applicationLanguages.js",
   ]);
   const violations = [];

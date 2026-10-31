@@ -23,7 +23,7 @@ test('game metadata and dimensions patch without cropping frames or wiring point
 
 test('an unconfirmed persistence result cannot update the live draft', async () => {
   const liveDocument={name:'local'};
-  await assert.rejects(saveSimpleGlobalConfigDocument({api:{getGameEditor:async()=>({data:{name:'saved'}}),saveGameEditor:async()=>({data:{saved:false}})},gameId:1,patch:{name:'new'},liveDocument}), /SAVE_NOT_CONFIRMED/);
+  await assert.rejects(saveSimpleGlobalConfigDocument({api:{getGameEditor:async()=>({data:{name:'saved',siteSizeWidth:16,siteSizeHeight:36}}),saveGameEditor:async()=>({data:{saved:false}})},gameId:1,patch:{name:'new'},liveDocument}), /SAVE_NOT_CONFIRMED/);
   assert.equal(liveDocument.name,'local');
 });
 
@@ -45,6 +45,7 @@ test("global config save uses the persisted document without submitting unsaved 
   const persistedDocument = {
     id: 7,
     name: "Persisted name",
+    siteSizeWidth: 16, siteSizeHeight: 36,
     levels: [{ frameList: [{ matrices: [{ objectList: ["saved-frame"] }] }] }],
     audio: { scoreSound: "old-score.mp3", injurySound: "keep-injury.mp3" },
   };
@@ -116,6 +117,7 @@ test("failed global config persistence leaves the live editor document unchanged
             data: {
               id: 9,
               name: "Persisted name",
+              siteSizeWidth: 16, siteSizeHeight: 36,
               levels: [{ frameList: [{ matrices: [{ objectList: ["saved-edit"] }] }] }],
               gif: { standby: "old.gif" },
             },
@@ -164,7 +166,7 @@ test("global config patch replaces scalar fields and preserves unspecified neste
 });
 
 test('pixel-light-only saves preserve game identity, media and bounded game time', async () => {
-  const persisted = {id:19,type:'default',mode:'[2]',name:'Newly saved game',cover:'cover.png',firstCatalog:'A',
+  const persisted = {siteSizeWidth:16,siteSizeHeight:36,id:19,type:'default',mode:'[2]',name:'Newly saved game',cover:'cover.png',firstCatalog:'A',
     globalTimeLimit:true,globalTimeLimitValue:60,commonConfig:{gameStartAudio:'start.mp3'},levels:[{label:'Existing level'}]};
   const live = structuredClone(persisted);
   const patch = {commonConfig:{pixelLightWiring:{form:{open:0},rows:[]}}};

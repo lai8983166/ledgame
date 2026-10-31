@@ -4,6 +4,7 @@ import {useI18n} from 'vue-i18n';
 import DebugLightBoard from '../components/DebugLightBoard.vue';
 import {isDebugRuntimeAvailable,debugLaunchPayload,appendDebugWristband,pixelsFromDebugFrame} from '../lib/editorDebugSession.js';
 import {wristbandErrorMessageKey,playerAccessRemainingSeconds} from '../lib/playerAccess.js';
+import {normalizeLevelOption} from '../lib/simpleLevelOptions.js';
 const props=defineProps({game:{type:Object,required:true},startLevelIndex:{type:Number,default:0},exitLabel:{type:String,default:''}});
 const emit=defineEmits(['exit']);
 const {t}=useI18n({useScope:'global'}), api=window.ledGame;
@@ -37,6 +38,21 @@ const blank=()=>Array.from({length:props.game.siteSizeHeight},()=>Array.from({le
 const pixels=ref(blank());
 const active=computed(()=>sessionId.value && state.value.sessionId===sessionId.value && ['STARTING','RUNNING','SETTLING','PAUSED'].includes(state.value.engineState));
 const canSwitchLevel=computed(()=>active.value && ['RUNNING','PAUSED'].includes(state.value.engineState));
+const levelList=computed(()=>props.game.levels || []);
+const selectedLevel=computed(()=>levelList.value[Number(options.startLevel)-1] || null);
+const levelChoiceDisabled=computed(()=>busy.value || !!preparation.value || (active.value && !canSwitchLevel.value));
+const selectedLevelOption=computed(()=>normalizeLevelOption(selectedLevel.value?.option));
+const selectedLevelTime=computed(()=>{
+  if(props.game.type==='rank')return t('touch.secondsCount',{value:selectedLevel.value?.durationSeconds || 0});
+  const option=selectedLevelOption.value;
+  if(option.timeLimitMode==='CYCLE_COUNT')return t('touch.cycleCount',{value:option.timeLimitValue});
+  if(option.timeLimitMode==='CYCLE_SECONDS')return t('touch.secondsCount',{value:option.timeLimitValue});
+  return t('editorDebug.unlimited');
+});
+const selectedLevelLife=computed(()=>props.game.type==='rank'?'—':props.game.globalLifeLimit
+  ? props.game.globalLifeLimitValue : selectedLevelOption.value.lifeLimitMode==='LIMITED'
+    ? selectedLevelOption.value.lifeLimitValue : t('editorDebug.unlimited'));
+const selectedLevelReward=computed(()=>props.game.type==='rank'?selectedLevel.value?.rewardPoints || 0:selectedLevelOption.value.rewardPoints);
 const preparation=computed(()=>state.value.preparation?.sessionId===sessionId.value?state.value.preparation:null);
 const participants=computed(()=>state.value.playerAccesses || []);
 const balanceNow=ref(Date.now());
@@ -92,6 +108,11 @@ async function cleanup(){
   sessionId.value=null;scanOpen.value=false;scanBuffer='';
 }
 async function restart(){const needsScan=await action(async()=>{const payload=debugLaunchPayload(props.game,options);await cleanup();await prepare(payload);if(enough.value)apply(await api.confirmPreparation(sessionId.value));else return true;});if(needsScan)await openScan();}
+async function selectLevel(index){
+  if(levelChoiceDisabled.value || !Number.isInteger(index) || index<0 || index>=levelList.value.length)return;
+  options.startLevel=index+1;
+  if(canSwitchLevel.value)await restart();
+}
 async function exit(){return Boolean(await action(async()=>{await cleanup();emit('exit');return true;}));}
 defineExpose({exit});
 async function command(name){await action(async()=>{apply(await api.sendDebugCommand({command:name,sessionId:sessionId.value}));});}
@@ -131,12 +152,31 @@ onBeforeUnmount(()=>{alive=false;clearTimeout(hardwareNoticeTimer);clearInterval
       <aside class="debug-workspace-controls">
         <label><span>{{t('editorDebug.method')}}</span><select v-model="options.launchMethod" :disabled="busy || active || !!preparation"><option value="debug">{{t('editorDebug.direct')}}</option><option value="wristband">{{t('editorDebug.wristband')}}</option></select></label>
         <label><span>{{t('editorDebug.players')}}</span><input v-model.number="options.userCount" type="number" :min="game.minPlayers || 1" :max="game.maxPlayers || game.participants || 1" :disabled="busy || active || !!preparation" /></label>
-        <label><span>{{t('editorDebug.level')}}</span><input v-model.number="options.startLevel" data-debug-field="startLevel" type="number" min="1" :max="game.levels?.length || 1" :disabled="busy || (active && !canSwitchLevel) || !!preparation" /></label>
+        <section class="debug-level-section" :aria-label="t('editorDebug.levelList')">
+          <h2>{{t('editorDebug.levelList')}}</h2>
+          <div class="debug-level-list">
+            <button v-for="(level,index) in levelList" :key="index" class="soft-button" type="button"
+              :data-debug-level="index" :class="{selected:options.startLevel===index+1}"
+              :aria-pressed="options.startLevel===index+1" :disabled="levelChoiceDisabled" @click="selectLevel(index)">
+              <strong>{{index+1}}</strong><span>{{level.label || `${t('editorDebug.level')} ${index+1}`}}</span>
+            </button>
+          </div>
+        </section>
+        <section v-if="selectedLevel && !active" class="debug-level-configuration" :aria-label="t('editorDebug.levelConfiguration')">
+          <h2>{{t('editorDebug.levelConfiguration')}}</h2>
+          <dl>
+            <dt>{{t('rank.levelName')}}</dt><dd>{{selectedLevel.label || options.startLevel}}</dd>
+            <template v-if="game.type==='rank'"><dt>{{t('globalConfig.type')}}</dt><dd>{{t(`rank.type${selectedLevel.type}`)}}</dd></template>
+            <dt>{{t('simple.levelTimeLimit')}}</dt><dd>{{selectedLevelTime}}</dd>
+            <dt>{{t('simple.levelLifeLimit')}}</dt><dd>{{selectedLevelLife}}</dd>
+            <dt>{{t('management.rankReward')}}</dt><dd>{{selectedLevelReward}}</dd>
+          </dl>
+        </section>
         <label><span>{{t('editorDebug.failurePolicy')}}</span><select v-model="options.stageFailurePolicy" :disabled="busy || active || !!preparation"><option value="END_GAME">{{t('rank.endGame')}}</option><option value="RETRY">{{t('rank.retry')}}</option></select></label>
         <div v-if="options.launchMethod==='wristband'" class="debug-participants"><button class="soft-button" :disabled="busy || active || enough" @click="scan">{{t('editorDebug.scan')}}</button><p>{{participants.length}} / {{options.userCount}}</p><p v-for="player in participants" :key="player.access.uid">{{player.member?.name}} · {{player.access.uid}}<br/>{{t('editorDebug.balance')}} {{playerAccessRemainingSeconds(player,balanceNow) ?? '—'}}s</p><small>{{t('editorDebug.balanceHint')}}</small></div>
-        <div class="debug-workspace-actions"><button class="action-button primary" :disabled="busy || active" @click="start">{{t('editorDebug.start')}}</button><button class="soft-button" :disabled="busy || !active" @click="command(state.engineState==='PAUSED'?'resume':'pause')">{{t(state.engineState==='PAUSED'?'editorDebug.resume':'editorDebug.pause')}}</button><button class="soft-button" :disabled="busy || !sessionId" @click="restart">{{t('editorDebug.restart')}}</button><button class="soft-button" :disabled="busy || !canSwitchLevel" @click="restart">{{t('editorDebug.switchLevel')}}</button></div>
+        <div class="debug-workspace-actions"><button class="action-button primary" :disabled="busy || active" @click="start">{{t('editorDebug.start')}}</button><button class="soft-button" :disabled="busy || !active" @click="command(state.engineState==='PAUSED'?'resume':'pause')">{{t(state.engineState==='PAUSED'?'editorDebug.resume':'editorDebug.pause')}}</button><button class="soft-button" :disabled="busy || !sessionId" @click="restart">{{t('editorDebug.restart')}}</button></div>
         <p v-if="error" class="error-line" role="alert">{{error}}</p><p v-if="hardwareWarning" class="error-line">{{hardwareWarning}}</p>
-        <dl><dt>{{t('editorDebug.state')}}</dt><dd>{{state.engineState || '—'}}</dd><dt>{{t('editorDebug.score')}}</dt><dd>{{gameplay.score ?? '—'}}</dd><dt>{{t('editorDebug.life')}}</dt><dd>{{game.type==='rank'?'—':gameplay.life ?? '—'}}</dd><dt>{{t('editorDebug.points')}}</dt><dd>{{gameplay.memberPoints ?? '—'}}</dd><dt>{{t('editorDebug.time')}}</dt><dd>{{countdown}}</dd><dt>{{t('editorDebug.currentLevel')}}</dt><dd>{{state.currentStageIndex==null?'—':state.currentStageIndex+1}}</dd></dl>
+        <dl><dt>{{t('editorDebug.score')}}</dt><dd>{{gameplay.score ?? '—'}}</dd><dt>{{t('editorDebug.life')}}</dt><dd>{{game.type==='rank'?'—':gameplay.life ?? '—'}}</dd><dt>{{t('editorDebug.points')}}</dt><dd>{{gameplay.memberPoints ?? '—'}}</dd><dt>{{t('editorDebug.time')}}</dt><dd>{{countdown}}</dd></dl>
         <article v-for="player in gameplay.players || []" :key="player.playerNumber" class="debug-player"><i :style="{background:player.color || '#888'}"></i><span>{{player.playerNumber}} · {{player.totalScore ?? player.score}} / {{t('editorDebug.points')}} {{player.memberPoints ?? 0}}</span></article>
         <p v-if="state.terminationReason">{{t('editorDebug.finished')}} · {{state.terminationReason}}</p>
       </aside>
@@ -164,6 +204,14 @@ h1{font-size:24px;margin:0}
 .debug-workspace-controls label span{min-width:0;overflow-wrap:anywhere}
 .debug-workspace-controls input,.debug-workspace-controls select{width:100%;max-width:none;min-width:0;box-sizing:border-box}
 .debug-workspace-actions{display:flex;gap:8px;flex-wrap:wrap}
+.debug-level-section,.debug-level-configuration{margin:0 0 16px}
+.debug-level-section h2,.debug-level-configuration h2{font-size:16px;margin:0 0 8px}
+.debug-level-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:6px;max-height:230px;overflow:auto;padding:2px}
+.debug-level-list button{display:flex;align-items:center;gap:8px;text-align:left;min-width:0;padding:8px}
+.debug-level-list button span{overflow-wrap:anywhere;min-width:0}
+.debug-level-list button.selected{border-color:var(--ui-accent);box-shadow:var(--ui-selected-shadow)}
+.debug-level-configuration{padding:12px;border:1px solid var(--ui-border);border-radius:8px}
+.debug-level-configuration dl{font-size:13px;margin:0;gap:8px}
 dl{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px}
 dd{margin:0;text-align:right;overflow-wrap:anywhere}
 .debug-workspace-rgb{min-width:0;min-height:0;overflow:hidden;display:flex}

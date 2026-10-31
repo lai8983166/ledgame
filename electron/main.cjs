@@ -31,9 +31,9 @@ const {
   toPublicApplicationSettings,
 } = require('./application-branding.cjs')
 const { createSplashLifecycle } = require('./splash-lifecycle.cjs')
+const { createBackendReadiness, createCloseApproval, finishTouchSession } = require('./application-lifecycle.cjs')
 const {
   describeDisplays,
-  matchSecondaryDisplay,
   automaticSecondaryDisplay,
   secondaryWindowPlacement,
   toDisplaySelection,
@@ -109,6 +109,9 @@ if (process.env.LED_USER_DATA_DIR) {
   app.setPath('userData', path.resolve(process.env.LED_USER_DATA_DIR))
 }
 
+const hasSingleInstanceLock = app.requestSingleInstanceLock()
+if (!hasSingleInstanceLock) app.quit()
+
 const languagePreferences = createLanguagePreferenceStore({
   fs,
   settingsPath: path.join(app.getPath('userData'), 'settings', 'language.json'),
@@ -145,6 +148,41 @@ let embeddedBackendLogSink = null
 let databaseRefreshPromise = null
 let NodeWebSocket = null
 let quitCleanupStarted = false
+let quitCleanupFinished = false
+let mainCloseApproved = false
+let quitRequestPromise = null
+let mainCloseListening = false
+const startupAbortController = new AbortController()
+const backendReadiness = createBackendReadiness((state) => {
+  for (const window of BrowserWindow.getAllWindows()) {
+    if (!window.isDestroyed()) window.webContents.send('backend-status-changed', state)
+  }
+})
+const mainCloseApproval = createCloseApproval({
+  isAvailable: () => Boolean(mainWindow && !mainWindow.isDestroyed() && mainCloseListening),
+  send: (request) => mainWindow.webContents.send('window:close-requested', request),
+})
+
+function activateMainWindow() {
+  if (!mainWindow || mainWindow.isDestroyed()) return
+  if (mainWindow.isMinimized()) mainWindow.restore()
+  mainWindow.show()
+  mainWindow.focus()
+  mainWindow.webContents.focus()
+}
+
+async function requestApplicationQuit() {
+  if (quitCleanupStarted) return
+  if (quitRequestPromise) return quitRequestPromise
+  quitRequestPromise = (async () => {
+    if (!await mainCloseApproval.request()) return
+    mainCloseApproved = true
+    app.quit()
+  })().finally(() => { quitRequestPromise = null })
+  return quitRequestPromise
+}
+
+app.on('second-instance', () => activateMainWindow())
 const splashLifecycle = createSplashLifecycle({
   createWindow: () => {
     const window = new BrowserWindow({
@@ -192,7 +230,7 @@ function broadcastApplicationSettings(settings) {
   const publicSettings = toPublicApplicationSettings(settings)
   BrowserWindow.getAllWindows().forEach((window) => {
     if (!window.isDestroyed()) {
-      window.webContents.send('app-settings-changed', publicSettings)
+      window.webContents.send('app-settings-changed', window === mainWindow ? settings : publicSettings)
     }
   })
 }
@@ -271,9 +309,7 @@ function currentDisplayDescriptors() {
 async function getSecondaryDisplayState() {
   const settings = await applicationSettings.get()
   const displays = currentDisplayDescriptors()
-  const selected = matchSecondaryDisplay(displays, settings.secondaryDisplay)
-    || (!displays.some((display) => display.selectable)
-      ? automaticSecondaryDisplay(displays, settings.secondaryDisplay) : null)
+  const selected = automaticSecondaryDisplay(displays, settings.secondaryDisplay)
   return {
     displays,
     selectedId: selected?.id ?? null,
@@ -412,6 +448,11 @@ function createWindow() {
     windowOptions.frame = false
   }
   mainWindow = new BrowserWindow(windowOptions)
+  mainCloseListening = false
+  mainWindow.webContents.on('did-start-loading', () => {
+    mainCloseListening = false
+    mainCloseApproval.cancel()
+  })
   preventRendererTitleOverride(mainWindow)
   mainWindow.setMenuBarVisibility(false)
   logWindowGeometry(mainWindow, 'main-window-created')
@@ -423,7 +464,15 @@ function createWindow() {
     splashLifecycle.close('main-ready')
     splashWindow = null
   })
+  mainWindow.on('close', (event) => {
+    if (quitCleanupFinished) return
+    event.preventDefault()
+    if (quitCleanupStarted) return
+    void requestApplicationQuit()
+  })
   mainWindow.on('closed', () => {
+    mainCloseApproval.cancel()
+    mainCloseListening = false
     void releaseElc408LogCapture()
     mainWindow = null
   })
@@ -662,7 +711,15 @@ async function exitTouchFullScreen(event, code) {
   ) {
     return { success: false }
   }
-  touchWindow.setFullScreen(false)
+  const targetWindow = touchWindow
+  const current = await requestCurrentGameState()
+  await finishTouchSession({
+    state: current?.data,
+    cancelPreparation: (sessionId) => executePreparationRequest('cancel', sessionId),
+    stopGame: () => engineStateRequest('/engine/game/stop', { method: 'POST' }),
+  })
+  if (!targetWindow.isDestroyed()) targetWindow.close()
+  activateMainWindow()
   return { success: true }
 }
 
@@ -773,27 +830,11 @@ async function selectSecondaryDisplay(displayId) {
 async function openSecondaryDisplay() {
   const settings = await applicationSettings.get()
   const displays = currentDisplayDescriptors()
-  const display = matchSecondaryDisplay(displays, settings.secondaryDisplay)
-    || (!displays.some((item) => item.selectable)
-      ? automaticSecondaryDisplay(displays, settings.secondaryDisplay) : null)
+  const display = automaticSecondaryDisplay(displays, settings.secondaryDisplay)
   if (!display) {
     throw new Error('SECONDARY_DISPLAY_UNAVAILABLE')
   }
   createSecondaryWindow(display)
-  return getSecondaryDisplayState()
-}
-
-async function openAutomaticSecondaryDisplay() {
-  const displays = currentDisplayDescriptors()
-  const settings = await applicationSettings.get()
-  const selected = matchSecondaryDisplay(displays, settings.secondaryDisplay)
-  const display = automaticSecondaryDisplay(displays, settings.secondaryDisplay)
-  if (!display) return null
-  if (!selected && !display.primary) {
-    await updateApplicationSettings({ secondaryDisplay: toDisplaySelection(display) })
-  }
-  createSecondaryWindow(display)
-  await broadcastSecondaryDisplayStatus()
   return getSecondaryDisplayState()
 }
 
@@ -1054,6 +1095,7 @@ function parseRuntimeStateMessage(message) {
 }
 
 async function backendRequest(pathname, options = {}) {
+  await backendReadiness.wait()
   const response = await fetch(`${backendBaseUrl}${pathname}`, {
     headers: {
       'Content-Type': 'application/json',
@@ -1188,20 +1230,21 @@ async function findAvailablePort(startPort, attempts = 40) {
 
 async function waitForBackend(baseUrl, timeoutMs = 30000) {
   const startedAt = Date.now()
-  let lastError = null
   while (Date.now() - startedAt < timeoutMs) {
+    startupAbortController.signal.throwIfAborted()
     try {
-      const response = await fetch(new URL('/engine/demo/state', baseUrl))
-      if (response.ok) {
-        return
-      }
-      lastError = new Error(`HTTP ${response.status}`)
-    } catch (error) {
-      lastError = error
+      const signal = AbortSignal.any([
+        startupAbortController.signal,
+        AbortSignal.timeout(Math.min(1500, Math.max(1, timeoutMs - (Date.now() - startedAt)))),
+      ])
+      const response = await fetch(new URL('/engine/demo/state', baseUrl), { signal })
+      if (response.ok) return
+    } catch (_error) {
+      startupAbortController.signal.throwIfAborted()
     }
     await new Promise((resolve) => setTimeout(resolve, 350))
   }
-  throw new Error(`Embedded backend did not become ready: ${lastError?.message || 'timeout'}`)
+  throw new Error('游戏服务启动超时，请重新打开应用。')
 }
 
 async function startEmbeddedBackend() {
@@ -1242,6 +1285,7 @@ async function startEmbeddedBackend() {
     onWarning: (error) => console.warn(`Backend log write failed: ${error.message || String(error)}`),
   })
 
+  startupAbortController.signal.throwIfAborted()
   embeddedBackendProcess = childProcess.spawn(javaPath, ['-jar', backendJarPath], {
     // Spring resolves ${user.dir}/elc408 against the portable app directory.
     cwd: getEmbeddedBackendWorkingDirectory(),
@@ -1261,6 +1305,10 @@ async function startEmbeddedBackend() {
     },
   })
   const spawnedBackend = embeddedBackendProcess
+  spawnedBackend.once('error', (error) => {
+    backendReadiness.fail(new Error('游戏服务启动失败，请检查运行环境后重新打开应用。'))
+    appendStartupLog(`Embedded backend spawn failed: ${error.message || String(error)}`)
+  })
   spawnedBackend.stdout.pipe(embeddedBackendLogSink, { end: false })
   spawnedBackend.stderr.pipe(embeddedBackendLogSink, { end: false })
 
@@ -1769,6 +1817,17 @@ function registerMediaProtocol() {
 ipcMain.handle('open-debug-panel', () => {
   createDebugWindow()
 })
+ipcMain.handle('backend:status', () => backendReadiness.get())
+ipcMain.on('window:close-listening', (event) => {
+  if (mainWindow && !mainWindow.isDestroyed() && event.sender === mainWindow.webContents) {
+    mainCloseListening = true
+  }
+})
+ipcMain.on('window:close-response', (event, requestId, allowed) => {
+  if (mainWindow && !mainWindow.isDestroyed() && event.sender === mainWindow.webContents) {
+    mainCloseApproval.respond(requestId, allowed)
+  }
+})
 ipcMain.handle('window:restore-focus', (event) => {
   const targetWindow = BrowserWindow.fromWebContents(event.sender)
   return restoreBrowserWindowFocus(targetWindow)
@@ -2091,7 +2150,10 @@ ipcMain.handle('media:upload', async (event, folder) => {
 })
 ipcMain.handle('app-language:get', () => languagePreferences.get())
 ipcMain.handle('app-language:set', (_event, locale) => setApplicationLanguage(locale))
-ipcMain.handle('app-settings:get', async () => toPublicApplicationSettings(await applicationSettings.get()))
+ipcMain.handle('app-settings:get', async (event) => {
+  const settings = await applicationSettings.get()
+  return mainWindow && event.sender === mainWindow.webContents ? settings : toPublicApplicationSettings(settings)
+})
 ipcMain.handle('app-settings:icon-data', async () => {
   const settings = await applicationSettings.get()
   const configuredPath = settings?.applicationIconPath
@@ -2108,7 +2170,10 @@ ipcMain.handle('app-settings:icon-data', async () => {
     return { dataUrl: null }
   }
 })
-ipcMain.handle('app-settings:update', (_event, patch) => updateApplicationSettings(patch))
+ipcMain.handle('app-settings:update', async (event, patch) => {
+  const result = await updateApplicationSettings(patch)
+  return mainWindow && event.sender === mainWindow.webContents ? applicationSettings.get() : result
+})
 ipcMain.handle('app-settings:choose-icon', async (event) => {
   const result = await showNativeDialogWithFocusRestore({
     BrowserWindow, dialog, event, method: 'showOpenDialog',
@@ -2403,29 +2468,30 @@ function registerIdleMediaProtocol() {
 
 app.whenReady()
   .then(async () => {
+    if (!hasSingleInstanceLock) return
     // The app has no native menu. Removing it keeps the Windows content bounds
     // stable instead of collapsing an auto-hidden menu on first input.
     Menu.setApplicationMenu(null)
     createSplashWindow()
     registerMediaProtocol()
     registerIdleMediaProtocol()
-    await startEmbeddedBackend()
-    startFrameServer()
-    startRuntimeStateStream()
     createWindow()
-    applyApplicationBrand(await applicationSettings.get())
-    void openAutomaticSecondaryDisplay().catch((error) => {
-      appendStartupLog(`Automatic secondary display open failed: ${error.message || String(error)}`)
+    startFrameServer()
+    // Render the management shell while its data requests wait for backend readiness.
+    void startEmbeddedBackend().then(() => {
+      if (quitCleanupStarted) return
+      backendReadiness.complete()
+      startRuntimeStateStream()
+    }).catch((error) => {
+      if (quitCleanupStarted) return
+      appendStartupLog(`Backend startup failed: ${error.message || String(error)}`)
+      backendReadiness.fail(new Error('游戏服务启动失败，请重新打开应用。'))
+      stopEmbeddedBackend()
     })
+    applyApplicationBrand(await applicationSettings.get())
 
     screen.on('display-added', () => {
       void broadcastSecondaryDisplayStatus()
-      if (!secondaryWindow || secondaryWindow.isDestroyed()
-        || secondaryWindowDisplayId === String(screen.getPrimaryDisplay().id)) {
-        void openAutomaticSecondaryDisplay().catch((error) => {
-          appendStartupLog(`Automatic secondary display open failed: ${error.message || String(error)}`)
-        })
-      }
     })
     screen.on('display-metrics-changed', () => {
       void broadcastSecondaryDisplayStatus()
@@ -2461,18 +2527,27 @@ app.on('window-all-closed', () => {
 })
 
 app.on('before-quit', (event) => {
-  if (quitCleanupStarted) {
+  if (quitCleanupFinished) {
+    return
+  }
+  event.preventDefault()
+  if (quitCleanupStarted) return
+  if (!mainCloseApproved && mainWindow && !mainWindow.isDestroyed()) {
+    void requestApplicationQuit()
     return
   }
   quitCleanupStarted = true
-  event.preventDefault()
+  startupAbortController.abort()
+  backendReadiness.fail(new Error('应用正在退出。'))
+  splashLifecycle.close('application-quit')
   stopRuntimeStateStream()
   stopFrameServer()
   Promise.race([
-    releaseElc408LogCapture(),
+    backendReadiness.get().status === 'ready' ? releaseElc408LogCapture() : Promise.resolve(),
     new Promise((resolve) => setTimeout(resolve, 500)),
   ]).finally(() => {
     stopEmbeddedBackend()
+    quitCleanupFinished = true
     app.quit()
   })
 })

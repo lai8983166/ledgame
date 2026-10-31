@@ -2884,19 +2884,19 @@ html.editor-saving * {
 }
 
 .object-actions .color-copy-green {
-  --color-copy-color: #3f8c63;
+  --color-copy-color: #00ff00;
 }
 
 .object-actions .color-copy-blue {
-  --color-copy-color: #4f78bb;
+  --color-copy-color: #4080ff;
 }
 
 .object-actions .color-copy-red {
-  --color-copy-color: #bc555a;
+  --color-copy-color: #ff4040;
 }
 
 .object-actions .color-copy-pink {
-  --color-copy-color: #a65c91;
+  --color-copy-color: #ff00ff;
 }
 
 .anchor-edit-panel {
@@ -3836,6 +3836,12 @@ body:has(.debug-shell) {
   background: var(--ui-panel);
   box-shadow: var(--ui-glow), inset 0 0 10px rgba(0, 240, 255, 0.1);
 }
+
+.app-brand { display: flex; align-items: center; gap: 8px; flex: 0 1 auto; min-width: 0; }
+.app-brand img { width: 32px; height: 32px; object-fit: contain; flex-shrink: 0; }
+.app-brand .brand-mark { flex-shrink: 0; }
+.app-brand-title { color: #fff; font-weight: 700; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media(max-width: 900px) { .app-brand-title { max-width: 80px; } }
 
 .nav-tabs {
   background: transparent;

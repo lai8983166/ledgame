@@ -1,3 +1,5 @@
+import { requireGameFieldDimensions } from './gameFieldDimensions.js';
+
 export function applySimpleGlobalConfigPatch(target, patch) {
   if (Object.hasOwn(patch, 'childModeVisible')) target.childModeVisible = Boolean(patch.childModeVisible);
   for (const field of ['cover', 'name', 'description', 'remark', 'firstCatalog']) {
@@ -35,6 +37,7 @@ export async function saveSimpleGlobalConfigDocument({
   }
 
   applySimpleGlobalConfigPatch(persistedDocument, patch);
+  requireGameFieldDimensions(persistedDocument);
   const result = await api.saveGameEditor(gameId, persistedDocument);
   if ((result?.data ?? result)?.saved !== true) {
     throw new Error(result?.message || 'SAVE_NOT_CONFIRMED');

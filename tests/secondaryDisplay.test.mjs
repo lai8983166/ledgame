@@ -77,16 +77,12 @@ test("automatic secondary display prefers saved external, first external, then p
   assert.equal(toDisplaySelection(automaticSecondaryDisplay(descriptors.slice(0, 1), saved)), null);
 });
 
-test("primary fallback is centered and windowed inside the work area, external stays fullscreen", () => {
+test("manually opened secondary display fills the selected display, including a single primary", () => {
   for (const raw of [display(1, "Primary", 0), display(1, "Small", -800, 800, 600)]) {
     const [primary] = describeDisplays([raw], raw);
     const plan = secondaryWindowPlacement(primary);
-    const area = primary.workArea;
-    assert.equal(plan.fullScreen, false);
-    assert.ok(plan.bounds.width <= 1280 && plan.bounds.height <= 720);
-    assert.ok(plan.bounds.x >= area.x && plan.bounds.y >= area.y);
-    assert.ok(plan.bounds.x + plan.bounds.width <= area.x + area.width);
-    assert.ok(plan.bounds.y + plan.bounds.height <= area.y + area.height);
+    assert.equal(plan.fullScreen, true);
+    assert.deepEqual(plan.bounds, primary.bounds);
   }
   const raw = [display(1, "Primary", 0), display(2, "Left", -1920)];
   const external = describeDisplays(raw, raw[0])[1];
@@ -95,10 +91,9 @@ test("primary fallback is centered and windowed inside the work area, external s
   assert.equal(secondaryWindowPlacement({ primary: true, bounds: { width: 0, height: 0 } }), null);
 });
 
-test("startup uses automatic secondary target selection in the shared main process", async () => {
+test("startup and display attachment never automatically open a secondary window", async () => {
   const source = await readFile(new URL("../electron/main.cjs", import.meta.url), "utf8");
-  assert.match(source, /async function openAutomaticSecondaryDisplay\(\)/);
-  assert.match(source, /void openAutomaticSecondaryDisplay\(\)\.catch/);
+  assert.doesNotMatch(source, /void openAutomaticSecondaryDisplay\(\)\.catch/);
   assert.match(source, /automaticSecondaryDisplay\(displays, settings\.secondaryDisplay\)/);
 });
 

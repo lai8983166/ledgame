@@ -30,6 +30,7 @@ const idlePromptFading = ref(false);
 const secondaryIdlePromptText = ref("LED FLOOR GAME");
 const secondaryIdleSubtitleText = ref('');
 const secondaryIdlePromptFontSize = ref(72);
+const secondaryIdleSubtitleFontSize = ref(72);
 const stateObservedAt = ref(Date.now());
 const clockNow = ref(Date.now());
 let removeStateListener = null;
@@ -124,6 +125,9 @@ function applyApplicationSettings(settings) {
   secondaryIdlePromptFontSize.value = Number.isInteger(fontSize) && fontSize >= 32 && fontSize <= 200
     ? fontSize
     : 72;
+  const subtitleFontSize = Number(settings?.secondaryIdleSubtitleFontSize ?? settings?.secondaryIdlePromptFontSize);
+  secondaryIdleSubtitleFontSize.value = Number.isInteger(subtitleFontSize) && subtitleFontSize >= 32 && subtitleFontSize <= 200
+    ? subtitleFontSize : secondaryIdlePromptFontSize.value;
 }
 
 async function loadApplicationSettings() {
@@ -293,7 +297,7 @@ function displayValue(value) {
           :fading="idlePromptFading"
           @animation-end="idlePromptFading = false"
         />
-        <IdlePromptDisplay v-if="secondaryIdleSubtitleText" :text="secondaryIdleSubtitleText" :font-size="secondaryIdlePromptFontSize" :allow-wrap="true" :fading="idlePromptFading" @animation-end="idlePromptFading = false" />
+        <IdlePromptDisplay v-if="secondaryIdleSubtitleText" :text="secondaryIdleSubtitleText" :font-size="secondaryIdleSubtitleFontSize" :allow-wrap="true" :fading="idlePromptFading" @animation-end="idlePromptFading = false" />
       </div>
     </section>
 

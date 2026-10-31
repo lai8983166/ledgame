@@ -11,6 +11,8 @@ export function createApplicationSettingsPatch(settings) {
     patch.secondaryIdlePromptText = settings.secondaryIdlePromptText;
   }
   if (settings && Object.hasOwn(settings, 'secondaryIdleSubtitleText')) patch.secondaryIdleSubtitleText = settings.secondaryIdleSubtitleText;
+  if (settings && Object.hasOwn(settings, 'secondaryIdleSubtitleFontSize')) patch.secondaryIdleSubtitleFontSize = settings.secondaryIdleSubtitleFontSize;
+  if (settings && Object.hasOwn(settings, 'touchPreparationTimeoutSeconds')) patch.touchPreparationTimeoutSeconds = settings.touchPreparationTimeoutSeconds;
   if (settings && Object.hasOwn(settings, 'coinCount')) patch.coinCount = settings.coinCount;
   if (settings && Object.prototype.hasOwnProperty.call(settings, "secondaryIdlePromptFontSize")) {
     patch.secondaryIdlePromptFontSize = settings.secondaryIdlePromptFontSize;

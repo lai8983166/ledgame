@@ -18,6 +18,6 @@ test('requested explanations are removed from their rendered templates, not glob
   assert.doesNotMatch(files[0],/t\(['"]management\.simpleRewardHint['"]\)|t\(['"]circleLights\.layoutRequired['"]\)/);
   assert.doesNotMatch(files[1],/t\(['"]effect\.coordinateHint['"]\)/);
   const settings = files[2].split('<style')[0].slice(files[2].indexOf('<template>'));
-  assert.doesNotMatch(settings,/<small|application-settings-range-hint|memberPlatform\.description|modeHints/);
+  assert.doesNotMatch(settings,/<small(?!\s+v-if="fieldError)|<[^>]+class="application-settings-range-hint"|memberPlatform\.description|modeHints/);
   assert.match(settings,/application-settings-error/);
 });

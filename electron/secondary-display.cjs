@@ -79,20 +79,9 @@ function automaticSecondaryDisplay(descriptors, selection) {
 
 function secondaryWindowPlacement(display) {
   if (!display) return null
-  const area = normalizeRectangle(display.primary ? display.workArea ?? display.bounds : display.bounds)
+  const area = normalizeRectangle(display.bounds)
   if (!area.width || !area.height) return null
-  if (!display.primary) return { bounds: area, fullScreen: true }
-  const width = Math.max(1, Math.floor(Math.min(1280, area.width * 0.8)))
-  const height = Math.max(1, Math.floor(Math.min(720, area.height * 0.8)))
-  return {
-    bounds: {
-      x: area.x + Math.floor((area.width - width) / 2),
-      y: area.y + Math.floor((area.height - height) / 2),
-      width,
-      height,
-    },
-    fullScreen: false,
-  }
+  return { bounds: area, fullScreen: true }
 }
 
 module.exports = {

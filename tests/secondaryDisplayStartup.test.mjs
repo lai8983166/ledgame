@@ -15,6 +15,7 @@ const external = { id: 2, label: 'External', bounds: { x: -1920, y: 0, width: 19
 function harness({ displays = [primary], selection = null, dev = false } = {}) {
   const windows = [];
   const writes = [];
+  const displayEvents = {};
   const settings = { secondaryDisplay: selection };
   class Window extends EventEmitter {
     constructor(options) {
@@ -41,7 +42,7 @@ function harness({ displays = [primary], selection = null, dev = false } = {}) {
   const context = vm.createContext({
     ...helpers, BrowserWindow: Window, path, __dirname: 'electron', isDev: dev,
     process: { env: { VITE_DEV_SERVER_URL: 'http://localhost:5173' } },
-    screen: { getAllDisplays: () => displays, getPrimaryDisplay: () => primary },
+    screen: { getAllDisplays: () => displays, getPrimaryDisplay: () => primary, on: (name, fn) => { displayEvents[name] = fn; } },
     applicationSettings: { get: async () => settings },
     updateApplicationSettings: async (patch) => { writes.push(patch); Object.assign(settings, patch); },
     preventRendererTitleOverride: () => {},
@@ -50,19 +51,21 @@ function harness({ displays = [primary], selection = null, dev = false } = {}) {
     source.slice(source.indexOf('function currentDisplayDescriptors()'), source.indexOf('async function broadcastSecondaryDisplayStatus')) +
     '\nasync function broadcastSecondaryDisplayStatus() { return getSecondaryDisplayState(); }\n' +
     source.slice(source.indexOf('function activateSecondaryWindow('), source.indexOf('function startFrameServer()')), context);
-  return { context, windows, writes, settings, displays };
+  vm.runInContext(source.slice(source.indexOf("screen.on('display-added'"),source.indexOf("screen.on('display-metrics-changed'")),context);
+  return { context, windows, writes, settings, displays, displayEvents };
 }
 
 for (const dev of [true, false]) {
-  test(`single-monitor startup and reopening use one ordinary window (${dev ? 'dev' : 'packaged'})`, async () => {
+  test(`single-monitor manual opening and reopening use one fullscreen window (${dev ? 'dev' : 'packaged'})`, async () => {
     const h = harness({ dev, selection: helpers.toDisplaySelection(helpers.describeDisplays([primary, external], primary)[1]) });
-    const state = await h.context.openAutomaticSecondaryDisplay();
+    assert.equal(h.windows.length, 0);
+    const state = await h.context.openSecondaryDisplay();
     assert.equal(state.activeDisplayId, '1');
     assert.equal(state.selectedAvailable, true);
     assert.equal(h.writes.length, 0, 'primary fallback must preserve saved external choice');
     const first = h.windows[0];
     first.emit('ready-to-show');
-    assert.equal(first.fullScreen, false);
+    assert.equal(first.fullScreen, true);
     assert.equal(first.visible, true);
     assert.equal(first.options.useContentSize, false);
     if (dev) assert.equal(first.url, 'http://localhost:5173?window=secondary');
@@ -78,19 +81,22 @@ for (const dev of [true, false]) {
   });
 }
 
-test('external display startup remains fullscreen and moves off primary fallback when attached', async () => {
+test('external attachment does not open or move a window until manually opened', async () => {
   const h = harness();
-  await h.context.openAutomaticSecondaryDisplay();
+  await h.context.openSecondaryDisplay();
   h.displays.push(external);
-  const state = await h.context.openAutomaticSecondaryDisplay();
+  h.displayEvents['display-added']();
+  assert.equal(h.windows.length,1);
+  assert.notEqual(h.windows[0].destroyed,true);
+  const state = await h.context.openSecondaryDisplay();
   assert.equal(h.windows[0].destroyed, true);
   assert.equal(state.activeDisplayId, '2');
   const second = h.windows[1];
   second.emit('ready-to-show');
   assert.equal(second.fullScreen, true);
   assert.deepEqual(second.bounds, external.bounds);
-  assert.equal(h.settings.secondaryDisplay.id, '2');
-  await h.context.openAutomaticSecondaryDisplay();
+  assert.equal(h.settings.secondaryDisplay, null);
+  await h.context.openSecondaryDisplay();
   assert.equal(h.windows.length, 2);
-  assert.match(source, /secondaryWindowDisplayId === String\(screen\.getPrimaryDisplay\(\)\.id\)/);
+  assert.doesNotMatch(source, /openAutomaticSecondaryDisplay/);
 });

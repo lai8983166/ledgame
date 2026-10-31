@@ -11,26 +11,30 @@ const {chromium}=require('playwright');
 const cache=path.join(process.env.LOCALAPPDATA,'ms-playwright');
 const chrome=(await readdir(cache)).filter(n=>/^chromium-\d+$/.test(n)).sort().at(-1);
 const output=path.join(root,'.build/touch-preparation-ui');await mkdir(output,{recursive:true});
-const server=await createServer({root,server:{host:'127.0.0.1',port:0}});await server.listen();
+const server=await createServer({root,server:{host:'127.0.0.1',port:0,hmr:false}});await server.listen();
 const browser=await chromium.launch({executablePath:path.join(cache,chrome,'chrome-win64/chrome.exe')});
 const context=await browser.newContext({viewport:{width:1366,height:768}});
 await context.addInitScript(()=>{
-  let stateListener,scanListener,revision=0,state;
+  let stateListener,scanListener,settingsListener,catalogListener,revision=0,state;
   const cats=[{id:11,name:'Entertainment Mode',cover:'Entertainment-mode.png'},{id:12,name:'Ranking game',cover:'Breakthrough-mode.png'}];
   const games=[1,2,3,4].map(id=>({id,name:['Simple','Normal','Diffcult','Rank'][id-1],type:id===4?'rank':'default',firstCatalog:String(id===4?12:11),minPlayers:1,maxPlayers:6,participants:6,cover:id===4?'Breakthrough-mode.png':`Entertainment-Ｍode/${['简单','正常','困难'][id-1]}.png`,levels:[{durationSeconds:90}]}));
+  games.push({id:5,name:'未分配游戏',type:'default',firstCatalog:'',participants:6},{id:6,name:'失效分类游戏',type:'default',firstCatalog:'999',participants:6});
   const publish=()=>{stateListener?.(structuredClone(state));return {data:structuredClone(state)};};
   const participant=uid=>({member:{id:Number(uid),phone:'13800000000',name:`玩家${uid}`},access:{bindingId:Number(uid),uid,status:'READY',durationMinutes:30,remainingSeconds:1800}});
-  window.fixture={entryMethod:'wristband',failCount:false,failCategories:false,noCategories:false,scanDelay:0,failConfirm:null,canceled:[],updates:[],confirmed:[],
+  window.fixture={games,entryMethod:'wristband',timeout:20,failCount:false,failCategories:false,noCategories:false,scanDelay:0,failConfirm:null,canceled:[],updates:[],confirmed:[],
+    changeSettings(seconds){this.timeout=seconds;settingsListener?.({entryMethod:this.entryMethod,touchPreparationTimeoutSeconds:seconds});},
+    notifyCatalog(){catalogListener?.();},
     reset(){state={engineState:'PREPARING',runtimeMode:'PRODUCTION',preparation:{sessionId:'test-'+ ++revision,revision,options:{userCount:1,startLevelIndex:0,launchMethod:this.entryMethod,runtimeMode:'PRODUCTION'}}};return publish();},
     scan(uid){scanListener?.({wristbandId:uid});},
     state:()=>structuredClone(state),
   };window.fixture.reset();
   window.appLanguage={get:async()=> 'zh-CN',onChanged:()=>()=>{}};
-  window.appSettings={get:async()=>({entryMethod:window.fixture.entryMethod,mode:'game'}),onChanged:()=>()=>{}};
+  window.appSettings={get:async()=>({entryMethod:window.fixture.entryMethod,mode:'game',touchPreparationTimeoutSeconds:window.fixture.timeout}),onChanged:fn=>{settingsListener=fn;return()=>settingsListener=null;}};
   window.mediaLibrary={getPreviewUrl:async p=>({url:'data:image/svg+xml,'+encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="${p.includes('mode')?400:100}" height="${p.includes('mode')?100:300}"><rect width="100%" height="100%" fill="cyan"/></svg>`)})};
   window.ledGame={
     touchPresentationMode:async()=> 'game',touchGameState:async()=>({data:structuredClone(state)}),
     onEngineState:fn=>{stateListener=fn;return()=>{stateListener=null;};},onWristbandScanned:fn=>{scanListener=fn;return()=>{scanListener=null;};},
+    onCatalogChanged:fn=>{catalogListener=fn;return()=>catalogListener=null;},
     listGames:async()=>games,listPlayableGames:async()=>games,seedSimpleVariants:async()=>{},seedRankType1:async()=>{},
     listGameCategories:async()=>{if(window.fixture.failCategories)throw Error('分类读取失败');return window.fixture.noCategories?[]:cats;},
     updatePreparation:async(id,patch)=>{window.fixture.updates.push(patch);if(window.fixture.failCount)throw Error('保存人数失败');Object.assign(state.preparation.options,patch);state.preparation.revision=++revision;return publish();},
@@ -74,6 +78,27 @@ try{
     assert.ok(sizes.length>2);for(const size of sizes){assert.equal(size.fit,'contain');assert.ok(Math.abs(size.ratio-size.natural)<.001,JSON.stringify(size));assert.ok(Math.abs(size.renderedRatio-size.natural)<.04,JSON.stringify(size));}
     await shot('封面与操作刷新');
   });
+  await check('当前轮播卡持续发光，切换跟随当前卡，减少动态效果时停用动画',async()=>{
+    const current=page.locator('.touch-carousel-card.current');
+    assert.match(await current.evaluate(node=>getComputedStyle(node).animationName),/^touch-current-card-glow/);
+    const before=await current.evaluate(node=>node.getAnimations()[0].currentTime);
+    await page.waitForTimeout(180);
+    assert.ok(await current.evaluate(node=>node.getAnimations()[0].currentTime)>before);
+    await page.getByTestId('game-carousel-next').click();
+    assert.equal(await page.locator('.touch-carousel-card').evaluateAll(nodes=>nodes.filter(node=>getComputedStyle(node).animationName.startsWith('touch-current-card-glow')).length),1);
+    await page.emulateMedia({reducedMotion:'reduce'});
+    assert.equal(await current.evaluate(node=>getComputedStyle(node).animationName),'none');
+    await page.emulateMedia({reducedMotion:'no-preference'});
+  });
+  await check('无其他游戏分类，未分配和失效分类不展示，分配有效分类后实时出现',async()=>{
+    assert.equal(await page.getByTestId('game-category-uncategorized').count(),0);
+    assert.deepEqual(await page.evaluate(()=>window.getComponentSetup().categorizedGames.map(game=>game.id)),[1,2,3,4]);
+    await page.evaluate(()=>{window.fixture.games.find(game=>game.id===5).firstCatalog='11';window.fixture.notifyCatalog();});
+    await page.waitForFunction(()=>window.getComponentSetup().categorizedGames.some(game=>game.id===5));
+    assert.equal(await page.evaluate(()=>window.getComponentSetup().categorizedGames.some(game=>game.id===6)),false);
+    await page.evaluate(()=>{window.fixture.games.find(game=>game.id===5).firstCatalog='';window.fixture.notifyCatalog();});
+    await page.waitForFunction(()=>!window.getComponentSetup().categorizedGames.some(game=>game.id===5));
+  });
   await check('分类封面轮播、点当前游戏进关卡、真实全局参数和关卡启动',async()=>{
     assert.equal(await page.locator('.touch-category-card').count(),2);
     await page.getByTestId('game-category-12').click();assert.equal(await page.getByTestId('game-carousel').getAttribute('data-selected-game-id'),'4');
@@ -115,12 +140,36 @@ try{
     await page.evaluate(()=>window.fixture.failConfirm=null);await page.getByTestId('game-start').click();await page.locator('.touch-shell[data-state="RUNNING"]').waitFor({timeout:10000});
     assert.equal(await page.evaluate(()=>window.fixture.confirmed.at(-1).options.startLevelIndex),2);
   });
-  await check('触屏跳过刷卡；没有分类可用；分类读取失败重试',async()=>{
+  await check('触屏跳过刷卡；没有有效分类不展示游戏；分类读取失败重试',async()=>{
     await page.evaluate(()=>{window.fixture.entryMethod='touch';window.fixture.noCategories=true;window.fixture.reset();});await mount();
     await page.getByTestId('game-player-count-1').click();await step('game');assert.equal(await page.getByTestId('game-wristband-prompt').count(),0);
-    await page.locator('.touch-carousel-card.current').click();await step('level');
+    assert.equal(await page.locator('.touch-carousel-card').count(),0);
+    assert.deepEqual(await page.evaluate(()=>window.getComponentSetup().categorizedGames.map(game=>game.id)),[]);
     await page.evaluate(()=>{window.fixture.noCategories=false;window.fixture.failCategories=true;window.fixture.reset();});await mount();await page.getByTestId('game-player-count-1').click();await step('game');
     await page.getByTestId('game-category-error').waitFor();await page.evaluate(()=>window.fixture.failCategories=false);await page.getByTestId('game-category-retry').click();await page.getByTestId('game-category-11').waitFor();await shot('选游戏');
+  });
+  await check('准备中已选游戏分类失效时取消当前准备，不继续启动隐藏游戏',async()=>{
+    await page.evaluate(()=>{window.fixture.entryMethod='touch';window.fixture.reset();});await mount();
+    await page.getByTestId('game-player-count-1').click();await step('game');
+    await page.locator('.touch-carousel-card.current').click();await step('level');
+    const selected=await page.evaluate(()=>window.fixture.state().preparation.gameId);
+    await page.evaluate(id=>{window.fixture.games.find(game=>game.id===id).firstCatalog='999';window.fixture.notifyCatalog();},selected);
+    await page.locator('.touch-shell[data-state="IDLE"]').waitFor();
+    await page.evaluate(id=>window.fixture.games.find(game=>game.id===id).firstCatalog=id===4?'12':'11',selected);
+  });
+  await check('准备秒数读取设置并实时更新，操作刷新设置值，非法0回退20且仍强制超时',async()=>{
+    await page.evaluate(()=>{window.fixture.entryMethod='wristband';window.fixture.timeout=3600;window.fixture.reset();});await mount();
+    const clock=page.getByTestId('game-preparation-step-timeout').locator('strong');
+    assert.equal(await clock.innerText(),'3600');
+    await page.evaluate(()=>window.fixture.changeSettings(0));assert.equal(await clock.innerText(),'20');
+    await page.evaluate(()=>window.fixture.changeSettings(2));assert.equal(await clock.innerText(),'2');
+    await page.getByTestId('game-player-count-1').click();await step('wristband');
+    await page.waitForTimeout(1100);assert.equal(await clock.innerText(),'1');
+    await page.locator('.touch-shell').dispatchEvent('pointermove',{pointerId:1});assert.equal(await clock.innerText(),'2');
+    const id=await page.evaluate(()=>window.fixture.state().preparation.sessionId);
+    await page.locator('.touch-shell[data-state="IDLE"]').waitFor({timeout:4000});
+    assert.ok(await page.evaluate(id=>window.fixture.canceled.includes(id),id));
+    await page.evaluate(()=>window.fixture.timeout=20);
   });
   await check('独立刷卡超时回待机；取消及迟到扫码不推进',async()=>{
     await page.evaluate(()=>{window.fixture.entryMethod='wristband';window.fixture.reset();});await mount();await page.getByTestId('game-player-count-1').click();await step('wristband');await shot('刷卡-单人');

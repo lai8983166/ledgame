@@ -4,6 +4,12 @@ import { normalizeLevelOption } from "./simpleLevelOptions.js";
 export const TOUCH_PLAYER_COUNTS = Object.freeze([1, 2, 3, 4, 5, 6]);
 export const TOUCH_GAME_COUNTDOWN_SECONDS = 5;
 export const TOUCH_PREPARATION_STEP_TIMEOUT_SECONDS = 20;
+export function normalizeTouchPreparationTimeoutSeconds(value) {
+  const seconds = Number(value);
+  return Number.isInteger(seconds) && seconds >= 1 && seconds <= 3600
+    ? seconds
+    : TOUCH_PREPARATION_STEP_TIMEOUT_SECONDS;
+}
 export const TOUCH_PREPARATION_TIMED_STEPS = Object.freeze([
   "players",
   "wristband",
@@ -150,7 +156,7 @@ export function createTouchPreparationStepTimeout({
   cancelSchedule,
 } = {}) {
   return createTouchCountdown({
-    seconds,
+    seconds: normalizeTouchPreparationTimeoutSeconds(seconds),
     onTick,
     onComplete: () => {
       onTick?.(0);

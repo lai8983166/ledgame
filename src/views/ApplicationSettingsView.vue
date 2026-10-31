@@ -3,6 +3,7 @@ import { computed, onMounted, onUnmounted, reactive, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { SUPPORTED_LOCALES } from "../i18n/index.js";
 import { createApplicationSettingsPatch } from "../lib/applicationSettingsPatch.js";
+import { applicationSettingsValidation } from "../lib/applicationSettingsValidation.js";
 
 const { t, locale } = useI18n({ useScope: "global" });
 const api = window.appSettings;
@@ -21,8 +22,10 @@ const saved = ref({
   memberPlatformPort: 8090,
   touchIdlePromptTexts: defaultPromptTexts(),
   touchIdlePromptFontSize: 72,
+  touchPreparationTimeoutSeconds: 20,
   secondaryIdlePromptText: "LED FLOOR GAME",
   secondaryIdlePromptFontSize: 72,
+  secondaryIdleSubtitleFontSize: 72,
   applicationTitle: "LED Game",
   applicationIconPath: "",
   secondaryDisplayBackgroundPath: "",
@@ -35,8 +38,10 @@ const draft = reactive({
   memberPlatformPort: 8090,
   touchIdlePromptTexts: defaultPromptTexts(),
   touchIdlePromptFontSize: 72,
+  touchPreparationTimeoutSeconds: 20,
   secondaryIdlePromptText: "LED FLOOR GAME",
   secondaryIdlePromptFontSize: 72,
+  secondaryIdleSubtitleFontSize: 72,
   applicationTitle: "LED Game",
   applicationIconPath: "",
   secondaryDisplayBackgroundPath: "",
@@ -46,7 +51,7 @@ const draft = reactive({
 let removeSettingsListener = null;
 
 const currentIdlePromptText = computed({
-  get: () => draft.touchIdlePromptTexts[locale.value] || defaultIdlePrompt(),
+  get: () => draft.touchIdlePromptTexts[locale.value] ?? defaultIdlePrompt(),
   set: (value) => {
     draft.touchIdlePromptTexts = {
       ...draft.touchIdlePromptTexts,
@@ -63,13 +68,23 @@ const dirty = computed(
     || Number(draft.memberPlatformPort) !== Number(saved.value.memberPlatformPort)
     || JSON.stringify(draft.touchIdlePromptTexts) !== JSON.stringify(saved.value.touchIdlePromptTexts)
     || draft.touchIdlePromptFontSize !== saved.value.touchIdlePromptFontSize
+    || draft.touchPreparationTimeoutSeconds !== saved.value.touchPreparationTimeoutSeconds
     || draft.secondaryIdlePromptText !== saved.value.secondaryIdlePromptText
     || draft.secondaryIdlePromptFontSize !== saved.value.secondaryIdlePromptFontSize
+    || draft.secondaryIdleSubtitleFontSize !== saved.value.secondaryIdleSubtitleFontSize
     || draft.applicationTitle !== saved.value.applicationTitle
     || draft.secondaryDisplayBackgroundPath !== saved.value.secondaryDisplayBackgroundPath
     || draft.secondaryIdleMediaPath !== saved.value.secondaryIdleMediaPath
-    || Boolean(draft.touchExitPassword),
+    || Boolean(draft.touchExitPassword && draft.touchExitPassword !== saved.value.touchExitPassword),
 );
+const validationErrors = computed(() => {
+  const errors = applicationSettingsValidation(draft);
+  const promptLength = Array.from(currentIdlePromptText.value.trim()).length;
+  if (promptLength < 1 || promptLength > 48) errors.touchIdlePromptText = ['applicationSettings.validation.text', { min: 1, max: 48 }];
+  return errors;
+});
+const valid = computed(() => Object.keys(validationErrors.value).length === 0);
+const fieldError = field => validationErrors.value[field] ? t(...validationErrors.value[field]) : '';
 const applicationIconLabel = computed(() => draft.applicationIconPath || t("management.defaultIcon"));
 const secondaryBackgroundLabel = computed(() => {
   if (!draft.secondaryDisplayBackgroundPath) return t("management.defaultBackground");
@@ -116,6 +131,7 @@ function applySettings(settings) {
   );
   const promptFontSize = Number(settings?.touchIdlePromptFontSize);
   const secondaryPromptFontSize = Number(settings?.secondaryIdlePromptFontSize);
+  const subtitleFontSize = Number(settings?.secondaryIdleSubtitleFontSize ?? settings?.secondaryIdlePromptFontSize);
   const normalized = {
     coinCount: Number.isInteger(settings?.coinCount) && settings.coinCount >= 1 && settings.coinCount <= 999 ? settings.coinCount : 1,
     secondaryIdleSubtitleText: typeof settings?.secondaryIdleSubtitleText === 'string' ? settings.secondaryIdleSubtitleText : '',
@@ -133,6 +149,9 @@ function applySettings(settings) {
     touchIdlePromptFontSize: Number.isInteger(promptFontSize) && promptFontSize >= 32 && promptFontSize <= 200
       ? promptFontSize
       : 72,
+    touchPreparationTimeoutSeconds: Number.isInteger(settings?.touchPreparationTimeoutSeconds)
+      && settings.touchPreparationTimeoutSeconds >= 1 && settings.touchPreparationTimeoutSeconds <= 3600
+      ? settings.touchPreparationTimeoutSeconds : 20,
     secondaryIdlePromptText: typeof settings?.secondaryIdlePromptText === "string"
       && settings.secondaryIdlePromptText.trim()
       ? settings.secondaryIdlePromptText.trim()
@@ -141,6 +160,8 @@ function applySettings(settings) {
       && secondaryPromptFontSize >= 32 && secondaryPromptFontSize <= 200
       ? secondaryPromptFontSize
       : 72,
+    secondaryIdleSubtitleFontSize: Number.isInteger(subtitleFontSize) && subtitleFontSize >= 32 && subtitleFontSize <= 200
+      ? subtitleFontSize : Number.isInteger(secondaryPromptFontSize) && secondaryPromptFontSize >= 32 && secondaryPromptFontSize <= 200 ? secondaryPromptFontSize : 72,
     applicationTitle: typeof settings?.applicationTitle === "string" && settings.applicationTitle.trim()
       ? settings.applicationTitle.trim() : "LED Game",
     applicationIconPath: typeof settings?.applicationIconPath === "string" ? settings.applicationIconPath : "",
@@ -148,7 +169,7 @@ function applySettings(settings) {
       ? settings.secondaryDisplayBackgroundPath : "",
     secondaryIdleMediaPath: typeof settings?.secondaryIdleMediaPath === "string"
       ? settings.secondaryIdleMediaPath : "",
-    touchExitPassword: "",
+    touchExitPassword: typeof settings?.touchExitPassword === 'string' ? settings.touchExitPassword : saved.value.touchExitPassword || '',
   };
   saved.value = normalized;
   draft.entryMethod = normalized.entryMethod;
@@ -158,13 +179,15 @@ function applySettings(settings) {
   draft.memberPlatformPort = normalized.memberPlatformPort;
   draft.touchIdlePromptTexts = normalized.touchIdlePromptTexts;
   draft.touchIdlePromptFontSize = normalized.touchIdlePromptFontSize;
+  draft.touchPreparationTimeoutSeconds = normalized.touchPreparationTimeoutSeconds;
   draft.secondaryIdlePromptText = normalized.secondaryIdlePromptText;
   draft.secondaryIdlePromptFontSize = normalized.secondaryIdlePromptFontSize;
+  draft.secondaryIdleSubtitleFontSize = normalized.secondaryIdleSubtitleFontSize;
   draft.applicationTitle = normalized.applicationTitle;
   draft.applicationIconPath = normalized.applicationIconPath;
   draft.secondaryDisplayBackgroundPath = normalized.secondaryDisplayBackgroundPath;
   draft.secondaryIdleMediaPath = normalized.secondaryIdleMediaPath;
-  draft.touchExitPassword = "";
+  draft.touchExitPassword = normalized.touchExitPassword;
 }
 
 async function chooseApplicationIcon() {
@@ -219,7 +242,7 @@ async function clearSecondaryIdleMedia() {
 }
 
 async function saveSettings() {
-  if (!api?.update || saving.value || !dirty.value) return;
+  if (!api?.update || saving.value || !dirty.value || !valid.value) return;
   saving.value = true;
   errorMessage.value = "";
   savedMessage.value = "";
@@ -274,8 +297,8 @@ async function testMemberPlatform() {
 
       <template v-else>
         <section class="application-settings-connection">
-          <label class="application-settings-field"><span>{{ t('management.appTitle') }}</span><input v-model.trim="draft.applicationTitle" type="text" maxlength="64" /></label>
-          <label class="application-settings-field"><span>{{ t('management.exitPassword') }}</span><input v-model="draft.touchExitPassword" type="text" inputmode="numeric" maxlength="12" autocomplete="off" /></label>
+          <label class="application-settings-field"><span>{{ t('management.appTitle') }} <b class="required-mark">*</b></span><input v-model.trim="draft.applicationTitle" type="text" maxlength="64" required :aria-invalid="Boolean(fieldError('applicationTitle'))" /><small v-if="fieldError('applicationTitle')" class="application-settings-error">{{ fieldError('applicationTitle') }}</small></label>
+          <label class="application-settings-field"><span>{{ t('management.exitPassword') }}</span><input v-model="draft.touchExitPassword" type="text" inputmode="numeric" maxlength="12" autocomplete="off" :aria-invalid="Boolean(fieldError('touchExitPassword'))" /><small v-if="fieldError('touchExitPassword')" class="application-settings-error">{{ fieldError('touchExitPassword') }}</small></label>
           <div class="application-settings-actions"><button class="application-settings-secondary" type="button" @click="chooseApplicationIcon">{{ t('management.chooseIcon') }}</button><span>{{ applicationIconLabel }}</span></div>
           <div class="application-settings-actions application-settings-background-actions">
             <button class="application-settings-secondary" type="button" @click="chooseSecondaryBackground">{{ t('management.chooseSecondaryBackground') }}</button>
@@ -283,7 +306,7 @@ async function testMemberPlatform() {
           </div>
         </section>
         <label class="application-settings-field">
-          <span>{{ t("applicationSettings.entryMethod") }}</span>
+          <span>{{ t("applicationSettings.entryMethod") }} <b class="required-mark">*</b></span>
           <select v-model="draft.entryMethod">
             <option value="touch">{{ t("applicationSettings.entryMethods.touch") }}</option>
             <option value="coin">{{ t("applicationSettings.entryMethods.coin") }}</option>
@@ -291,25 +314,34 @@ async function testMemberPlatform() {
           </select>
         </label>
 
+        <label class="application-settings-field">
+          <span>{{ t('applicationSettings.preparationTimeoutSeconds') }} <b class="required-mark">*</b></span>
+          <input v-model.number="draft.touchPreparationTimeoutSeconds" type="number" min="1" max="3600" step="1" required :aria-invalid="Boolean(fieldError('touchPreparationTimeoutSeconds'))" />
+          <small v-if="fieldError('touchPreparationTimeoutSeconds')" class="application-settings-error">{{ fieldError('touchPreparationTimeoutSeconds') }}</small>
+        </label>
+
         <label v-if="draft.entryMethod === 'coin'" class="application-settings-field">
-          <span>{{ t('applicationSettings.coinCount') }}</span>
-          <input v-model.number="draft.coinCount" type="number" min="1" max="999" step="1" />
+          <span>{{ t('applicationSettings.coinCount') }} <b class="required-mark">*</b></span>
+          <input v-model.number="draft.coinCount" type="number" min="1" max="999" step="1" required :aria-invalid="Boolean(fieldError('coinCount'))" /><small v-if="fieldError('coinCount')" class="application-settings-error">{{ fieldError('coinCount') }}</small>
         </label>
         <label class="application-settings-field">
-          <span>{{ t("applicationSettings.idlePromptText") }}</span>
+          <span>{{ t("applicationSettings.idlePromptText") }} <b class="required-mark">*</b></span>
           <input
             v-model="currentIdlePromptText"
+            required :aria-invalid="Boolean(fieldError('touchIdlePromptText'))"
             type="text"
             maxlength="48"
             autocomplete="off"
           />
+          <small v-if="fieldError('touchIdlePromptText')" class="application-settings-error">{{ fieldError('touchIdlePromptText') }}</small>
         </label>
 
         <label class="application-settings-field">
-          <span>{{ t("applicationSettings.idlePromptFontSize") }}</span>
+          <span>{{ t("applicationSettings.idlePromptFontSize") }} <b class="required-mark">*</b></span>
           <span class="application-settings-input-row">
             <input
               v-model.number="draft.touchIdlePromptFontSize"
+              required :aria-invalid="Boolean(fieldError('touchIdlePromptFontSize'))"
               type="number"
               min="32"
               max="200"
@@ -317,27 +349,31 @@ async function testMemberPlatform() {
               inputmode="numeric"
             />
           </span>
+          <small v-if="fieldError('touchIdlePromptFontSize')" class="application-settings-error">{{ fieldError('touchIdlePromptFontSize') }}</small>
         </label>
 
         <section class="application-settings-connection">
           <label class="application-settings-field">
-            <span>{{ t("applicationSettings.secondaryIdleTopTitle") }}</span>
+            <span>{{ t("applicationSettings.secondaryIdleTopTitle") }} <b class="required-mark">*</b></span>
             <input
               v-model.trim="draft.secondaryIdlePromptText"
+              required :aria-invalid="Boolean(fieldError('secondaryIdlePromptText'))"
               type="text"
               maxlength="64"
               autocomplete="off"
             />
+            <small v-if="fieldError('secondaryIdlePromptText')" class="application-settings-error">{{ fieldError('secondaryIdlePromptText') }}</small>
           </label>
           <label class="application-settings-field">
             <span>{{ t('applicationSettings.secondaryIdleBottomTitle') }}</span>
             <input v-model.trim="draft.secondaryIdleSubtitleText" type="text" maxlength="64" autocomplete="off" />
           </label>
           <label class="application-settings-field">
-            <span>{{ t("applicationSettings.secondaryIdlePromptFontSize") }}</span>
+            <span>{{ t("applicationSettings.secondaryIdleTopTitleFontSize") }} <b class="required-mark">*</b></span>
             <span class="application-settings-input-row">
               <input
                 v-model.number="draft.secondaryIdlePromptFontSize"
+                required :aria-invalid="Boolean(fieldError('secondaryIdlePromptFontSize'))"
                 type="number"
                 min="32"
                 max="200"
@@ -345,6 +381,12 @@ async function testMemberPlatform() {
                 inputmode="numeric"
               />
             </span>
+            <small v-if="fieldError('secondaryIdlePromptFontSize')" class="application-settings-error">{{ fieldError('secondaryIdlePromptFontSize') }}</small>
+          </label>
+          <label class="application-settings-field">
+            <span>{{ t("applicationSettings.secondaryIdleSubtitleFontSize") }} <b class="required-mark">*</b></span>
+            <input v-model.number="draft.secondaryIdleSubtitleFontSize" type="number" min="32" max="200" step="1" required :aria-invalid="Boolean(fieldError('secondaryIdleSubtitleFontSize'))" />
+            <small v-if="fieldError('secondaryIdleSubtitleFontSize')" class="application-settings-error">{{ fieldError('secondaryIdleSubtitleFontSize') }}</small>
           </label>
           <div class="application-settings-actions application-settings-idle-media-actions">
             <button class="application-settings-secondary" type="button" @click="chooseSecondaryIdleMedia">
@@ -356,8 +398,8 @@ async function testMemberPlatform() {
 
         <section class="application-settings-connection">
           <label class="application-settings-field">
-            <span>{{ t("applicationSettings.memberPlatform.host") }}</span>
-            <input v-model.trim="draft.memberPlatformHost" type="text" autocomplete="off" />
+            <span>{{ t("applicationSettings.memberPlatform.host") }} <b class="required-mark">*</b></span>
+            <input v-model.trim="draft.memberPlatformHost" type="text" autocomplete="off" required :aria-invalid="Boolean(fieldError('memberPlatformHost'))" /><small v-if="fieldError('memberPlatformHost')" class="application-settings-error">{{ fieldError('memberPlatformHost') }}</small>
           </label>
           <div class="application-settings-actions">
             <button class="application-settings-secondary" type="button" :disabled="connectionTestStatus === 'testing'" @click="testMemberPlatform">
@@ -373,7 +415,7 @@ async function testMemberPlatform() {
           <button
             class="application-settings-save"
             type="button"
-            :disabled="saving || !dirty"
+            :disabled="saving || !dirty || !valid"
             @click="saveSettings"
           >
             {{ saving ? t("applicationSettings.saving") : t("common.save") }}
@@ -394,14 +436,14 @@ async function testMemberPlatform() {
 <style scoped>
 .application-settings-view {
   width: 92%;
-  max-width: 1600px;
+  max-width: 920px;
   margin-inline: auto;
 }
 
 .application-settings-panel {
   display: grid;
-  gap: 22px;
-  padding: 30px;
+  gap: 16px;
+  padding: 22px;
   border: 1px solid var(--ui-border);
   border-radius: 8px;
   background: var(--ui-surface);
@@ -415,9 +457,9 @@ async function testMemberPlatform() {
 
 .application-settings-field {
   display: grid;
-  grid-template-columns: minmax(150px, 220px) minmax(0, 1fr);
+  grid-template-columns: minmax(150px, 200px) minmax(0, 420px);
   align-items: center;
-  gap: 8px 20px;
+  gap: 6px 16px;
   min-width: 0;
 }
 
@@ -427,7 +469,7 @@ async function testMemberPlatform() {
 }
 
 .application-settings-field select {
-  min-height: 46px;
+  min-height: 40px;
   padding: 0 13px;
   border: 1px solid var(--ui-border);
   border-radius: 6px;
@@ -437,7 +479,7 @@ async function testMemberPlatform() {
 }
 
 .application-settings-field input {
-  min-height: 46px;
+  min-height: 40px;
   padding: 0 13px;
   border: 1px solid var(--ui-border);
   border-radius: 6px;
@@ -469,6 +511,8 @@ async function testMemberPlatform() {
   white-space: nowrap;
 }
 
+.required-mark { color: var(--ui-error); }
+.application-settings-field [aria-invalid="true"] { border-color: var(--ui-error); }
 .application-settings-field > small {
   grid-column: 2;
   color: var(--ui-muted);

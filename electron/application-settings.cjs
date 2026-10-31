@@ -40,9 +40,11 @@ const DEFAULT_APPLICATION_SETTINGS = Object.freeze({
   secondaryDisplay: null,
   touchIdlePromptTexts: TOUCH_IDLE_PROMPT_DEFAULTS,
   touchIdlePromptFontSize: TOUCH_IDLE_PROMPT_FONT_SIZE_DEFAULT,
+  touchPreparationTimeoutSeconds: 20,
   secondaryIdlePromptText: SECONDARY_IDLE_PROMPT_DEFAULT,
   secondaryIdleSubtitleText: '',
   secondaryIdlePromptFontSize: SECONDARY_IDLE_PROMPT_FONT_SIZE_DEFAULT,
+  secondaryIdleSubtitleFontSize: SECONDARY_IDLE_PROMPT_FONT_SIZE_DEFAULT,
   applicationTitle: APPLICATION_TITLE_DEFAULT,
   applicationIconPath: null,
   secondaryDisplayBackgroundPath: SECONDARY_DISPLAY_BACKGROUND_DEFAULT,
@@ -154,9 +156,13 @@ function normalizeApplicationSettings(value) {
       source.touchIdlePromptTexts ?? source.touchIdlePromptText,
     ),
     touchIdlePromptFontSize: normalizeTouchIdlePromptFontSize(source.touchIdlePromptFontSize),
+    touchPreparationTimeoutSeconds: Number.isInteger(source.touchPreparationTimeoutSeconds)
+      && source.touchPreparationTimeoutSeconds >= 1 && source.touchPreparationTimeoutSeconds <= 3600
+      ? source.touchPreparationTimeoutSeconds : 20,
     secondaryIdlePromptText: normalizeSecondaryIdlePromptText(source.secondaryIdlePromptText),
     secondaryIdleSubtitleText: typeof source.secondaryIdleSubtitleText === 'string' && Array.from(source.secondaryIdleSubtitleText.trim()).length <= SECONDARY_IDLE_PROMPT_MAX_LENGTH ? source.secondaryIdleSubtitleText.trim() : '',
     secondaryIdlePromptFontSize: normalizeSecondaryIdlePromptFontSize(source.secondaryIdlePromptFontSize),
+    secondaryIdleSubtitleFontSize: normalizeSecondaryIdlePromptFontSize(source.secondaryIdleSubtitleFontSize ?? source.secondaryIdlePromptFontSize),
     applicationTitle: normalizeApplicationTitle(source.applicationTitle),
     applicationIconPath: typeof source.applicationIconPath === 'string' && source.applicationIconPath.trim()
       ? path.resolve(source.applicationIconPath) : null,
@@ -172,6 +178,15 @@ function normalizeApplicationSettings(value) {
 
 function validateSettingsPatch(value) {
   const patch = value && typeof value === 'object' ? value : {}
+  if ('touchPreparationTimeoutSeconds' in patch && (!Number.isInteger(patch.touchPreparationTimeoutSeconds)
+    || patch.touchPreparationTimeoutSeconds < 1 || patch.touchPreparationTimeoutSeconds > 3600)) {
+    throw new Error('Touch preparation timeout must be an integer between 1 and 3600 seconds')
+  }
+  if ('secondaryIdleSubtitleFontSize' in patch && (!Number.isInteger(patch.secondaryIdleSubtitleFontSize)
+    || patch.secondaryIdleSubtitleFontSize < SECONDARY_IDLE_PROMPT_FONT_SIZE_MIN
+    || patch.secondaryIdleSubtitleFontSize > SECONDARY_IDLE_PROMPT_FONT_SIZE_MAX)) {
+    throw new Error('Secondary idle subtitle font size must be an integer between 32 and 200')
+  }
   if ('coinCount' in patch && (!Number.isInteger(patch.coinCount) || patch.coinCount < 1 || patch.coinCount > 999)) throw new Error('Coin count must be an integer between 1 and 999')
   if ('secondaryIdleSubtitleText' in patch && (typeof patch.secondaryIdleSubtitleText !== 'string' || Array.from(patch.secondaryIdleSubtitleText.trim()).length > SECONDARY_IDLE_PROMPT_MAX_LENGTH)) throw new Error('Secondary idle subtitle must contain at most 64 characters')
   if ('entryMethod' in patch && !ENTRY_METHODS.includes(patch.entryMethod)) {

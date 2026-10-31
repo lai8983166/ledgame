@@ -18,6 +18,15 @@ const spirits = [
   { id: "double", name: "Double", color: 3, width: 2, height: 1, points: "[[0,0],[1,0]]", basic: true },
 ];
 
+test('effect steps reject fractional, zero and non-finite typed input', () => {
+  for (const step of [0.01, 1.5, 0, -1, Infinity, NaN]) {
+    assert.ok(validateEffectConfig(normalizeEffectConfig({ step })).some(error => error.code === 'STEP_INVALID'), String(step));
+  }
+  for (const step of [1, 2, 20]) {
+    assert.equal(validateEffectConfig(normalizeEffectConfig({ step })).some(error => error.code === 'STEP_INVALID'), false);
+  }
+});
+
 test("effect sprite whitelist is color-aware and de-duplicates by name", () => {
   assert.equal(EFFECT_SPRITE_NAMES[2].length, 17);
   assert.deepEqual(filterEffectSprites(spirits, 0).map((item) => item.name), ["安全块"]);

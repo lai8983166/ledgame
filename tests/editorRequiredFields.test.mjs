@@ -24,7 +24,7 @@ test('time and life values are required only while their settings are active', (
   assert.deepEqual(requiredEditorFields(doc).map(error => error.path), ['levels[0].option.timeLimitValue','levels[0].option.lifeLimitValue']);
   assert.equal(requiredEditorFields(doc)[0].label, 'simple.levelCycleCountValue');
   doc.levels[0].option.timeLimitMode='CYCLE_SECONDS';
-  assert.equal(requiredEditorFields(doc)[0].label, 'simple.levelTimeValue');
+  assert.equal(requiredEditorFields(doc)[0].label, 'simple.levelTimeSecondsValue');
 });
 test('Rank does not inherit Simple required media, but cannot save blank name or dimensions', () => {
   assert.deepEqual(requiredEditorFields({name:'Rank',siteSizeWidth:8,siteSizeHeight:8},true), []);

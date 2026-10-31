@@ -16,8 +16,8 @@
   --ui-warning: #facc15;
   --ui-error: #ff8498;
   --ui-text: #ffffff;
-  --ui-text-secondary: rgba(255, 255, 255, 0.78);
-  --ui-muted: rgba(255, 255, 255, 0.56);
+  --ui-text-secondary: #fff;
+  --ui-muted: #fff;
   --ui-text-disabled: rgba(255, 255, 255, 0.32);
   --ui-border: rgba(0, 240, 255, 0.18);
   --ui-border-strong: rgba(0, 240, 255, 0.55);

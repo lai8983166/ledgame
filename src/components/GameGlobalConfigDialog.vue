@@ -1,4 +1,5 @@
 <script setup>
+import { GAME_FIELD_DIMENSION_MAX, gameFieldDimensionsValid } from '../lib/gameFieldDimensions.js';
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import MediaPickerDialog from "./MediaPickerDialog.vue";
@@ -32,8 +33,8 @@ const sections = computed(() => {
       { label: t("globalConfig.name"), path: "name", kind: "text" },
       { label: t("simple.description"), path: "description", kind: "text" },
       { label: t("simple.remark"), path: "remark", kind: "text" },
-      { label: t("simple.width"), path: "siteSizeWidth", kind: "number", min: 1, marked: true },
-      { label: t("simple.height"), path: "siteSizeHeight", kind: "number", min: 1, marked: true },
+      { label: t("simple.width"), path: "siteSizeWidth", kind: "number", min: 1, max: GAME_FIELD_DIMENSION_MAX, step: 1, marked: true },
+      { label: t("simple.height"), path: "siteSizeHeight", kind: "number", min: 1, max: GAME_FIELD_DIMENSION_MAX, step: 1, marked: true },
       { label: t("globalConfig.firstCatalog"), path: "firstCatalog", kind: "category", marked: true },
       { label: t("management.childModeVisible"), path: "childModeVisible", kind: "checkbox" },
     ],
@@ -184,8 +185,8 @@ function handleSave() {
     saveError.value = t('editorSave.required') + '\n' + missing.map(field => t(field.label)).join('\n');
     return;
   }
-  if (['siteSizeWidth','siteSizeHeight'].some(field => !Number.isInteger(draft.value[field]) || draft.value[field] < 1)) {
-    saveError.value = t('editorSave.invalid') + '\n' + t('simple.width') + ' / ' + t('simple.height');
+  if (!gameFieldDimensionsValid(draft.value)) {
+    saveError.value = t('editorSave.invalid') + '\n' + t('editorSave.fieldDimensions');
     return;
   }
   if (lifeError.value || (draft.value.globalTimeLimit && (!Number.isInteger(draft.value.globalTimeLimitValue) || draft.value.globalTimeLimitValue <= 0))) {
@@ -300,6 +301,8 @@ onBeforeUnmount(() => {
                 v-else-if="field.kind === 'number'"
                 type="number"
                 :min="field.min ?? 0"
+                :max="field.max"
+                :step="field.step ?? 1"
                 :value="getPath(field.path)"
                 :disabled="saving"
                 @input="setPath(field.path, $event.target.value === '' ? '' : Number($event.target.value))"

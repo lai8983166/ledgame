@@ -329,7 +329,7 @@ function drawEmptyCell(context, index) {
   context.fillRect(left, top, size, size);
 
   context.globalAlpha = 1;
-  context.lineWidth = 1;
+  context.lineWidth = realCell ? 0.5 : 1;
   context.setLineDash(virtualCell ? [3, 2] : []);
   context.strokeStyle = realCell
     ? "#ffffff"
@@ -359,7 +359,7 @@ function drawCellOverlay(context, cell, index) {
 
   // Redraw the grid stroke ON TOP of the object fill to match the non-cached look
   // (drawCell originally strokes after filling).
-  context.lineWidth = realCell ? 1 : objectCell ? 1.25 : 1;
+  context.lineWidth = realCell ? 0.5 : objectCell ? 1.25 : 1;
   context.setLineDash(virtualCell ? [3, 2] : []);
   context.strokeStyle = realCell
     ? "#ffffff"

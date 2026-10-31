@@ -34,7 +34,7 @@ onBeforeUnmount(() => previousFocus?.focus?.());
           :disabled="saving || option === 'multidimensional'" :aria-pressed="family === option"
           @click="family = option">
           <strong>{{ t(`gameCreation.${option}`) }}</strong>
-          <span>{{ t(`gameCreation.${option}Hint`) }}</span>
+          <span v-if="option === 'multidimensional'">{{ t('gameCreation.multidimensionalHint') }}</span>
         </button>
       </div>
       <p v-if="error" class="error-line" role="alert">{{ error }}</p>

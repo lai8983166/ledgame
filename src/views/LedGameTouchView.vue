@@ -43,6 +43,7 @@ import {
   isTouchPreparationStepTimeoutCurrent,
   moveTouchCarousel,
   normalizeTouchGameDocument,
+  normalizeTouchPreparationTimeoutSeconds,
   normalizeTouchPlayerCount,
   hasRequiredWristbandParticipants,
   TOUCH_GAME_COUNTDOWN_SECONDS,
@@ -104,6 +105,7 @@ const queueUid = ref("");
 const queueGameId = ref(null);
 const queueSubmitting = ref(false);
 const gamePreparationStep = ref("players");
+const touchPreparationTimeoutSeconds = ref(TOUCH_PREPARATION_STEP_TIMEOUT_SECONDS);
 const preparationStepSecondsRemaining = ref(
   TOUCH_PREPARATION_STEP_TIMEOUT_SECONDS,
 );
@@ -236,17 +238,14 @@ const carouselGame = computed(
   () => categoryGames.value[gameCarouselIndex.value] || null,
 );
 const categoryGames = computed(() => {
-  if (selectedCategoryId.value === null) return games.value;
-  if (selectedCategoryId.value === 'uncategorized') return uncategorizedGames.value;
-  return gamesInCategory(games.value, selectedCategoryId.value);
+  if (selectedCategoryId.value === null) return categorizedGames.value;
+  return gamesInCategory(categorizedGames.value, selectedCategoryId.value);
 });
-const uncategorizedGames = computed(() => games.value.filter(game =>
-  !categories.value.some(category => String(category.id) === String(game.firstCatalog))));
-const touchCategories = computed(() => {
-  if (!categories.value.length) return [];
-  return [...categories.value.map(category => ({...category, gameIds:gamesInCategory(games.value,category.id).map(game=>game.id)})), ...(uncategorizedGames.value.length
-    ? [{ id: 'uncategorized', name: t('touch.uncategorizedGames'), cover: '', gameIds:uncategorizedGames.value.map(game=>game.id) }] : [])];
-});
+const categorizedGames = computed(() => games.value.filter(game =>
+  categories.value.some(category => String(category.id) === String(game.firstCatalog))));
+const touchCategories = computed(() => categories.value.map(category => ({
+  ...category, gameIds: gamesInCategory(categorizedGames.value, category.id).map(game => game.id),
+})));
 const gameLevels = computed(() => gameDocument.value?.levels || []);
 const selectedWizardLevel = computed(
   () => gameLevels.value[draft.startLevelIndex] || gameLevels.value[0] || null,
@@ -360,12 +359,12 @@ async function refreshCatalog() {
   if (gamesLoadPromise) await gamesLoadPromise;
   const refreshed = await loadGames();
   if (!refreshed || !touchMounted) return;
-  if (queueGameId.value && !games.value.some((game) => game.id === queueGameId.value)) {
+  if (queueGameId.value && !categorizedGames.value.some((game) => game.id === queueGameId.value)) {
     queueGameId.value = null;
   }
   if (view.value === "PREPARING" && sessionId === preparation.value?.sessionId
       && selectedBeforeRefresh === selectedGameId.value && selectedBeforeRefresh
-      && !games.value.some((game) => game.id === selectedBeforeRefresh)) {
+      && !categorizedGames.value.some((game) => game.id === selectedBeforeRefresh)) {
     await cancelPreparation();
   }
 }
@@ -398,6 +397,7 @@ watch(
     preparationStepTimeoutVisible,
     () => preparation.value?.sessionId || null,
     gamePreparationStep,
+    touchPreparationTimeoutSeconds,
   ],
   ([visible, sessionId, step]) => {
     stopPreparationStepTimeout();
@@ -417,8 +417,9 @@ function handlePreparationActivity() {
 function startPreparationStepTimeout(sessionId, step) {
   stopPreparationStepTimeout();
   preparationStepSecondsRemaining.value =
-    TOUCH_PREPARATION_STEP_TIMEOUT_SECONDS;
+    touchPreparationTimeoutSeconds.value;
   cancelPreparationStepTimeout = createTouchPreparationStepTimeout({
+    seconds: touchPreparationTimeoutSeconds.value,
     onTick: (remaining) => {
       if (isCurrentPreparationStepTimeout(sessionId, step)) {
         preparationStepSecondsRemaining.value = remaining;
@@ -521,6 +522,7 @@ async function loadApplicationSettings() {
 }
 
 function applyApplicationSettings(settings) {
+  touchPreparationTimeoutSeconds.value = normalizeTouchPreparationTimeoutSeconds(settings?.touchPreparationTimeoutSeconds);
   entryMethod.value =
     settings?.entryMethod === "wristband"
       ? "wristband"
@@ -720,7 +722,7 @@ function handleWristbandScanned(payload) {
 async function openQueuePanel() {
   if (!canCollectQueueEntry.value) return;
   queueUid.value = "";
-  queueGameId.value = games.value.some((game) => game.id === runtimeState.value.gameId)
+  queueGameId.value = categorizedGames.value.some((game) => game.id === runtimeState.value.gameId)
     ? runtimeState.value.gameId : null;
   queuePanelOpen.value = true;
   errorMessage.value = "";
@@ -1757,7 +1759,7 @@ async function confirmReturnToIdle() {
           <div v-if="loadingGames" class="touch-empty">
             {{ t("touch.loadingGames") }}...
           </div>
-          <div v-else-if="!games.length" class="touch-empty">
+          <div v-else-if="!categorizedGames.length" class="touch-empty">
             <strong>{{ t("touch.noGames") }}</strong>
             <button
               class="touch-secondary-button"
@@ -1769,7 +1771,7 @@ async function confirmReturnToIdle() {
           </div>
           <div v-else class="touch-game-grid">
             <button
-              v-for="game in games"
+              v-for="game in categorizedGames"
               :key="game.id"
               :data-testid="`game-option-${game.id}`"
               class="touch-game-card"
@@ -2074,7 +2076,7 @@ async function confirmReturnToIdle() {
         <input v-model="queueUid" class="queue-uid-input" data-testid="game-queue-uid" inputmode="numeric" pattern="[0-9]*" :placeholder="t('touch.queueUidPlaceholder')" />
         <select v-model.number="queueGameId" class="queue-game-select" data-testid="game-queue-game">
           <option :value="null" disabled>{{ t("touch.chooseGame") }}</option>
-          <option v-for="game in games" :key="game.id" :value="game.id">{{ game.name }}</option>
+          <option v-for="game in categorizedGames" :key="game.id" :value="game.id">{{ game.name }}</option>
         </select>
         <p v-if="queueSummary.waiting.length" class="queue-summary-line">{{ queueSummary.waiting.length }} player(s) waiting</p>
         <div v-if="queueSummary.waiting.length" class="queue-waiting-list" data-testid="game-queue-waiting">
@@ -4098,7 +4100,9 @@ fieldset:disabled {
 .touch-game-panel .touch-carousel-shell{width:100%;min-height:0;height:100%;grid-template-columns:40px minmax(0,1fr) 40px;}
 .touch-game-panel .touch-game-carousel{height:100%;min-height:0;padding:12px 16px;gap:8px;grid-template-columns:1.05fr .9fr .55fr;perspective:1000px;overflow:hidden;}
 .touch-game-panel .touch-carousel-card{max-width:100%;width:min(100%,calc(var(--touch-cover-ratio,.594) * min(49vh,400px)));height:auto;aspect-ratio:var(--touch-cover-ratio,183 / 308);border-radius:0;clip-path:none;border-color:#844fbc;padding:7px;opacity:.9;}
-.touch-game-panel .touch-carousel-card.current{order:1;transform:scale(.96);filter:drop-shadow(0 0 14px #0af5ff66);border-color:#d866e5;background:#664c9f;}
+.touch-game-panel .touch-carousel-card.current{order:1;transform:scale(.96);filter:drop-shadow(0 0 14px #0af5ff66);border-color:#d866e5;background:#664c9f;animation:touch-current-card-glow 1.8s ease-in-out infinite;}
+@keyframes touch-current-card-glow{0%,100%{border-color:#d866e5;box-shadow:0 0 8px #ee72f466,inset 0 0 8px #e76cf433;}50%{border-color:#b4fbff;box-shadow:0 0 24px #30e9ffcc,inset 0 0 16px #30e9ff66;}}
+@media(prefers-reduced-motion:reduce){.touch-game-panel .touch-carousel-card.current{animation:none;}}
 .touch-game-panel .touch-carousel-card.next{order:2;transform:scale(.88) rotateY(-24deg);}
 .touch-game-panel .touch-carousel-card.previous{order:3;transform:scale(.78) rotateY(-55deg);}
 .touch-game-panel .touch-carousel-card:only-child{grid-column:1 / -1;}

@@ -9,7 +9,7 @@ const {chromium}=createRequire(path.join(root,'../ledGame-platform/package.json'
 const cache=path.join(process.env.LOCALAPPDATA,'ms-playwright');
 const chrome=(await readdir(cache)).filter(n=>/^chromium-\d+$/.test(n)).sort().at(-1);
 const output=path.join(root,'.build/editor-debug-ui');await mkdir(output,{recursive:true});
-const server=await createServer({root,server:{host:'127.0.0.1',port:0}});await server.listen();
+const server=await createServer({root,server:{host:'127.0.0.1',port:20000+Math.floor(Math.random()*30000),hmr:false}});await server.listen();
 const browser=await chromium.launch({executablePath:path.join(cache,chrome,'chrome-win64/chrome.exe')});
 const context=await browser.newContext({viewport:{width:1366,height:768}});
 await context.addInitScript(()=>{
@@ -107,7 +107,7 @@ try{
     assert.ok((await page.evaluate(()=>window.fixture.requests)).some(r=>r[0]==='command'&&r[1].command==='tileinput'));
     await button('重新开始').click();await page.evaluate(()=>window.fixture.failStop=true);await button('退出调试，返回编辑').click();assert.equal(await page.locator('[role=alert]').innerText(),'停止失败');
     await page.evaluate(()=>window.fixture.failStop=false);await button('退出调试，返回编辑').click();assert.equal((await page.evaluate(()=>window.componentEvents)).at(-1)[0],'exit');
-    assert.notEqual(await page.locator('dd').nth(4).innerText(),'无限');
+    assert.notEqual(await page.locator('.debug-workspace-controls > dl dt').filter({hasText:'游戏剩余秒数'}).locator('xpath=following-sibling::dd[1]').innerText(),'无限');
     await mount('GameWiringDialog',{width:8,height:8});assert.deepEqual(await page.evaluate(()=>window.fixture.listeners()),[0,0]);
   });
   await check('真实 UID 加回车，多人刷卡数量、重复卡、取消不算成功、普通输入不被扫描捕获',async()=>{
@@ -189,10 +189,10 @@ try{
     await page.evaluate(()=>window.fixture.update({engineState:'RUNNING',sessionId:window.fixture.requests.filter(r=>r[0]==='confirm').at(-1)[1],
       gameTime:{mode:'UNLIMITED'},gameplay:{remainingMillis:12500,players:[{playerNumber:1,color:'#ff0000',totalScore:6,memberPoints:4},{playerNumber:2,color:'#00ff00',totalScore:2,memberPoints:0}]}}));
     assert.equal(await page.locator('.debug-player').count(),2);assert.match(await page.locator('.debug-player').first().innerText(),/6.*4/);
-    assert.equal(await page.locator('dd').nth(2).innerText(),'—');
-    assert.equal(await page.locator('dd').nth(4).innerText(),'13');
+    assert.equal(await page.locator('.debug-workspace-controls > dl dt').filter({hasText:'生命值'}).locator('xpath=following-sibling::dd[1]').innerText(),'—');
+    assert.equal(await page.locator('.debug-workspace-controls > dl dt').filter({hasText:'游戏剩余秒数'}).locator('xpath=following-sibling::dd[1]').innerText(),'13');
     await page.evaluate(async()=>window.fixture.update({...(await window.ledGame.gameState()).data,gameTime:{mode:'LIMITED',remainingMillis:6000}}));
-    assert.equal(await page.locator('dd').nth(4).innerText(),'6');
+    assert.equal(await page.locator('.debug-workspace-controls > dl dt').filter({hasText:'游戏剩余秒数'}).locator('xpath=following-sibling::dd[1]').innerText(),'6');
     for(const [width,height] of [[1366,768],[1920,1080],[2560,1440]]){await page.setViewportSize({width,height});await page.waitForTimeout(100);
       const canvas=await page.locator('canvas').boundingBox();assert.ok(canvas.y+canvas.height<=height);assert.equal(canvas.width,canvas.height);
       await page.screenshot({path:path.join(output,`rank-${width}.png`)});}

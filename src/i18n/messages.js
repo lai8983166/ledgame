@@ -1569,6 +1569,10 @@ for (const [locale, overwrite] of Object.entries(effectOverwriteCopy)) {
   mergedMessages[locale] = mergeCatalog(mergedMessages[locale] || {}, { effect: { overwrite } });
 }
 
+for (const locale of canonicalLocales) {
+  mergedMessages[locale] = mergeCatalog(mergedMessages[locale], feedback23Catalog(locale));
+}
+
 export const authoredMessages = Object.fromEntries(
   canonicalLocales.map((locale) => [locale, mergedMessages[locale] || {}]),
 );
@@ -1581,3 +1585,4 @@ export const messages = Object.fromEntries(
       : mergeCatalog(authoredMessages["en-US"], authoredMessages[locale]),
   ]),
 );
+import { feedback23Catalog } from './feedback23.js';

@@ -1,3 +1,5 @@
+import { requireGameFieldDimensions } from './gameFieldDimensions.js';
+
 export const SIMPLE_TICK_MS = 25;
 
 export function selectSimpleTopItem(items, colorOf = (item) => item?.color) {
@@ -27,8 +29,7 @@ export function normalizeRgbColor(value, fallback = "#000000") {
 }
 
 export function rasterizeSimpleFrame(frame, options) {
-  const width = clampDimension(options?.width);
-  const height = clampDimension(options?.height);
+  const { width, height } = requireGameFieldDimensions({ siteSizeWidth: options?.width, siteSizeHeight: options?.height });
   const palette = normalizeGamePalette(options?.colors);
   const occupants = Array.from({ length: width * height }, () => []);
 
@@ -57,8 +58,7 @@ export function rasterizeSimpleFrame(frame, options) {
 }
 
 export function prepareSimpleLevelGif(level, document) {
-  const width = clampDimension(document?.siteSizeWidth);
-  const height = clampDimension(document?.siteSizeHeight);
+  const { width, height } = requireGameFieldDimensions(document);
   const colors = [document?.color0, document?.color1, document?.color2, document?.color3];
   const palette = uniquePalette(normalizeGamePalette(colors));
   const frames = (level?.frameList || []).map((frame) => ({
@@ -106,11 +106,6 @@ function normalizePoints(points) {
       : [toInteger(point?.x), toInteger(point?.y)],
   );
   return normalized.length ? normalized : [[0, 0]];
-}
-
-function clampDimension(value) {
-  const number = Number(value);
-  return Math.min(96, Math.max(1, Number.isFinite(number) ? Math.floor(number) : 1));
 }
 
 function clampColorIndex(value) {

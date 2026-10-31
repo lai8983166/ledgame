@@ -1,5 +1,51 @@
 const { contextBridge, ipcRenderer } = require('electron')
 
+function userErrorMessage(error) {
+  let message = String(error?.message || error || '').trim()
+  // Electron adds the IPC channel to errors crossing the process boundary.
+  message = message.replace(/^(?:Error:\s*)?Error invoking remote method ['"][^'"]+['"]:\s*/i, '')
+    .replace(/^(?:Error|TypeError|java\.[\w.]+Exception):\s*/i, '').split(/\r?\n/)[0].trim()
+  const translations = [
+    [/^Touch exit password must contain 4 to 12 digits$/i, '退出密码需为4～12位数字'],
+    [/^Coin count must be an integer between 1 and 999$/i, '投币数量需为1～999的整数'],
+    [/^Application title must contain 1 to 64 characters$/i, '应用标题需为1～64个字符'],
+    [/^Member platform host is invalid$/i, '会员管理端地址无效'],
+    [/^Member platform port must be between 1 and 65535$/i, '会员管理端端口需为1～65535'],
+    [/^(?:.*category.*(?:already exists|duplicate)|(?:duplicate|already exists).*category.*)$/i, '分类名称已存在'],
+    [/^EEXIST:.*$/i, '同名文件或文件夹已存在'],
+    [/^ENOENT:.*$/i, '文件或文件夹不存在'],
+    [/^(?:EACCES|EPERM):.*$/i, '无法访问文件或文件夹，请检查权限'],
+    [/^(?:fetch failed|Failed to fetch|ECONNREFUSED.*)$/i, '无法连接游戏服务，请稍后重试'],
+    [/^SECONDARY_DISPLAY_UNAVAILABLE$/i, '当前没有可用的显示器'],
+    [/^Secondary idle (?:subtitle|prompt text) must contain (.*) characters$/i, '副屏标题长度无效'],
+    [/^Secondary idle (?:text size|font size).*$/i, '副屏字号无效'],
+    [/^(?:Secondary|Touch) idle prompt font size must be an integer between \d+ and \d+$/i, '文字字号需为支持范围内的整数'],
+    [/^Backend request failed: \d+$/i, '操作失败，请稍后重试'],
+  ]
+  for (const [pattern, translated] of translations) if (pattern.test(message)) return translated
+  // Keep the concrete backend reason while removing its internal error-code prefix.
+  if (/[\u3400-\u9fff]/.test(message) && !/^(?:ELC408_|WRISTBAND_|PLAYER_|MEMBER_)/.test(message)) {
+    message = message.replace(/^[A-Z][A-Z0-9_]+:\s*/, '')
+  }
+  return message || '操作失败，请重试'
+}
+
+function exposeApi(name, api) {
+  const wrapped = Object.fromEntries(Object.entries(api).map(([key, value]) => [key,
+    typeof value !== 'function' ? value : (...args) => {
+      try {
+        const result = value(...args)
+        return result && typeof result.then === 'function'
+          ? result.catch((error) => { throw new Error(userErrorMessage(error)) })
+          : result
+      } catch (error) {
+        throw new Error(userErrorMessage(error))
+      }
+    },
+  ]))
+  contextBridge.exposeInMainWorld(name, wrapped)
+}
+
 function detectWindowKind(search) {
   const kind = new URLSearchParams(search || '').get('window')
   return kind === 'debug' || kind === 'touch' || kind === 'secondary' ? kind : 'main'
@@ -47,6 +93,19 @@ const secondaryRuntimeApi = {
 const fullLedGameApi = {
   windowKind,
   customTitleBarEnabled,
+  backendStatus: () => ipcRenderer.invoke('backend:status'),
+  onBackendStatus: (callback) => {
+    const listener = (_event, status) => callback(status)
+    ipcRenderer.on('backend-status-changed', listener)
+    return () => ipcRenderer.removeListener('backend-status-changed', listener)
+  },
+  onCloseRequested: (callback) => {
+    const listener = (_event, request) => callback(request)
+    ipcRenderer.on('window:close-requested', listener)
+    ipcRenderer.send('window:close-listening')
+    return () => ipcRenderer.removeListener('window:close-requested', listener)
+  },
+  respondToClose: (requestId, allowed) => ipcRenderer.send('window:close-response', requestId, allowed === true),
   minimizeWindow: () => ipcRenderer.invoke('window:minimize'),
   toggleMaximizeWindow: () => ipcRenderer.invoke('window:toggle-maximize'),
   closeWindow: () => ipcRenderer.invoke('window:close'),
@@ -147,12 +206,12 @@ const fullLedGameApi = {
   },
 }
 
-contextBridge.exposeInMainWorld(
+exposeApi(
   'ledGame',
   windowKind === 'secondary' ? secondaryRuntimeApi : fullLedGameApi,
 )
 
-contextBridge.exposeInMainWorld('mediaLibrary', {
+exposeApi('mediaLibrary', {
   list: () => ipcRenderer.invoke('media:list'),
   getPreviewUrl: (relativePath) => ipcRenderer.invoke('media:get-preview-url', relativePath),
   openFolder: () => ipcRenderer.invoke('media:open-folder'),
@@ -160,7 +219,7 @@ contextBridge.exposeInMainWorld('mediaLibrary', {
   createFolder: (folder, name) => ipcRenderer.invoke('media:create-folder', folder, name),
 })
 
-contextBridge.exposeInMainWorld('appLanguage', {
+exposeApi('appLanguage', {
   get: () => ipcRenderer.invoke('app-language:get'),
   set: (locale) => ipcRenderer.invoke('app-language:set', locale),
   onChanged: (callback) => {
@@ -170,7 +229,7 @@ contextBridge.exposeInMainWorld('appLanguage', {
   },
 })
 
-contextBridge.exposeInMainWorld('appSettings', {
+exposeApi('appSettings', {
   get: () => ipcRenderer.invoke('app-settings:get'),
   getIconData: () => ipcRenderer.invoke('app-settings:icon-data'),
   getSecondaryBackground: () => ipcRenderer.invoke('secondary-display:background'),
@@ -194,7 +253,7 @@ contextBridge.exposeInMainWorld('appSettings', {
 })
 
 if (windowKind === 'main') {
-  contextBridge.exposeInMainWorld('secondaryDisplay', {
+  exposeApi('secondaryDisplay', {
     list: () => ipcRenderer.invoke('secondary-display:list'),
     select: (displayId) => ipcRenderer.invoke('secondary-display:select', displayId),
     open: () => ipcRenderer.invoke('secondary-display:open'),
@@ -206,14 +265,14 @@ if (windowKind === 'main') {
   })
 }
 
-contextBridge.exposeInMainWorld('spiritLibrary', {
+exposeApi('spiritLibrary', {
   list: () => ipcRenderer.invoke('spirit:list'),
   create: (payload) => ipcRenderer.invoke('spirit:create', payload),
   update: (spiritId, payload) => ipcRenderer.invoke('spirit:update', spiritId, payload),
   delete: (spiritId) => ipcRenderer.invoke('spirit:delete', spiritId),
 })
 
-contextBridge.exposeInMainWorld('elc408Tools', {
+exposeApi('elc408Tools', {
   networkInterfaces: () => ipcRenderer.invoke('elc408:network-interfaces'),
   readWiring: () => ipcRenderer.invoke('elc408:read-wiring'),
   generateConfig: (draft) => ipcRenderer.invoke('elc408:generate-config', draft),

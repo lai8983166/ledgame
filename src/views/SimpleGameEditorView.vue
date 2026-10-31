@@ -15,6 +15,8 @@ import PixelLightLayoutDialog from "../components/PixelLightLayoutDialog.vue";
 import GameEffectDialog from "../components/GameEffectDialog.vue";
 import GameWiringDialog from "../components/GameWiringDialog.vue";
 import { saveGameWiring } from "../lib/gameWiring.js";
+import { editorSnapshot } from '../lib/editorDirtyState.js';
+import { gameFieldDimensionsValid, gameFieldDimensionForDisplay } from '../lib/gameFieldDimensions.js';
 import { encodeSimpleGifInWorker } from "../lib/encodeSimpleGif.js";
 import { prepareSimpleLevelGif, selectSimpleTopItem } from "../lib/simpleLevelGif.js";
 import { resolveLiveOccupancyCell, canApplyColorOccupancy, filterUnoccupiedColorCells } from "../lib/simpleOccupancy.js";
@@ -94,6 +96,7 @@ async function saveWiring(wiring) {
       statusMessage.value = t('gameCreation.draftHint');
     }
     gameWiringOpen.value = false;
+    if (currentGameId.value && savedEditorDocument) savedEditorDocument.wiringData = JSON.parse(JSON.stringify(wiring));
     saveFeedback.value = { message: currentGameId.value ? t('simple.saveSuccess') : t('gameCreation.draftHint') };
   } catch (error) {
     gameWiringError.value = error.message?.startsWith('gameWiring.') ? t(error.message) : error.message;
@@ -118,6 +121,16 @@ const levelPreviewSnapshot = ref(null);
 const validationErrors = ref([]);
 const gifExportProgress = ref("");
 const document = ref(null);
+let savedEditorDocument = null;
+function hasUnsavedChanges() {
+  return Boolean(document.value && (!currentGameId.value || editorSnapshot(document.value) !== editorSnapshot(savedEditorDocument)));
+}
+async function saveForLeave() {
+  if (busyAction.value || gameWiringSaving.value) return false;
+  return await saveEditor() === true;
+}
+function canLeave() { return !busyAction.value && !gameWiringSaving.value; }
+defineExpose({ hasUnsavedChanges, saveForLeave, canLeave });
 const activeLevelIndex = ref(0);
 const activeFrameIndex = ref(0);
 const selectedColor = ref(0);
@@ -271,10 +284,10 @@ const autoFitMatrixCell = computed(() => {
   return Math.floor(Math.min(cellByW, cellByH));
 });
 const colorOptions = computed(() => [
-  { index: 0, label: "Color 0", value: normalizeColor(document.value?.color0, "#00ff00") },
-  { index: 1, label: "Color 1", value: normalizeColor(document.value?.color1, "#0000ff") },
-  { index: 2, label: "Color 2", value: normalizeColor(document.value?.color2, "#ff00ff") },
-  { index: 3, label: "Color 3", value: normalizeColor(document.value?.color3, "#ffffff") },
+  { index: 0, label: t('effect.colors.color0'), value: normalizeColor(document.value?.color0, "#00ff00") },
+  { index: 1, label: t('effect.colors.color1'), value: normalizeColor(document.value?.color1, "#0000ff") },
+  { index: 2, label: t('effect.colors.color2'), value: normalizeColor(document.value?.color2, "#ff00ff") },
+  { index: 3, label: t('effect.colors.color3'), value: normalizeColor(document.value?.color3, "#ffffff") },
 ]);
 const colorSelectionDisabled = computed(
   () => Boolean(busyAction.value) || selectionMode.value || anchorEditMode.value,
@@ -575,6 +588,7 @@ async function loadEditor() {
     const prepared = await prepareEditorDocument({ ...loaded, id: gameId }, loadTicket);
     if (!prepared || !isCurrentEditorLoad(loadTicket)) return;
     document.value = prepared;
+    savedEditorDocument = JSON.parse(editorSnapshot(prepared));
     resetMatrixFrameCache();
     activeLevelIndex.value = 0;
     activeFrameIndex.value = 0;
@@ -965,7 +979,8 @@ async function saveEditor() {
   if (!document.value || busyAction.value) {
     return;
   }
-  await runEditorAction("save", async () => {
+  return await runEditorAction("save", async () => {
+    if (!gameFieldDimensionsValid(document.value)) throw new Error(t('editorSave.invalid') + '\n' + t('editorSave.fieldDimensions'));
     const missing = requiredEditorFields(document.value);
     if (missing.length) {
       throw new Error(t('editorSave.required') + '\n' + missing.map(field => (field.level ? `${t('simple.level')} ${field.level} · ` : '') + t(field.label)).join('\n'));
@@ -994,6 +1009,7 @@ async function saveEditor() {
     }
     document.value.id = saved.gameId;
     payload.id = saved.gameId;
+    savedEditorDocument = JSON.parse(editorSnapshot(document.value));
     statusMessage.value = t("simple.saveSuccess");
     validationErrors.value = [];
   });
@@ -1047,6 +1063,7 @@ async function saveGlobalConfig(patch) {
       liveDocument: document.value,
       missingDocumentMessage: t("simple.readSavedFailed"),
     });
+    if (savedEditorDocument) applySimpleGlobalConfigPatch(savedEditorDocument, patch);
     statusMessage.value = result?.data?.saved ? t("simple.globalSaved") : t("simple.saveComplete");
     validationErrors.value = [];
   });
@@ -1149,6 +1166,7 @@ async function savePixelLightLayout(layout) {
       liveDocument: document.value,
       missingDocumentMessage: t("simple.readSavedFailed"),
     });
+    if (savedEditorDocument) applySimpleGlobalConfigPatch(savedEditorDocument, { commonConfig: { pixelLightWiring: normalizePixelLightWiring(layout) } });
     pixelLightLayoutDraft.value = normalizePixelLightWiring(layout);
     statusMessage.value = result?.data?.saved ? t("pixelLight.saved") : t("simple.saveComplete");
     validationErrors.value = [];
@@ -1192,7 +1210,7 @@ async function exportCurrentLevelGif() {
       SIMPLE_GIF_ENCODING_FAILED: "simple.gifEncodingFailed",
       SIMPLE_GIF_WORKER_FAILED: "simple.gifWorkerFailed",
     }[error?.code];
-    errorMessage.value = messageKey ? t(messageKey) : error?.message || t("simple.gifFailed");
+    errorMessage.value = messageKey ? t(messageKey) : error?.message === 'editorSave.fieldDimensions' ? t(error.message) : error?.message || t("simple.gifFailed");
   } finally {
     gifExportProgress.value = "";
     busyAction.value = "";
@@ -1298,12 +1316,14 @@ async function runEditorAction(name, action, shouldCommit = () => true) {
     if (name === 'save') await withEditorSavingCursor(action);
     else await action();
     if (name === 'save' && shouldCommit()) saveFeedback.value = { message: statusMessage.value || t('simple.saveSuccess') };
+    return true;
   } catch (error) {
     if (shouldCommit()) {
-      errorMessage.value = error.message || String(error);
+      errorMessage.value = error.message === 'editorSave.fieldDimensions' ? t(error.message) : error.message || String(error);
       if (name === 'save') saveFeedback.value = { failed: true, message: errorMessage.value };
       if (name === 'load') nextTick(scheduleEditorFitMeasurement);
     }
+    return false;
   } finally {
     if (shouldCommit()) {
       busyAction.value = "";
@@ -2414,6 +2434,8 @@ function updateActiveLevelTimeMode(mode) {
   activeLevel.value.option = normalizeLevelOption({
     ...activeLevel.value.option,
     timeLimitMode: mode,
+    timeLimitValue: mode !== 'UNLIMITED' && !(Number.isInteger(Number(activeLevel.value.option.timeLimitValue)) && Number(activeLevel.value.option.timeLimitValue) > 0)
+      ? 1 : activeLevel.value.option.timeLimitValue,
   });
 }
 
@@ -3159,11 +3181,7 @@ function normalizeColor(value, fallback) {
 }
 
 function clampDimension(value) {
-  const number = Number(value);
-  if (!Number.isFinite(number)) {
-    return 1;
-  }
-  return Math.min(96, Math.max(1, Math.floor(number)));
+  return gameFieldDimensionForDisplay(value);
 }
 
 function clampColorIndex(value) {
@@ -3581,7 +3599,7 @@ function formatRuntimeSummary(value) {
             </select>
           </label>
           <label v-if="activeLevel.option.timeLimitMode !== 'UNLIMITED'">
-            <span class="editor-required-label">{{ t(activeLevel.option.timeLimitMode === 'CYCLE_COUNT' ? 'simple.levelCycleCountValue' : 'simple.levelTimeValue') }}</span>
+            <span class="editor-required-label">{{ t(activeLevel.option.timeLimitMode === 'CYCLE_COUNT' ? 'simple.levelCycleCountValue' : 'simple.levelTimeSecondsValue') }}</span>
             <input
               v-model.number="activeLevel.option.timeLimitValue"
               min="1"

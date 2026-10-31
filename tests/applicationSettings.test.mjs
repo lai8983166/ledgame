@@ -29,6 +29,8 @@ const DEFAULT_PROMPT_TEXTS = {
   "ar-SA": "ابدأ اللعبة",
 };
 const BRAND_DEFAULTS = {
+  secondaryIdleSubtitleFontSize: 72,
+  touchPreparationTimeoutSeconds: 20,
   coinCount: 1,
   secondaryIdleSubtitleText: '',
   applicationTitle: "LED Game",
@@ -189,6 +191,27 @@ test("application settings migrate the legacy single idle prompt into localized 
   const normalized = normalizeApplicationSettings({ touchIdlePromptText: "自定义开始" });
   assert.equal(normalized.touchIdlePromptTexts["zh-CN"], "自定义开始");
   assert.equal(normalized.touchIdlePromptTexts["en-US"], "Start Game");
+});
+
+test('old subtitle sizes inherit the saved top title; independent sizes and preparation timeout survive restart', async () => {
+  assert.equal(normalizeApplicationSettings({ secondaryIdlePromptFontSize: 96 }).secondaryIdleSubtitleFontSize, 96);
+  assert.equal(normalizeApplicationSettings({ touchPreparationTimeoutSeconds: 0 }).touchPreparationTimeoutSeconds, 20);
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'led-game-title-sizes-'));
+  try {
+    const settingsPath = path.join(directory, 'application.json');
+    await writeFile(settingsPath, JSON.stringify({ secondaryIdlePromptFontSize: 96 }));
+    const store = createApplicationSettingsStore({ fs, settingsPath });
+    assert.equal((await store.get()).secondaryIdleSubtitleFontSize, 96);
+    const saved = await store.update({ secondaryIdlePromptFontSize: 120, secondaryIdleSubtitleFontSize: 48, touchPreparationTimeoutSeconds: 3600 });
+    const reopened = await createApplicationSettingsStore({ fs, settingsPath }).get();
+    assert.equal(reopened.secondaryIdlePromptFontSize, 120);
+    assert.equal(reopened.secondaryIdleSubtitleFontSize, 48);
+    assert.equal(reopened.touchPreparationTimeoutSeconds, 3600);
+    for (const touchPreparationTimeoutSeconds of [0, -1, 1.5, 3601, '20']) await assert.rejects(() => store.update({ touchPreparationTimeoutSeconds }), /between 1 and 3600/);
+    for (const secondaryIdleSubtitleFontSize of [31, 200.5, 201, '72']) await assert.rejects(() => store.update({ secondaryIdleSubtitleFontSize }), /subtitle font size/);
+    assert.deepEqual(await store.get(), saved);
+    assert.equal((await store.update({ touchPreparationTimeoutSeconds: 1 })).touchPreparationTimeoutSeconds, 1);
+  } finally { await rm(directory, { recursive: true, force: true }); }
 });
 
 test('secondary subtitle and placeholder coin count persist independently of Touch',async()=>{

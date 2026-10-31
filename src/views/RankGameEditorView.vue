@@ -9,6 +9,8 @@ import { buildMediaPreviewUrl } from '../lib/mediaPreview.js';
 import { requiredEditorFields } from '../lib/editorRequiredFields.js';
 import { withEditorSavingCursor } from '../lib/editorSavingCursor.js';
 import { saveGameWiring } from '../lib/gameWiring.js';
+import { editorSnapshot } from '../lib/editorDirtyState.js';
+import { gameFieldDimensionsValid } from '../lib/gameFieldDimensions.js';
 import { deleteLevelAt, moveLevelAt } from '../lib/simpleLevelSequence.js';
 import EditorActionIcon from '../components/EditorActionIcon.vue';
 import EditorSaveDialog from '../components/EditorSaveDialog.vue';
@@ -30,12 +32,18 @@ const rangeDrafts=reactive(new Map());
 const levelKeys=new WeakMap();let nextLevelKey=0;
 function levelKey(level){if(!levelKeys.has(level))levelKeys.set(level,++nextLevelKey);return levelKeys.get(level);}
 let hydrating=false;
+let savedEditorDocument=null;
+function hasUnsavedChanges(){return Boolean(document.value&&(!currentGameId.value||editorSnapshot(document.value)!==editorSnapshot(savedEditorDocument)||[...rangeDrafts].some(([level,drafts])=>Object.entries(drafts).some(([kind,text])=>!parseRankEditorRange(kind,text,document.value)))));}
+async function saveForLeave(){return await save()===true;}
+function canLeave(){return canSave.value;}
+defineExpose({hasUnsavedChanges,saveForLeave,canLeave});
 watch(document,()=>{if(!hydrating&&document.value)dirty.value=true;},{deep:true});
 onMounted(async()=>{
   try {
     const result=props.gameId?await api.getRankGameEditor(props.gameId):{data:props.initialDocument};
     if(!result?.data||result.data.type!=='rank')throw Error(t('rank.loadFailed'));
     hydrating=true; document.value=normalizeRankEditorDocument(result.data); await nextTick(); dirty.value=!props.gameId;
+    savedEditorDocument=JSON.parse(editorSnapshot(document.value));
   }catch(error){errorMessage.value=extractErrorMessage(error,t('rank.loadFailed'));}
   finally{hydrating=false;loading.value=false;}
   if(api?.listGameCategories)try{gameCategories.value=normalizeGameCategoryList(await api.listGameCategories());}catch{gameCategories.value=[];}
@@ -70,6 +78,7 @@ function chooseMedia(field,accept,label){mediaPicker.value={level:type1Config.va
 function applyMedia(path){if(mediaPicker.value&&levels.value.includes(mediaPicker.value.level))mediaPicker.value.level[mediaPicker.value.field]=path;mediaPicker.value=null;}
 
 async function validatePayload(payload){
+  if(!gameFieldDimensionsValid(document.value))throw Error(t('editorSave.invalid')+'\n'+t('editorSave.fieldDimensions'));
   const missing=requiredEditorFields(document.value,true);
   if(missing.length)throw Error(t('editorSave.required')+'\n'+missing.map(field=>t(field.label)).join('\n'));
   for(const [index,level] of levels.value.entries()){
@@ -84,15 +93,16 @@ async function validatePayload(payload){
   }
 }
 async function save(){
-  if(!canSave.value)return;busy.value='save';errorMessage.value='';
+  if(!canSave.value)return false;busy.value='save';errorMessage.value='';
   try{await withEditorSavingCursor(async()=>{
     const payload=createRankEditorPayload(document.value,currentGameId.value); await validatePayload(payload);
     const result=currentGameId.value?await api.saveRankGameEditor(currentGameId.value,payload):await api.createRankGameEditor(payload);
     const saved=result?.data??result;
     if(saved?.saved!==true||!Number.isInteger(saved.gameId)||saved.gameId<1)throw Error(result?.message||t('rank.saveFailed'));
     document.value.id=saved.gameId;document.value.displayName=document.value.name;await nextTick();dirty.value=false;
+    savedEditorDocument=JSON.parse(editorSnapshot(document.value));rangeDrafts.clear();
     saveFeedback.value={message:t('rank.saved')};
-  });}catch(error){errorMessage.value=extractErrorMessage(error,t('rank.saveFailed'));saveFeedback.value={failed:true,message:errorMessage.value};}
+  });return true;}catch(error){errorMessage.value=extractErrorMessage(error,t('rank.saveFailed'));saveFeedback.value={failed:true,message:errorMessage.value};return false;}
   finally{busy.value=null;}
 }
 function openGlobalConfig(){
@@ -110,6 +120,7 @@ async function saveGlobalConfig(patch){
       if(result?.data?.saved!==true)throw Error(result?.message||t('rank.saveFailed'));
     }
     applyRankGlobalConfig(document.value,patch);globalConfigOpen.value=false;
+    if(currentGameId.value&&savedEditorDocument)applyRankGlobalConfig(savedEditorDocument,patch);
     saveFeedback.value={message:t(currentGameId.value?'rank.saved':'gameCreation.draftHint')};
   });}catch(error){globalError.value=extractErrorMessage(error,t('rank.saveFailed'));saveFeedback.value={failed:true,message:globalError.value};}
   finally{globalSaving.value=false;}
@@ -119,11 +130,12 @@ async function saveWiring(wiring){
   try{
     if(currentGameId.value)await withEditorSavingCursor(()=>saveGameWiring(api,currentGameId.value,true,wiring,document.value));
     else document.value.wiringData=JSON.parse(JSON.stringify(wiring));
+    if(currentGameId.value&&savedEditorDocument)savedEditorDocument.wiringData=JSON.parse(JSON.stringify(wiring));
     gameWiringOpen.value=false;saveFeedback.value={message:t(currentGameId.value?'simple.saveSuccess':'gameCreation.draftHint')};
   }catch(error){gameWiringError.value=error.message?.startsWith('gameWiring.')?t(error.message):error.message;saveFeedback.value={failed:true,message:gameWiringError.value};}
   finally{gameWiringSaving.value=false;}
 }
-function goBack(){if(!dirty.value||confirmWithRendererFocus(t('rank.confirmLeave')))emit('back');}
+function goBack(){emit('back');}
 </script>
 
 <template>

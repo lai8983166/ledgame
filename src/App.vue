@@ -17,6 +17,8 @@ import ApplicationSettingsView from "./views/ApplicationSettingsView.vue";
 import SecondaryDisplayView from "./views/SecondaryDisplayView.vue";
 import SecondaryDisplayPickerDialog from "./components/SecondaryDisplayPickerDialog.vue";
 import LanguageSelectionDialog from "./components/LanguageSelectionDialog.vue";
+import EditorLeaveDialog from './components/EditorLeaveDialog.vue';
+import { resolveEditorDeparture } from './lib/editorLeaveGuard.js';
 
 const { t } = useI18n({ useScope: "global" });
 
@@ -42,6 +44,12 @@ const languageButtonRef = ref(null);
 const selectedEditorGame = ref(null);
 const editorDebugActive = computed(() => activeView.value === 'game-debug');
 const debugWorkspaceRef = ref(null);
+const simpleEditorRef = ref(null);
+const rankEditorRef = ref(null);
+const leaveDialogOpen = ref(false);
+let resolveLeaveChoice = null;
+let departurePending = false;
+let removeCloseRequestListener = null;
 const debugGame = ref(null);
 const navigationBusy = ref(false);
 const helpMenuOpen = ref(false);
@@ -122,6 +130,11 @@ onMounted(async () => {
   if (isTouchWindow || isSecondaryWindow) {
     return;
   }
+  removeCloseRequestListener = api?.onCloseRequested?.(async ({ requestId }) => {
+    let allowed = false;
+    try { allowed = await leaveCurrentWorkspace(); }
+    finally { api.respondToClose?.(requestId, allowed); }
+  });
   removeEngineStateListener = api?.onEngineState?.((state) => {
     applyState(state);
   });
@@ -153,6 +166,8 @@ onMounted(async () => {
 const runtimeMode = computed(() => String(gameRuntimeState.value?.runtimeMode || "PRODUCTION"));
 
 onUnmounted(() => {
+  removeCloseRequestListener?.();
+  resolveLeaveChoice?.('stay');
   removeLedFrameListener?.();
   removeEngineStateListener?.();
   removeSecondaryDisplayListener?.();
@@ -255,8 +270,30 @@ async function leaveEditorDebug() {
   }
 }
 
+function chooseEditorDeparture() {
+  leaveDialogOpen.value = true;
+  return new Promise(resolve => { resolveLeaveChoice = resolve; });
+}
+function finishLeaveChoice(choice) {
+  leaveDialogOpen.value = false;
+  const resolve = resolveLeaveChoice;
+  resolveLeaveChoice = null;
+  resolve?.(choice);
+}
+async function leaveCurrentWorkspace() {
+  if (departurePending) return false;
+  departurePending = true;
+  try {
+    const editor = activeView.value === 'simple-editor' ? simpleEditorRef.value
+      : activeView.value === 'rank-editor' ? rankEditorRef.value : null;
+    if (!await resolveEditorDeparture(editor, chooseEditorDeparture)) return false;
+    return await leaveEditorDebug();
+  } finally { departurePending = false; }
+}
+
 async function navigateTo(view) {
-  if (!await leaveEditorDebug()) return false;
+  if (view === activeView.value) return true;
+  if (!await leaveCurrentWorkspace()) return false;
   activeView.value = view;
   return true;
 }
@@ -323,7 +360,7 @@ function openDebugPanel() {
 }
 
 async function enterGameFlow() {
-  if (!await leaveEditorDebug()) return;
+  if (!await leaveCurrentWorkspace()) return;
   if (!api?.enterGameFlow) {
     errorMessage.value = t("debug.entryApiUnavailable");
     return;
@@ -333,7 +370,7 @@ async function enterGameFlow() {
 
 async function openGameDebug(game) {
   if (navigationBusy.value || busyAction.value) return;
-  if (!await leaveEditorDebug()) return;
+  if (!await leaveCurrentWorkspace()) return;
   busyAction.value = 'game-debug'; secondaryErrorMessage.value = '';
   try {
     if (!isDebugRuntimeAvailable((await api.gameState())?.data)) throw new Error(t('editorDebug.busy'));
@@ -365,7 +402,7 @@ function openGameEditor(game) {
 }
 
 async function selectGameSection(value) {
-  if (!await leaveEditorDebug()) return;
+  if (!await leaveCurrentWorkspace()) return;
   gameMenuOpen.value = false;
   gameSection.value = value === "list" ? "list" : "home";
   activeView.value = "games";
@@ -477,7 +514,8 @@ async function openSecondaryDisplay() {
   }
 }
 
-function backToGameList() {
+async function backToGameList() {
+  if (!await leaveCurrentWorkspace()) return;
   selectedEditorGame.value = null;
   activeView.value = "games";
 }
@@ -663,7 +701,11 @@ function formatRuntimeValue(value, fallback = "-") {
       </span>
     </div>
     <header class="app-nav" aria-label="Primary" :inert="navigationBusy">
-      <div class="brand-mark" aria-hidden="true"></div>
+      <div class="app-brand">
+        <img v-if="applicationIconData" :src="applicationIconData" alt="" />
+        <span v-else class="brand-mark" aria-hidden="true"></span>
+        <span class="app-brand-title">{{ applicationTitle }}</span>
+      </div>
       <nav class="nav-tabs">
         <div class="nav-help-wrapper">
           <button ref="gameButtonRef" class="nav-tab nav-help-button" data-testid="game-menu-button" type="button"
@@ -850,6 +892,7 @@ function formatRuntimeValue(value, fallback = "-") {
 
     <SimpleGameEditorView
       v-else-if="activeView === 'simple-editor'"
+      ref="simpleEditorRef"
       :game-id="selectedEditorGame?.id"
       :game-name="selectedEditorGame?.name"
       :initial-document="selectedEditorGame?.draft"
@@ -859,6 +902,7 @@ function formatRuntimeValue(value, fallback = "-") {
 
     <RankGameEditorView
       v-else-if="activeView === 'rank-editor'"
+      ref="rankEditorRef"
       :game-id="selectedEditorGame?.id"
       :game-name="selectedEditorGame?.displayName || selectedEditorGame?.name"
       :initial-document="selectedEditorGame?.draft"
@@ -877,6 +921,7 @@ function formatRuntimeValue(value, fallback = "-") {
     <ApplicationSettingsView v-else-if="activeView === 'application-settings'" />
 
     <LanguageSelectionDialog v-if="languageDialogOpen" @close="closeLanguageDialog" />
+    <EditorLeaveDialog v-if="leaveDialogOpen" @choose="finishLeaveChoice" />
 
     <SecondaryDisplayPickerDialog
       :open="secondaryPickerOpen"

@@ -7,11 +7,23 @@ import {
   isTouchPreparationStepTimeoutActive,
   moveTouchCarousel,
   normalizeTouchGameDocument,
+  normalizeTouchPreparationTimeoutSeconds,
   normalizeTouchPlayerCount,
   touchCarouselSlots,
   hasRequiredWristbandParticipants,
   TOUCH_PREPARATION_STEP_TIMEOUT_SECONDS,
 } from "../src/lib/touchGamePreparation.js";
+
+test("Preparation timeout accepts 1–3600 seconds and invalid values retain the mandatory 20-second timer", () => {
+  for (const value of [1, 20, 3600, '75']) assert.equal(normalizeTouchPreparationTimeoutSeconds(value), Number(value));
+  for (const value of [0, -1, 3601, 1.5, '', null, undefined, 'off', Infinity]) {
+    assert.equal(normalizeTouchPreparationTimeoutSeconds(value), 20);
+    const ticks = [];
+    const stop = createTouchPreparationStepTimeout({seconds:value, onTick:tick=>ticks.push(tick),schedule:()=>1,cancelSchedule:()=>{}});
+    assert.deepEqual(ticks,[20]);
+    stop();
+  }
+});
 
 test("Touch game preparation constrains players and wraps the game carousel", () => {
   assert.equal(normalizeTouchPlayerCount(6), 6);

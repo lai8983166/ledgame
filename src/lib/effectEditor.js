@@ -158,7 +158,7 @@ export function normalizeEffectConfig(value = {}) {
     endY: toInteger(source.endY, DEFAULT_EFFECT_CONFIG.endY),
     width: toInteger(source.width, DEFAULT_EFFECT_CONFIG.width),
     height: toInteger(source.height, DEFAULT_EFFECT_CONFIG.height),
-    step: toFiniteNumber(source.step, DEFAULT_EFFECT_CONFIG.step),
+    step: Number(source.step ?? DEFAULT_EFFECT_CONFIG.step),
     mode,
     useSprite: Boolean(source.useSprite),
     spriteId: String(source.spriteId ?? ""),
@@ -201,7 +201,7 @@ export function validateEffectConfig(value, options = {}) {
       errors.push({ field, code: "COORDINATE_OUT_OF_RANGE" });
     }
   }
-  if (!Number.isFinite(config.step) || config.step <= 0) {
+  if (!Number.isInteger(config.step) || config.step < 1) {
     errors.push({ field: "step", code: "STEP_INVALID" });
   }
   if (!Number.isInteger(config.width) || config.width < 1) {

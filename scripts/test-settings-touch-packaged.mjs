@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const require = createRequire(path.join(root, '../ledGame-platform/package.json'));
-const { _electron } = require('playwright');
+const { _electron, expect } = require('@playwright/test');
 await mkdir(path.join(root, '.build'), { recursive: true });
 const data = await mkdtemp(path.join(root, '.build/settings-touch-packaged-'));
 const healthRequests = [];
@@ -32,7 +32,11 @@ async function launch() {
   const deadline = Date.now() + 90000;
   while (Date.now() < deadline) {
     page = app.windows().find(window => !window.isClosed() && window.url().includes('/dist/index.html') && !window.url().includes('window='));
-    if (page && await page.getByTestId('game-menu-button').count()) { await page.locator('.game-category-heading').waitFor(); return; }
+    if (page && await page.getByTestId('game-menu-button').count()) {
+      await page.locator('.game-category-heading').waitFor();
+      await expect.poll(() => page.evaluate(async () => (await window.ledGame.backendStatus()).status), { timeout: 90000 }).toBe('ready');
+      return;
+    }
     await new Promise(resolve => setTimeout(resolve, 100));
   }
   throw new Error('Packaged main window did not become ready');
@@ -62,10 +66,16 @@ try {
   assert.equal(connection.port, memberPort);
   await page.locator('.nav-tab').filter({ hasText: /^配置$/ }).click();
   await page.locator('.application-settings-field input').first().fill('验收标题');
-  const settingInput=label=>page.locator('.application-settings-field').filter({has:page.locator('span').filter({hasText:new RegExp('^'+label+'$')})}).locator('input');
+  const settingInput=label=>page.locator('.application-settings-field').filter({has:page.locator('span').filter({hasText:new RegExp('^'+label+'(?:\\s*\\*)?$')})}).locator('input');
   await settingInput('副屏上标题').fill('上标题验收');await settingInput('副屏下标题').fill('下标题验收');
   assert.equal(await page.locator('input[maxlength="12"]').getAttribute('type'),'text');
+  assert.equal(await page.locator('input[maxlength="12"]').inputValue(),'888888');
+  await page.locator('input[maxlength="12"]').fill('12ab');
+  assert.equal(await page.locator('.application-settings-save').isDisabled(),true);
+  assert.equal(await page.locator('input[maxlength="12"]').getAttribute('aria-invalid'),'true');
   await page.locator('input[maxlength="12"]').fill('12345678');
+  await page.locator('input[min="32"]').nth(1).fill('120');await page.locator('input[min="32"]').nth(2).fill('48');
+  await page.locator('input[max="3600"]').fill('37');
   await page.locator('select').selectOption('coin');await page.locator('input[max="999"]').fill('3');
   assert.equal(await page.locator('input[max="65535"]').count(), 0);
   assert.equal(await page.locator('.application-settings-panel small').count(),0);
@@ -73,8 +83,10 @@ try {
   assert.equal(await page.evaluate(async()=> (await window.appSettings.get()).mode),'game');
   await page.getByRole('button', { name: '保存', exact: true }).click();
   await page.waitForFunction(async () => (await window.appSettings.get()).applicationTitle === '验收标题');
+  assert.equal(await page.locator('input[maxlength="12"]').inputValue(),'12345678');
   assert.equal(await page.evaluate(async () => (await window.appSettings.get()).memberPlatformPort), memberPort);
   const settings=await page.evaluate(()=>window.appSettings.get());assert.equal(settings.secondaryIdlePromptText,'上标题验收');assert.equal(settings.secondaryIdleSubtitleText,'下标题验收');assert.equal(settings.coinCount,3);
+  assert.equal(settings.secondaryIdlePromptFontSize,120);assert.equal(settings.secondaryIdleSubtitleFontSize,48);assert.equal(settings.touchPreparationTimeoutSeconds,37);
   await page.getByRole('button', {name:'测试连接',exact:true}).click();
   await page.getByText('会员管理端可访问', {exact:true}).waitFor();
   // The room WebSocket may connect in the background; the connection-test API
@@ -93,9 +105,11 @@ try {
     await app.close();app=null;await launch();
     const reopened=await page.evaluate(()=>window.appSettings.get());
     assert.equal(reopened.secondaryIdlePromptText,'上标题验收');assert.equal(reopened.secondaryIdleSubtitleText,'下标题验收');assert.equal(reopened.coinCount,3);
+    assert.equal(reopened.touchExitPassword,'12345678');assert.equal(reopened.secondaryIdlePromptFontSize,120);assert.equal(reopened.secondaryIdleSubtitleFontSize,48);assert.equal(reopened.touchPreparationTimeoutSeconds,37);
     passed.push('重启后副屏上下标题和投币数量持久化');
     await page.evaluate(()=>window.secondaryDisplay.open());const secondary=await findWindow('secondary');
     await secondary.locator('.touch-idle-title-face').nth(1).waitFor();assert.deepEqual(await secondary.locator('.touch-idle-title-face').allTextContents(),['上标题验收','下标题验收']);
+    assert.deepEqual(await secondary.locator('.touch-idle-prompt').evaluateAll(nodes=>nodes.map(node=>node.style.getPropertyValue('--idle-prompt-font-size'))),['120px','48px']);
     await page.evaluate(()=>window.ledGame.enterGameFlow({mode:'game'}));const touch=await findWindow('touch');
     await touch.locator('.touch-language-trigger').waitFor();
     for(const language of ['zh-CN','en-US']){await touch.locator('.touch-language-trigger').click();await touch.locator(`.touch-language-dialog input[value="${language}"]`).click();await touch.locator('.touch-language-dialog').waitFor({state:'hidden'});}

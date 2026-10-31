@@ -101,7 +101,7 @@ try{
       assert.ok(frozen.gameplay.remainingMillis>0);
       const remaining=frozen.gameTime?.mode==='LIMITED'
         ? Math.min(frozen.gameplay.remainingMillis,frozen.gameTime.remainingMillis):frozen.gameplay.remainingMillis;
-      await expect(page.locator('.editor-debug-workspace dl dd').nth(4)).toHaveText(String(Math.ceil(remaining/1000)));
+      await expect(page.locator('.debug-workspace-controls > dl dt').filter({hasText:'游戏剩余秒数'}).locator('xpath=following-sibling::dd[1]')).toHaveText(String(Math.ceil(remaining/1000)));
     }
     assert.equal(await page.locator('.app-nav').evaluate(el=>el.inert),false);
     await page.getByTestId('language-menu-button').click();await page.locator('.language-dialog').waitFor();await button('取消').click();

@@ -9,5 +9,5 @@ test("game selection reloads the playable catalog after a successful visibility 
   assert.match(source, /if \(!refreshed \|\| !touchMounted\) return/);
   assert.match(source, /removeCatalogListener\?\.\(\)/);
   assert.match(source, /await loadGames\(\)/);
-  assert.match(source, /!games\.value\.some[\s\S]*await cancelPreparation\(\)/);
+  assert.match(source, /!categorizedGames\.value\.some[\s\S]*await cancelPreparation\(\)/);
 });

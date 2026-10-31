@@ -434,7 +434,7 @@ test("wristband scan binds UID to the current PREPARING session and gates confir
   assert.match(touchSource, /touch\.scanWristbandHint/);
 });
 
-test("Touch window is reusable, reconstructable, and closing it does not stop gameplay", async () => {
+test("Touch window is reusable; native close keeps gameplay and authenticated exit finishes the session", async () => {
   const source = await readFile(new URL("../electron/main.cjs", import.meta.url), "utf8");
   const createTouchWindow = source.slice(
     source.indexOf("function activateTouchWindow("),
@@ -448,7 +448,11 @@ test("Touch window is reusable, reconstructable, and closing it does not stop ga
   assert.match(createTouchWindow, /setImmediate\(\(\)\s*=>\s*activateTouchWindow/);
   assert.match(createTouchWindow, /touchWindow\s*=\s*null/);
   assert.match(createTouchWindow, /window=touch/);
-  assert.doesNotMatch(createTouchWindow, /engine\/game\/stop|stopTouchGame/);
+  const nativeClosedHandler=createTouchWindow.slice(createTouchWindow.indexOf("touchWindow.on('closed'"),createTouchWindow.indexOf("async function exitTouchFullScreen"));
+  assert.doesNotMatch(nativeClosedHandler, /engine\/game\/stop|stopTouchGame/);
+  assert.match(createTouchWindow, /await finishTouchSession/);
+  assert.match(createTouchWindow, /targetWindow\.close\(\)/);
+  assert.match(createTouchWindow, /activateMainWindow\(\)/);
 });
 
 test("Touch preparation options require a game but remain focusable during async actions", async () => {
