@@ -121,9 +121,9 @@ test("validates channel conflicts, invalid alignment and required alignment", ()
   assert.ok(validatePixelLightWiring(requiredAlign).some((error) => error.code === "ALIGN_REQUIRED"));
 
   assert.equal(validatePixelLightAlign("0,0", 16, 36), null);
-  assert.equal(validatePixelLightAlign("15,35", 16, 36), null);
-  assert.equal(validatePixelLightAlign("16,0", 16, 36)?.code, "ALIGN_OUT_OF_RANGE");
-  assert.equal(validatePixelLightAlign("0,36", 16, 36)?.code, "ALIGN_OUT_OF_RANGE");
+  assert.equal(validatePixelLightAlign("35,15", 16, 36), null);
+  assert.equal(validatePixelLightAlign("36,0", 16, 36)?.code, "ALIGN_OUT_OF_RANGE");
+  assert.equal(validatePixelLightAlign("0,16", 16, 36)?.code, "ALIGN_OUT_OF_RANGE");
 });
 
 test("builds a preview from the current grid dimensions", () => {
@@ -140,4 +140,35 @@ test("builds a preview from the current grid dimensions", () => {
   assert.ok(preview.canvasHeight > preview.floor.height);
   assert.equal(preview.symbolChain.length, 2);
   assert.equal(preview.circleChain.length, 2);
+});
+
+test("wall alignment projects row/column onto the wall and never moves a pair into the floor", () => {
+  const layout = normalizePixelLightWiring({
+    form: { open: 1, topWallPixelLightNum: 1, rightWallPixelLightNum: 1,
+      bottomWallPixelLightNum: 1, leftWallPixelLightNum: 1 },
+  });
+  const before = buildPixelLightPreview(layout, 16, 36);
+  layout.rows.forEach(row => { row.align = "35,15"; });
+  const aligned = buildPixelLightPreview(layout, 16, 36);
+  for (const light of aligned.lights) {
+    const original = before.lights.find(item => item.wall === light.wall);
+    for (const marker of ["symbol", "circle"]) {
+      if (light.wall === 0 || light.wall === 2) {
+        assert.equal(light[marker].x, aligned.floor.x + 15.5 * aligned.cellSize);
+        assert.equal(light[marker].y, original[marker].y);
+        assert.ok(light.wall === 0 ? light[marker].y < aligned.floor.y
+          : light[marker].y > aligned.floor.y + aligned.floor.height);
+      } else {
+        assert.equal(light[marker].y, aligned.floor.y + 35.5 * aligned.cellSize);
+        assert.equal(light[marker].x, original[marker].x);
+        assert.ok(light.wall === 3 ? light[marker].x < aligned.floor.x
+          : light[marker].x > aligned.floor.x + aligned.floor.width);
+      }
+    }
+    layout.rows.find(row => row.wall === light.wall).align = light.wall % 2 ? "35,2" : "2,15";
+  }
+  const changedUnusedAxis = buildPixelLightPreview(layout, 16, 36);
+  assert.deepEqual(changedUnusedAxis.symbolChain, aligned.symbolChain);
+  assert.deepEqual(changedUnusedAxis.circleChain, aligned.circleChain);
+  assert.equal(validatePixelLightWiring(layout, { gridWidth: 16, gridHeight: 36 }).length, 0);
 });

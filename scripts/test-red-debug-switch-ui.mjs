@@ -80,7 +80,7 @@ try {
   });
   await page.evaluate(() => window.mountComponent('EditorDebugWorkspace', { game: window.fixture.game }));
   await expect(button('启动游戏')).toBeEnabled();
-  await check('精简调试界面保留列表选关及所选配置，不显示重复控件和状态提示', async () => {
+  await check('精简调试界面保留列表选关，不显示所选配置及重复控件和状态提示', async () => {
     assert.equal(await page.locator('[data-debug-level]').count(),3);
     assert.equal(await page.locator('[data-debug-field=startLevel], .debug-level-selection').count(),0);
     assert.equal(await button('切换关卡').count(),0);
@@ -88,9 +88,7 @@ try {
     await page.locator('[data-debug-level="1"]').click();
     await expect(page.locator('[data-debug-level="1"]')).toHaveAttribute('aria-pressed','true');
     assert.equal(await page.locator('[data-debug-level][aria-pressed="true"]').count(),1);
-    await expect(page.locator('.debug-level-configuration')).toContainText('45');
-    await expect(page.locator('.debug-level-configuration')).toContainText('4');
-    await expect(page.locator('.debug-level-configuration')).toContainText('20');
+    await expect(page.locator('.debug-level-configuration')).toHaveCount(0);
     assert.equal(await count('prepare'),0);
     await page.locator('[data-debug-level="0"]').click();
   });
@@ -153,7 +151,7 @@ try {
     assert.equal((await snapshot()).currentStageIndex, 1); assert.equal((await snapshot()).playerAccesses[0].access.uid, '654321');
     await page.screenshot({ path: path.join(output, '调试切关.png') });
   });
-  await check('长关卡列表完整可滚动选择最后一关，Rank配置摘要与小屏布局正常', async () => {
+  await check('长关卡列表完整可滚动选择最后一关，Rank不显示配置摘要且小屏布局正常', async () => {
     await page.evaluate(async()=>{
       await window.getComponentSetup().cleanup();
       const game={...window.fixture.game,type:'rank',levels:Array.from({length:32},(_,index)=>({label:'完整列表关卡'+(index+1),type:1+index%3,durationSeconds:40+index,rewardPoints:index+1}))};
@@ -164,11 +162,9 @@ try {
     await page.setViewportSize({width:1280,height:600});
     await page.locator('[data-debug-level="31"]').click();
     await expect(level(31)).toHaveAttribute('aria-pressed','true');
-    await expect(page.locator('.debug-level-configuration')).toContainText('71');
-    await expect(page.locator('.debug-level-configuration')).toContainText('炸弹5x5');
+    await expect(page.locator('.debug-level-configuration')).toHaveCount(0);
     assert.equal(await page.locator('.debug-workspace-controls').evaluate(node=>node.scrollWidth<=node.clientWidth+1),true);
-    await page.locator('.debug-level-configuration').scrollIntoViewIfNeeded();
-    await page.screenshot({path:path.join(output,'完整关卡与Rank摘要.png')});
+    await page.screenshot({path:path.join(output,'完整关卡无配置摘要.png')});
     await page.setViewportSize({width:1366,height:768});
     await page.locator('[data-debug-level="0"]').click();
     await button('启动游戏').click();

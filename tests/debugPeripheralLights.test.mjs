@@ -19,6 +19,18 @@ test('runtime frozen positions override drafts and preserve authoritative sequen
   assert.equal(board.lights[0].remaining,8);
   assert.equal(debugPeripheralBoard(saved,{enabled:false,lights:[]},16,36),null);
 });
+test('frozen runtime alignment stays on the wall and matches the saved-layout preview',()=>{
+  const rows=[0,1,2,3].map(wall=>({wall,idx:0,align:'35,15'}));
+  const preview=debugPeripheralBoard({...saved,rows},null,16,36);
+  const runtime=debugPeripheralBoard(saved,{enabled:true,order:0,selectedRow:'2|0',
+    lights:rows.map(row=>({wall:row.wall,index:0,sequenceIndex:3-row.wall,alignX:35,alignY:15,phase:'BLUE',remaining:7}))},16,36);
+  for(const light of runtime.lights){
+    const expected=preview.lights.find(item=>item.wall===light.wall);
+    assert.deepEqual(light.symbol,expected.symbol);
+    assert.deepEqual(light.circle,expected.circle);
+    assert.ok(light.markerSize>0);
+  }
+});
 test('circle countdown configuration rejects invalid integer ranges only when enabled',()=>{
   for(const [min,max] of [[0,2],[4,3],[1,100],[1.5,3],['',3],[1,undefined]]){
     assert.ok(validateLevelOption({pixelLightType:'1',countdownMin:min,countdownMax:max}).some(error=>error.field==='countdownMin'));

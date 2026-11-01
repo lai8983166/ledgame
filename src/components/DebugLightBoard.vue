@@ -7,7 +7,7 @@ const props=defineProps({pixels:{type:Array,required:true},layout:Object,runtime
 const emit=defineEmits(['cell-click','hover-cell','clear-hover','circle-click']);
 const {t}=useI18n({useScope:'global'});
 const host=ref(null),size=ref({width:0,height:0});
-const board=computed(()=>debugPeripheralBoard(props.layout,props.runtime,props.pixels[0]?.length || 1,props.pixels.length || 1));
+const board=computed(()=>debugPeripheralBoard(props.layout,props.runtime,props.pixels[0]?.length || 16,props.pixels.length || 16));
 const scale=computed(()=>board.value?Math.max(0,Math.min((size.value.width-12)/board.value.canvasWidth,(size.value.height-12)/board.value.canvasHeight)):1);
 const sceneStyle=computed(()=>({width:`${board.value.canvasWidth*scale.value}px`,height:`${board.value.canvasHeight*scale.value}px`}));
 const floorStyle=computed(()=>({left:`${board.value.floor.x*scale.value}px`,top:`${board.value.floor.y*scale.value}px`,width:`${board.value.floor.width*scale.value}px`,height:`${board.value.floor.height*scale.value}px`}));
@@ -24,7 +24,7 @@ onBeforeUnmount(()=>observer?.disconnect());
 <template>
   <div ref="host" class="debug-light-board">
     <div v-if="board" class="debug-light-scene" :style="sceneStyle">
-      <div class="debug-light-floor" :style="floorStyle"><DebugLedCanvas :pixels="pixels" :hover-cell="hoverCell" :disabled="disabled" @cell-click="(x,y)=>emit('cell-click',x,y)" @hover-cell="(x,y)=>emit('hover-cell',x,y)" @clear-hover="emit('clear-hover')" /></div>
+      <div class="debug-light-floor" :style="floorStyle"><DebugLedCanvas :cell-pitch="board.cellSize*scale" :pixels="pixels" :hover-cell="hoverCell" :disabled="disabled" @cell-click="(x,y)=>emit('cell-click',x,y)" @hover-cell="(x,y)=>emit('hover-cell',x,y)" @clear-hover="emit('clear-hover')" /></div>
       <template v-for="light in board.lights" :key="light.key">
         <span class="debug-symbol-light" :data-wall="light.wall" :data-index="light.idx" :data-phase="light.phase" :style="{...pointStyle(light.symbol,light),color:color(light.phase)}">{{light.phase==='BLUE'?light.remaining:light.phase==='GREEN'?'✓':light.phase==='YELLOW'?'!':''}}</span>
         <button type="button" class="debug-circle-light" :data-wall="light.wall" :data-index="light.idx" :data-sequence="light.sequenceIndex" :data-phase="light.phase" :style="{...pointStyle(light.circle,light),backgroundColor:color(light.phase)}" :aria-label="t('circleLights.light',{wall:wallNames[light.wall],index:light.idx+1})" :disabled="disabled || light.phase==='OFF'" @pointerdown.stop @click.stop="emit('circle-click',light.sequenceIndex)"></button>

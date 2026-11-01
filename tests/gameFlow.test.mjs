@@ -547,11 +547,11 @@ test("Debug LED preview uses one canvas instead of repainting a button per pixel
   assert.match(canvasSource, /requestAnimationFrame/);
   assert.match(canvasSource, /emit\("cell-click"/);
   assert.match(canvasSource, /emit\("hover-cell"/);
-  assert.match(canvasSource, /function fitCanvasLayout/);
+  assert.match(canvasSource, /fitDebugLedGrid/);
   assert.match(canvasSource, /align-items: flex-start/);
-  assert.match(canvasSource, /const cellSize = Math\.max\(/);
-  assert.match(canvasSource, /cellWidth: cellSize/);
-  assert.match(canvasSource, /cellHeight: cellSize/);
+  assert.match(canvasSource, /debugLedGrid\(matrixWidth\.value, matrixHeight\.value, props\.cellPitch\)/);
+  assert.match(canvasSource, /context\.setTransform/);
+  assert.match(canvasSource, /debugLedCellAt\(grid/);
 });
 
 test("Debug gameplay input applies the runtime response through the shared state adapter", async () => {

@@ -61,7 +61,7 @@ try{
     await button('取消').click();assert.equal((await page.evaluate(()=>window.componentEvents)).at(-1)[0],'cancel');
     await mount('GameWiringDialog',{width:8,height:8});await button('保存此游戏布线').waitFor();await button('保存此游戏布线').click();assert.deepEqual((await page.evaluate(()=>window.componentEvents))[0][1].lines,[[]]);
   });
-  await check('待机和本页准备显示16x36实时动画，最新帧初始化、无硬件预览及运行尺寸隔离',async()=>{
+  await check('待机/准备/开始说明显示16x36动画，交接后恢复游戏尺寸且拒绝迟到待机帧',async()=>{
     await page.evaluate(()=>{window.fixture.update({engineState:'STOPPED',queueSummary:{waiting:[]}});window.fixture.hardwareError='ELC408_RUNTIME_DISABLED';window.fixture.frame({width:16,height:36,rgb:Array(16*36*3).fill(40)});});
     const game=await page.evaluate(()=>window.fixture.rank);await mount('EditorDebugWorkspace',{game});
     await page.waitForFunction(()=>window.getComponentSetup().pixels.length===36&&window.getComponentSetup().pixels[0][0].r===40);
@@ -75,6 +75,20 @@ try{
     assert.deepEqual(await page.evaluate(()=>[window.getComponentSetup().pixels[0].length,window.getComponentSetup().pixels.length,window.getComponentSetup().pixels[0][0].r]),[8,8,120]);
     await page.evaluate(()=>window.fixture.frame({width:16,height:36,rgb:Array(16*36*3).fill(200)}));
     assert.equal(await page.evaluate(()=>window.getComponentSetup().pixels[0][0].r),120);
+    await page.evaluate(async()=>{
+      const current=(await window.ledGame.gameState()).data;
+      window.fixture.update({...current,engineState:'STARTING',startingStandby:true});
+      window.fixture.frame({width:24,height:24,rgb:Array(16*36*3).fill(144)});
+      window.fixture.update({...current,engineState:'STARTING',startingStandby:true});
+    });
+    assert.deepEqual(await page.evaluate(()=>[window.getComponentSetup().pixels[0].length,window.getComponentSetup().pixels.length,window.getComponentSetup().pixels[0][0].r]),[16,36,144]);
+    await page.evaluate(async()=>{
+      const current=(await window.ledGame.gameState()).data;
+      window.fixture.update({...current,engineState:'STARTING',startingStandby:false});
+      window.fixture.frame({width:8,height:8,rgb:Array(8*8*3).fill(160)});
+      window.fixture.frame({width:16,height:36,rgb:Array(16*36*3).fill(200)});
+    });
+    assert.deepEqual(await page.evaluate(()=>[window.getComponentSetup().pixels[0].length,window.getComponentSetup().pixels.length,window.getComponentSetup().pixels[0][0].r]),[8,8,160]);
     await button('退出调试，返回编辑').click();
     await page.evaluate(()=>{window.fixture.update({engineState:'IDLE',queueSummary:{waiting:[]}});window.fixture.hardwareError='';window.fixture.requests=[];});
     await mount('GameListView');assert.deepEqual(await page.evaluate(()=>window.fixture.listeners()),[0,0]);
@@ -225,13 +239,10 @@ try{
         assert.ok(canvas.y+canvas.height<=height && canvas.y+canvas.height<=board.y+board.height+1,JSON.stringify({width,height,canvas,board}));
         assert.equal(await page.locator('.editor-debug-workspace').evaluate(el=>el.scrollHeight<=el.clientHeight),true);
         assert.equal(await page.locator('.app-shell').evaluate(el=>el.scrollHeight<=el.clientHeight),true);
-        // Same logical cell size is used on both axes; padding and gaps are symmetric.
-        const padding=Math.min(14,Math.max(2,Math.floor(Math.min(board.width,board.height)/24)));
-        const gap=Math.min(4,Math.max(1,Math.floor(Math.min(board.width/columns,board.height/rows)/4)));
-        const cellX=(canvas.width-padding*2-gap*(columns-1))/columns;
-        const cellY=(canvas.height-padding*2-gap*(rows-1))/rows;
+        const cellX=canvas.width/columns;
+        const cellY=canvas.height/rows;
         assert.ok(Math.abs(cellX-cellY)<0.1,JSON.stringify({cellX,cellY}));
-        await page.locator('canvas').click({position:{x:padding+cellX/2,y:padding+(rows-1)*(cellY+gap)+cellY/2}});
+        await page.locator('canvas').click({position:{x:cellX/2,y:(rows-.5)*cellY}});
         const request=(await page.evaluate(()=>window.fixture.requests)).at(-1);
         assert.equal(request[1].command,'tileinput');assert.equal(request[1].x,0);assert.equal(request[1].y,rows-1);
         await page.screenshot({path:path.join(output,`rank-shell-${columns}x${rows}-${width}x${height}.png`)});

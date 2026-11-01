@@ -138,7 +138,7 @@ function rowErrorMessage(row) {
     return t("pixelLight.alignRequired");
   }
   if (error.code === "ALIGN_OUT_OF_RANGE") {
-    return t("pixelLight.alignOutOfRange", { width: props.gridWidth, height: props.gridHeight });
+    return t("pixelLight.alignOutOfRange", { width: props.gridHeight, height: props.gridWidth });
   }
   return t("pixelLight.invalidAlign");
 }

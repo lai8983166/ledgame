@@ -287,19 +287,14 @@ export function buildPixelLightPreview(layout, width, height) {
       circle.x += circleInset;
     }
 
-    // `align` is a zero-based floor coordinate. When supplied, both lights
-    // belonging to the row are placed on that tile instead of their default
-    // wall position, so the editor preview makes the alignment explicit.
+    // Alignment uses (row, column). Project only along the wall, keeping the
+    // pair outside the floor and retaining its distance from that wall.
     if (align) {
-      const anchor = {
-        x: floor.x + (align.x + 0.5) * cellSize,
-        y: floor.y + (align.y + 0.5) * cellSize,
-      };
-      const pairOffset = Math.max(2, Math.round(cellSize * 0.22));
-      symbol.x = anchor.x - pairOffset;
-      symbol.y = anchor.y - pairOffset;
-      circle.x = anchor.x + pairOffset;
-      circle.y = anchor.y + pairOffset;
+      if (row.wall === 0 || row.wall === 2) {
+        symbol.x = circle.x = floor.x + (align.y + 0.5) * cellSize;
+      } else {
+        symbol.y = circle.y = floor.y + (align.x + 0.5) * cellSize;
+      }
     }
 
     return {
@@ -309,8 +304,8 @@ export function buildPixelLightPreview(layout, width, height) {
       align,
       // Keep the original floor-local coordinates for callers that use them as
       // alignment data, while the visual renderer uses wall positions below.
-      x: align ? Math.min(safeWidth - 1, align.x) : progress * Math.max(0, safeWidth - 1),
-      y: align ? Math.min(safeHeight - 1, align.y) : progress * Math.max(0, safeHeight - 1),
+      x: align ? Math.min(safeHeight - 1, align.x) : progress * Math.max(0, safeHeight - 1),
+      y: align ? Math.min(safeWidth - 1, align.y) : progress * Math.max(0, safeWidth - 1),
       symbol,
       circle,
       selected: normalized.selectedRow === pixelLightRowKey(row),
@@ -360,7 +355,7 @@ export function validatePixelLightAlign(value, width, height) {
   }
   const safeWidth = integerOr(width, 16, { min: 1, max: 256 });
   const safeHeight = integerOr(height, 16, { min: 1, max: 256 });
-  if (align.x >= safeWidth || align.y >= safeHeight) {
+  if (align.x >= safeHeight || align.y >= safeWidth) {
     return { code: "ALIGN_OUT_OF_RANGE", width: safeWidth, height: safeHeight };
   }
   return null;

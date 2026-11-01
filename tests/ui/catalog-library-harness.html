@@ -15,6 +15,7 @@ import GameWiringDialog from '../../src/components/GameWiringDialog.vue';
 import SimpleGameEditorView from '../../src/views/SimpleGameEditorView.vue';
 import RankGameEditorView from '../../src/views/RankGameEditorView.vue';
 import EditorDebugWorkspace from '../../src/views/EditorDebugWorkspace.vue';
+import DebugLightBoard from '../../src/components/DebugLightBoard.vue';
 import PixelLightLayoutDialog from '../../src/components/PixelLightLayoutDialog.vue';
 import GameEffectDialog from '../../src/components/GameEffectDialog.vue';
 import SpiritPointEditorDialog from '../../src/components/SpiritPointEditorDialog.vue';
@@ -36,7 +37,7 @@ window.mountComponent = (component, props, { applicationShell = false } = {}) =>
   app = createApp({ render: () => {
     const view = h({ MediaPickerDialog, GameGlobalConfigDialog, ApplicationSettingsView,
     Elc408DebugAssistantView, GameListView, LedGameTouchView, SecondaryDisplayView, MediaLibraryView, SpiritLibraryView,
-    GameWiringDialog, SimpleGameEditorView, RankGameEditorView, EditorDebugWorkspace, PixelLightLayoutDialog,
+    GameWiringDialog, SimpleGameEditorView, RankGameEditorView, EditorDebugWorkspace, DebugLightBoard, PixelLightLayoutDialog,
     GameEffectDialog, SpiritPointEditorDialog, SecondaryDisplayPickerDialog, LanguageSelectionDialog,
     GameCreationDialog, GameCategoryEditDialog, CatalogDeleteDialog, App }[component], {
     ...props,
@@ -45,6 +46,8 @@ window.mountComponent = (component, props, { applicationShell = false } = {}) =>
     onSave: value => window.componentEvents.push(['save', value]),
     onConfirm: value => window.componentEvents.push(['confirm', value]),
     onExit: () => window.componentEvents.push(['exit']),
+    onCellClick: (x,y) => window.componentEvents.push(['cell-click',x,y]),
+    onCircleClick: index => window.componentEvents.push(['circle-click',index]),
     onOpenGame: game => window.componentEvents.push(['open-game', game]),
     });
     return applicationShell ? h('main', { class: 'app-shell app-shell--custom-titlebar' }, [
