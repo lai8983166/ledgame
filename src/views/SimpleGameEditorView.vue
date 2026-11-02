@@ -3407,6 +3407,7 @@ function formatRuntimeSummary(value) {
                 type="button" :data-tool="tool" :disabled="Boolean(busyAction)"
                 :aria-label="t(`simple.tool${tool[0].toUpperCase()}${tool.slice(1)}`)"
                 :data-tip="t(`simple.tool${tool[0].toUpperCase()}${tool.slice(1)}`) + (tool === 'add' ? ' (Alt+A)' : tool === 'delete' ? ' (Alt+D)' : '')"
+                :title="t(`simple.tool${tool[0].toUpperCase()}${tool.slice(1)}`) + (tool === 'add' ? ' (Alt+A)' : tool === 'delete' ? ' (Alt+D)' : '')"
                 :aria-keyshortcuts="tool === 'add' ? 'Alt+A' : tool === 'delete' ? 'Alt+D' : undefined"
                 :aria-pressed="drawingTool === tool && !selectionMode && !anchorEditMode"
                 @click="selectDrawingTool(tool)">
@@ -3419,6 +3420,7 @@ function formatRuntimeSummary(value) {
                 :disabled="Boolean(busyAction) || drawingTool === 'select' || selectionMode || anchorEditMode"
                 :aria-label="t(mode === 'point' ? 'simple.pointEditing' : 'simple.regionEditing')"
                 :data-tip="t(mode === 'point' ? 'simple.pointEditing' : 'simple.regionEditing')"
+                :title="t(mode === 'point' ? 'simple.pointEditing' : 'simple.regionEditing')"
                 :aria-pressed="editingMode === mode && drawingTool !== 'select' && !selectionMode && !anchorEditMode"
                 @click="selectEditingMode(mode)">
                 <EditorActionIcon :name="mode === 'point' ? 'brush' : 'region'" />
@@ -3793,7 +3795,7 @@ function formatRuntimeSummary(value) {
 
         <div ref="matrixScrollRef" class="matrix-scroll" @wheel="zoomMatrix">
           <SimpleMatrixCanvas
-            :tool="anchorEditMode || selectionMode ? 'select' : drawingTool !== 'select' && editingMode === 'region' ? 'region' : drawingTool"
+            :tool="anchorEditMode || selectionMode ? 'select' : drawingTool === 'delete' && editingMode === 'region' ? 'region' : drawingTool"
             :interaction-enabled="!busyAction"
             :interaction-key="`${activeLevelIndex}:${activeFrameIndex}:${panoramaMode}:${selectionMode}:${anchorEditMode}:${drawingTool}:${editingMode}:${matrixInteractionRevision}`"
             :cells="matrixCells"
