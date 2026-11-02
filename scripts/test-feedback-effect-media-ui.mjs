@@ -17,6 +17,7 @@ const browser=await chromium.launch({executablePath:path.join(cache,chrome,'chro
 const page=await browser.newPage({viewport:{width:1366,height:768}});const passed=[],errors=[];
 page.setDefaultTimeout(15000);
 page.on('pageerror',error=>errors.push(error.message));
+page.on('dialog',dialog=>dialog.accept());
 await page.addInitScript(()=>{
   const matrix=i=>[{id:'old-'+i,x:i,y:3,color:0,points:[[0,0]]}];
   const game={id:1,name:'特效隔离测试',type:'default',mode:'[1]',siteSizeWidth:8,siteSizeHeight:8,

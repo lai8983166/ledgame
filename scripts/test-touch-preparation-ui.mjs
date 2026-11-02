@@ -66,7 +66,7 @@ try{
     await page.evaluate(()=>window.fixture.scan('102'));await step('game');
     assert.equal(await page.getByTestId('game-preparation-step-timeout').locator('strong').innerText(),'20');
   });
-  await check('操作刷新20秒倒计时，横竖封面与容器比例一致且不裁切',async()=>{
+  await check('操作刷新20秒倒计时，大小屏更换封面不改变容器且完整显示',async()=>{
     const shell=page.locator('.touch-shell'),clock=page.getByTestId('game-preparation-step-timeout').locator('strong');
     for(const [name,detail] of [['pointermove',{pointerId:1}],['wheel',{deltaY:1}],['keydown',{key:'Tab'}],['input',{}],['click',{}]]){
       await page.waitForTimeout(1100);assert.ok(Number(await clock.innerText())<20);
@@ -74,8 +74,19 @@ try{
     }
     const images=page.locator('.touch-category-card img,.touch-carousel-card img');
     await page.waitForFunction(()=>[...document.querySelectorAll('.touch-category-card img,.touch-carousel-card img')].every(node=>node.naturalWidth>0));
-    const sizes=await images.evaluateAll(nodes=>nodes.map(image=>{const card=image.parentElement,style=getComputedStyle(card);return{fit:getComputedStyle(image).objectFit,ratio:Number(style.getPropertyValue('--touch-cover-ratio')),renderedRatio:parseFloat(style.width)/parseFloat(style.height),natural:image.naturalWidth/image.naturalHeight};}));
-    assert.ok(sizes.length>2);for(const size of sizes){assert.equal(size.fit,'contain');assert.ok(Math.abs(size.ratio-size.natural)<.001,JSON.stringify(size));assert.ok(Math.abs(size.renderedRatio-size.natural)<.04,JSON.stringify(size));}
+    const measure=()=>images.evaluateAll(nodes=>nodes.map(image=>{const style=getComputedStyle(image.parentElement);return{width:parseFloat(style.width),height:parseFloat(style.height),fit:getComputedStyle(image).objectFit,natural:image.naturalWidth/image.naturalHeight};}));
+    for(const width of [1024,1366,1920]){
+      await page.setViewportSize({width,height:768});
+      const baseline=await measure();assert.ok(baseline.length>2);
+      for(const [w,h] of [[1600,100],[100,1600],[1000,1000],[2,1]]){
+        await images.evaluateAll((nodes,[w,h])=>nodes.forEach(image=>image.src='data:image/svg+xml,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="'+w+'" height="'+h+'"><rect width="100%" height="100%" fill="cyan"/></svg>')),[w,h]);
+        await page.waitForFunction(ratio=>[...document.querySelectorAll('.touch-category-card img,.touch-carousel-card img')].every(img=>img.naturalWidth/img.naturalHeight===ratio),w/h);
+        const sizes=await measure();
+        assert.equal(await images.evaluateAll(nodes=>nodes.every(img=>Math.abs(img.clientWidth-img.parentElement.clientWidth)<=1 && Math.abs(img.clientHeight-img.parentElement.clientHeight)<=1)),true);
+        for(let i=0;i<sizes.length;i++){const size=sizes[i];assert.equal(size.fit,'fill');assert.ok(Math.abs(size.width-baseline[i].width)<.1 && Math.abs(size.height-baseline[i].height)<.1,JSON.stringify({width,baseline:baseline[i],size}));}
+      }
+    }
+    await page.setViewportSize({width:1366,height:768});
     await shot('封面与操作刷新');
   });
   await check('当前轮播卡持续发光，切换跟随当前卡，减少动态效果时停用动画',async()=>{

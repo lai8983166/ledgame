@@ -563,15 +563,18 @@ onBeforeUnmount(() => {
 .global-config-cover-preview {
   display: grid;
   place-items: center;
-  min-height: 64px;
+  height: 240px;
+  min-height: 0;
 }
 
 .global-config-cover-preview img {
   display: block;
   max-width: 100%;
-  max-height: 240px;
+  max-height: 100%;
   width: auto;
   height: auto;
+  min-height: 0;
+  object-fit: contain;
   margin: 0 auto;
   border-radius: 8px;
 }

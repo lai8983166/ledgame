@@ -33,17 +33,15 @@ test("game card exposes independent hover actions without nesting buttons", () =
 test("card cover stays separate above the title and does not distort the source", () => {
   assert.match(
     styleSource,
-    /\.game-card-cover\s*\{[^}]*flex:\s*0 0 auto[^}]*aspect-ratio:\s*var\(--game-cover-ratio,\s*3\s*\/\s*4\)/s,
+    /\.game-card-cover\s*\{[^}]*flex:\s*0 0 auto[^}]*aspect-ratio:\s*3\s*\/\s*4/s,
   );
   assert.match(
     styleSource,
-    /\.game-card-cover img\s*\{[^}]*object-fit:\s*cover[^}]*object-position:\s*center/s,
+    /\.game-card-cover img\s*\{[^}]*object-fit:\s*fill[^}]*object-position:\s*center/s,
   );
   assert.match(styleSource, /\.game-card-main\s*\{[^}]*display:\s*flex[^}]*flex-direction:\s*column/s);
   assert.match(cardSource, /class="game-card-cover"[\s\S]*class="game-card-actions"[\s\S]*class="game-card-copy"/);
-  assert.match(cardSource, /@load="onCoverLoaded"/);
-  assert.match(cardSource, /naturalWidth\s*\/\s*naturalHeight/);
-  assert.match(cardSource, /@error="coverFailed = true; coverRatio = 3 \/ 4"/);
+  assert.match(cardSource, /@error="coverFailed = true"/);
   assert.match(dialogSource, /@error="previewFailed = true"/);
 });
 

@@ -3,6 +3,7 @@ import { elc408Messages } from "./elc408-messages.js";
 import { kioskMessages } from "./kiosk-messages.js";
 import { rankMessages } from "./rank-messages.js";
 import { generatedTranslations } from "./generated-translations.js";
+import { effectImpactCatalog } from "./effect-impact-messages.js";
 
 function deepMergeMessages(base, addition) {
   const result = { ...base };
@@ -1571,6 +1572,7 @@ for (const [locale, overwrite] of Object.entries(effectOverwriteCopy)) {
 
 for (const locale of canonicalLocales) {
   mergedMessages[locale] = mergeCatalog(mergedMessages[locale], feedback23Catalog(locale));
+  mergedMessages[locale] = mergeCatalog(mergedMessages[locale], { effect: effectImpactCatalog(locale) });
 }
 
 export const authoredMessages = Object.fromEntries(

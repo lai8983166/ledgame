@@ -75,8 +75,11 @@ test("matrix edits use RGB transactions while frame and level structure clear hi
   }
 });
 
-test("RGB history restores only matrices and refreshes derived editor state", () => {
+test("history restores full frame lists for effects while RGB snapshots stay matrix-only", () => {
   const restore = functionSource("restoreRgbHistorySnapshot", "clampIndex");
+  assert.match(restore, /snapshot\?\.frameLists/);
+  assert.match(restore, /level\.frameList = cloneEffectFrameList\(item\.frameList\)/);
+  assert.ok(restore.indexOf("snapshot?.frameLists") < restore.indexOf("snapshot?.matrices"));
   assert.match(restore, /frame\.matrix = cloneRgbMatrix\(item\.matrix\)/);
   assert.doesNotMatch(restore, /document\.value\s*=/);
   assert.doesNotMatch(restore, /repeatTimes|\\.option|siteSize/);
@@ -86,6 +89,11 @@ test("RGB history restores only matrices and refreshes derived editor state", ()
   const sync = functionSource("syncSelectedObject", "canTriggerGlobalShortcut");
   assert.match(sync, /const frame = activeFrame\.value \|\| ensureActiveFrame\(\)/,
     "selection refresh must preserve arbitrary restored object anchors");
+  const capture = functionSource("captureRgbHistorySnapshot", "cloneRgbMatrix");
+  assert.doesNotMatch(capture, /frameLists|cloneEffectFrameList/);
+  const effect = functionSource("applyEffectResult", "savePixelLightLayout");
+  assert.doesNotMatch(effect, /clearRgbEditHistory/);
+  assert.match(effect, /rgbEditHistory\.commit\(before, captureEffectHistorySnapshot\(\)/);
 });
 
 test("level deletion is confirmed and disabled when only one level remains", () => {

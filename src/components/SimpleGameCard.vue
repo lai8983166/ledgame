@@ -15,26 +15,20 @@ const props = defineProps({
 });
 const emit = defineEmits(["open-game", "play-game", "export-game", "delete-game", "reorder-start", "reorder-over", "reorder-drop", "reorder-end"]);
 const coverFailed = ref(false);
-const coverRatio = ref(3 / 4);
 const coverUrl = computed(() =>
   coverFailed.value ? "" : buildMediaPreviewUrl(props.game.cover),
 );
-
-function onCoverLoaded({ target: { naturalWidth, naturalHeight } }) {
-  if (naturalWidth > 0 && naturalHeight > 0) coverRatio.value = naturalWidth / naturalHeight;
-}
 
 watch(
   () => props.game.cover,
   () => {
     coverFailed.value = false;
-    coverRatio.value = 3 / 4;
   },
 );
 </script>
 
 <template>
-  <article class="game-card" :data-id="game.id" :style="{ '--game-cover-ratio': coverRatio }" :class="{ 'catalog-dragging': dragging, 'catalog-drop-target': dropTarget }"
+  <article class="game-card" :data-id="game.id" :class="{ 'catalog-dragging': dragging, 'catalog-drop-target': dropTarget }"
     @dragover.prevent="emit('reorder-over', game.id)" @drop.prevent.stop="emit('reorder-drop', game.id)">
     <button class="catalog-drag-handle" type="button" :draggable="!orderBlocked" :disabled="orderBlocked"
       v-bind="{ title: t('management.reorder'), 'aria-label': t('management.reorder') }"
@@ -47,8 +41,7 @@ watch(
           v-if="coverUrl"
           :src="coverUrl"
           :alt="t('games.coverAlt', { game: game.displayName || game.name })"
-          @load="onCoverLoaded"
-          @error="coverFailed = true; coverRatio = 3 / 4"
+          @error="coverFailed = true"
         />
         <span v-else class="game-card-cover-placeholder">
           <span class="game-card-mark" aria-hidden="true"></span>

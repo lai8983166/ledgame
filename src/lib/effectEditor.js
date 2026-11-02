@@ -343,6 +343,17 @@ function cloneFrame(frame) {
   };
 }
 
+/** Describe the same frame positions and counts used by applyEffectToFrameList. */
+export function getEffectWriteImpact(frameCount, currentIndex, generatedCount, mode = 'insert') {
+  const before = Math.max(0, toInteger(frameCount));
+  const count = Math.max(0, toInteger(generatedCount));
+  const index = Math.min(before, Math.max(0, toInteger(currentIndex)));
+  const startIndex = mode === 'after' ? Math.min(before, index + 1) : index;
+  const changed = mode === 'overwrite' || mode === 'merge' ? Math.min(count, before - startIndex) : 0;
+  const added = count - changed;
+  return { count, start: startIndex + 1, end: startIndex + count, changed, added, before, after: before + added };
+}
+
 /** Apply generated frames to a level's existing frameList without mutating input. */
 export function applyEffectToFrameList(frameList, currentIndex, generatedFrames, mode = "insert") {
   const source = Array.isArray(frameList) ? frameList : [];

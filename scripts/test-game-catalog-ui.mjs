@@ -134,7 +134,7 @@ try {
     await card.getByRole('button', { name: '删除', exact: true }).click(); await page.locator('.catalog-confirm-dialog').getByRole('button', { name: '删除', exact: true }).click();
     await expect(page.locator('.game-card[data-id="1"]')).toHaveCount(0);
   });
-  await check('卡片靠左换行，按封面比例调整宽度，无黑边且标题独立', async () => {
+  await check('卡片靠左换行，更换横竖封面保持固定大小且标题独立', async () => {
     await page.evaluate(() => {
       const template = window.fixture.games[0];
       const source = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, 'src');
@@ -177,9 +177,11 @@ try {
       const card = page.locator(`.game-card[data-id="${id}"]`);
       await expect.poll(() => card.locator('img').evaluate(image => image.naturalWidth / image.naturalHeight)).toBe(ratio);
       const cover = await card.locator('.game-card-cover').boundingBox();
-      assert.ok(Math.abs(cover.width / cover.height - ratio) < 0.005, 'container matches natural image ratio without letterboxing');
+      assert.ok(Math.abs(cover.width / cover.height - .75) < 0.005, 'container keeps the original ratio');
       assert.ok(Math.abs(cover.height - 284) < 0.5, 'existing cover height stays the same');
-      assert.ok(Math.abs((await card.boundingBox()).width - (284 * ratio + 2)) < 0.5);
+      assert.ok(Math.abs((await card.boundingBox()).width - 215) < 0.5);
+      await expect(card.locator('img')).toHaveCSS('object-fit', 'fill');
+      assert.equal(await card.locator('img').evaluate(img=>Math.abs(img.clientWidth-img.parentElement.clientWidth)<=1 && Math.abs(img.clientHeight-img.parentElement.clientHeight)<=1),true);
     }
     await expect(page.locator('.game-card[data-id="22"] .game-card-cover-placeholder')).toBeVisible();
     await expect(page.locator('.game-card[data-id="22"]')).toHaveCSS('width', '215px');
@@ -188,7 +190,7 @@ try {
     await expect(changed.locator('.game-card-cover-placeholder')).toBeVisible(); await expect(changed).toHaveCSS('width', '215px');
     await page.evaluate(() => { window.getComponentSetup().games.find(game => game.id === 20).cover = 'test-cover-wide.png'; });
     await expect.poll(() => changed.locator('img').evaluate(image => image.naturalWidth)).toBe(800);
-    await expect.poll(() => changed.evaluate(card => Math.abs(card.getBoundingClientRect().width - (284 * 800 / 420 + 2)) < .5)).toBe(true);
+    await expect(changed).toHaveCSS('width', '215px');
     await page.locator('.game-card').first().hover();
     await page.screenshot({ path: path.join(output, '左对齐小卡片.png') });
   });

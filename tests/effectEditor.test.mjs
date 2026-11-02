@@ -4,11 +4,24 @@ import {
   EFFECT_SPRITE_NAMES,
   applyEffectToFrameList,
   expandEffectFrames,
+  getEffectWriteImpact,
   filterEffectSprites,
   normalizeEffectConfig,
   sampleEffectTrajectory,
   validateEffectConfig,
 } from "../src/lib/effectEditor.js";
+
+test('effect impact reports insertion positions, overwritten frames, extensions and resulting totals',()=>{
+  for(const [mode,index,count,expected] of [
+    ['insert',2,3,{count:3,start:3,end:5,changed:0,added:3,before:5,after:8}],
+    ['after',2,3,{count:3,start:4,end:6,changed:0,added:3,before:5,after:8}],
+    ['after',4,1,{count:1,start:6,end:6,changed:0,added:1,before:5,after:6}],
+    ['overwrite',1,2,{count:2,start:2,end:3,changed:2,added:0,before:5,after:5}],
+    ['overwrite',4,3,{count:3,start:5,end:7,changed:1,added:2,before:5,after:7}],
+    ['merge',3,3,{count:3,start:4,end:6,changed:2,added:1,before:5,after:6}],
+  ])assert.deepEqual(getEffectWriteImpact(5,index,count,mode),expected);
+  assert.deepEqual(getEffectWriteImpact(0,0,3,'overwrite'),{count:3,start:1,end:3,changed:0,added:3,before:0,after:3});
+});
 
 const spirits = [
   { id: "safe", name: "安全块", color: 0, width: 1, height: 1, points: "[[0,0]]", basic: true },

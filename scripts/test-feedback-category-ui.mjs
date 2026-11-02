@@ -29,6 +29,10 @@ await page.addInitScript(() => {
   const categories = [{ id: 1, name: '空分类', cover: 'wide.svg' }, { id: 2, name: '原分类', cover: 'tall.svg' }, { id: 3, name: '第二个空分类' }];
   const fixture = window.categoryFixture = { games, categories, requests: [], failId: null, delay: 0 };
   window.appLanguage = { get: async () => 'zh-CN', onChanged: () => () => {} };
+  window.mediaLibrary = {
+    list: async () => ({items:['wide.svg','tall.svg'].map(name=>({kind:'file',name,relativePath:name,mediaType:'image'}))}),
+    getPreviewUrl: async relativePath => ({url:'led-media://preview/'+relativePath,mediaType:'image'}),
+  };
   window.ledGame = {
     listManageableGames: async () => ({ data: structuredClone(games) }),
     listGameCategories: async () => ({ data: structuredClone(categories) }),
@@ -46,18 +50,33 @@ const button = name => page.getByRole('button', { name, exact: true });
 const openCategory = name => page.locator('.game-category-card-main').filter({ has: page.getByRole('heading', { name, exact: true }) }).click();
 async function check(name, fn) { await fn(); passed.push(name); console.log('PASS ' + name); }
 try {
-  await page.route('led-media://preview/**', route => route.fulfill({ contentType: 'image/svg+xml', body: route.request().url().includes('wide')
+  await page.route('led-media://preview/**', route => route.request().url().includes('missing') ? route.fulfill({status:404,body:''}) : route.fulfill({ contentType: 'image/svg+xml', body: route.request().url().includes('wide')
     ? '<svg xmlns="http://www.w3.org/2000/svg" width="400" height="100"><rect width="400" height="100" fill="cyan"/></svg>'
     : '<svg xmlns="http://www.w3.org/2000/svg" width="100" height="300"><rect width="100" height="300" fill="magenta"/></svg>' }));
   await page.goto(`http://127.0.0.1:${server.address().port}/tests/ui/catalog-library-harness.html`);
   await page.waitForFunction(() => window.mountComponent);
   await page.evaluate(() => window.mountComponent('GameListView'));
-  await check('分类横竖封面容器随固有比例适配并完整显示', async () => {
+  await check('分类封面横竖换图、空图和失败保持相同容器，大小屏完整适配', async () => {
     const covers=page.locator('.game-category-card-cover:has(img)');
     await expect(covers).toHaveCount(2);
     await expect.poll(()=>covers.evaluateAll(nodes=>nodes.every(node=>node.querySelector('img').naturalWidth>0))).toBe(true);
-    const sizes=await covers.evaluateAll(nodes=>nodes.map(node=>{const image=node.querySelector('img'),rect=node.getBoundingClientRect();return{ratio:rect.width/rect.height,natural:image.naturalWidth/image.naturalHeight,fit:getComputedStyle(image).objectFit};}));
-    for(const size of sizes){assert.ok(Math.abs(size.ratio-size.natural)<.03,JSON.stringify(size));assert.equal(size.fit,'contain');}
+    const target=page.locator('.game-category-card[data-id="1"] .game-category-card-cover');
+    for(const width of [1024,1366,1920]){
+      await page.setViewportSize({width,height:768});
+      const baseline=await target.boundingBox();
+      for(const cover of ['tall.svg','wide.svg','', 'missing.svg','wide.svg']){
+        await page.evaluate(cover=>{window.getComponentSetup().categories.find(c=>c.id===1).cover=cover;},cover);
+        if(cover && cover!=='missing.svg'){
+          await expect.poll(()=>target.locator('img').evaluate(img=>img.naturalWidth)).toBe(cover==='wide.svg'?400:100);
+          await expect(target.locator('img')).toHaveCSS('object-fit','fill');
+          assert.equal(await target.locator('img').evaluate(img=>Math.abs(img.clientWidth-img.parentElement.clientWidth)<=1 && Math.abs(img.clientHeight-img.parentElement.clientHeight)<=1),true);
+        }else await expect(target.locator('.game-card-cover-placeholder')).toBeVisible();
+        const box=await target.boundingBox();
+        assert.ok(Math.abs(box.width-baseline.width)<.1 && Math.abs(box.height-baseline.height)<.1,JSON.stringify({width,cover,baseline,box}));
+        assert.ok(Math.abs(box.width/box.height-2)<.01);
+      }
+    }
+    await page.setViewportSize({width:1366,height:768});
     await page.screenshot({path:path.join(output,'自适应封面.png')});
   });
   await check('空分类显示加号而非重新加载，取消不保存并还原焦点', async () => {
@@ -129,6 +148,46 @@ try {
     await page.evaluate(() => window.mountComponent('GameGlobalConfigDialog', { config: { firstCatalog: '8' }, categories: [{ id: 8, name: '合法旧分类' }] }));
     await expect(select).toHaveValue('8');
     await page.screenshot({ path: path.join(output, 'known-category-options.png') });
+  });
+  await check('全局配置预览保留横竖图片原始比例，预览框大小保持不变', async () => {
+    for(const width of [1024,1366]){
+      await page.setViewportSize({width,height:768});
+      let baseline;
+      for(const cover of ['wide.svg','tall.svg','']){
+        await page.evaluate(cover=>window.mountComponent('GameGlobalConfigDialog',{config:{name:'预览验收',cover}}),cover);
+        const preview=page.locator('.global-config-cover-preview');
+        if(cover){
+          await expect.poll(()=>preview.locator('img').evaluate(img=>img.naturalWidth)).toBe(cover==='wide.svg'?400:100);
+          await expect(preview.locator('img')).toHaveCSS('object-fit','contain');
+          const image=await preview.locator('img').evaluate(img=>{const r=img.getBoundingClientRect();return {ratio:r.width/r.height,natural:img.naturalWidth/img.naturalHeight,width:r.width,height:r.height};});
+          const frame=await preview.boundingBox();
+          assert.ok(Math.abs(image.ratio-image.natural)<.01,JSON.stringify(image));
+          assert.ok(image.width<=frame.width+1 && image.height<=frame.height+1);
+        }
+        const box=await preview.boundingBox();
+        baseline ||= box;
+        assert.ok(Math.abs(box.width-baseline.width)<.1 && Math.abs(box.height-baseline.height)<.1,JSON.stringify({cover,baseline,box}));
+      }
+    }
+  });
+  await check('全局配置选图弹窗保留原比例，取消不换图，确认后预览仍保留原比例',async()=>{
+    await page.evaluate(()=>window.mountComponent('GameGlobalConfigDialog',{config:{name:'选图验收',cover:'wide.svg'}}));
+    const field=page.locator('.global-config-field').filter({has:page.locator('.global-config-cover-preview')});
+    for(const confirm of [false,true]){
+      await field.getByRole('button',{name:'选择',exact:true}).click();
+      const picker=page.locator('.media-picker-dialog');
+      await picker.locator('.media-picker-row[data-path="tall.svg"]').click();
+      const image=picker.locator('.media-picker-image');
+      await expect.poll(()=>image.evaluate(img=>img.naturalWidth)).toBe(100);
+      const size=await image.evaluate(img=>{const r=img.getBoundingClientRect();return {ratio:r.width/r.height,natural:img.naturalWidth/img.naturalHeight};});
+      assert.ok(Math.abs(size.ratio-size.natural)<.01,JSON.stringify(size));
+      await picker.getByRole('button',{name:confirm?'确认':'取消',exact:true}).click();
+      const selected=field.locator('.global-config-cover-preview img');
+      await expect.poll(()=>selected.evaluate(img=>img.naturalWidth)).toBe(confirm?100:400);
+      const ratio=await selected.evaluate(img=>{const r=img.getBoundingClientRect();return r.width/r.height;});
+      assert.ok(Math.abs(ratio-(confirm?1/3:4))<.01);
+    }
+    await page.screenshot({path:path.join(output,'全局配置原比例预览.png')});
   });
   assert.deepEqual(errors, []);
 } catch (error) {

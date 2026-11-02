@@ -38,7 +38,7 @@ await context.addInitScript(() => {
     updateGameCategory:async(id,payload)=>{categories=categories.map(item=>item.id===id?{...item,...payload}:item);save('ui.categories',categories);return {data:categories.find(item=>item.id===id)};},
     createGameCategory:async payload=>{const item={id:Date.now(),displayOrder:categories.length,...payload};categories.push(item);save('ui.categories',categories);return {data:item};},
     updateGameMetadata:async(id,payload)=>{games=games.map(item=>item.id===id?{...item,...payload}:item);save('ui.games',games);return {data:true};},
-    getRankGameEditor:async()=>({data:{id:8,name:'Rank Draft',cover:games.find(g=>g.id===8).cover||'',siteSizeWidth:16,siteSizeHeight:36,minPlayers:1,maxPlayers:4,levels:[{id:81,type:1,bounds:{minX:0,maxX:15,minY:0,maxY:35},gameTime:30}],audio:{scoreSound:'A/music.mp3'},gif:{standby:'A/B/same.png'}}}),
+    getRankGameEditor:async()=>({data:{id:8,type:'rank',name:'Rank Draft',cover:games.find(g=>g.id===8).cover||'',siteSizeWidth:16,siteSizeHeight:36,minPlayers:1,maxPlayers:4,levels:[{id:81,type:1,bounds:{minX:0,maxX:15,minY:0,maxY:35},gameTime:30}],audio:{scoreSound:'A/music.mp3'},gif:{standby:'A/B/same.png'}}}),
     validateRankGameEditor:async()=>({data:{valid:true}}),
     saveRankGameEditor:async(id,doc)=>{games=games.map(g=>g.id===id?{...g,cover:doc.cover}:g);save('ui.games',games);return{data:{saved:true,gameId:id}};},
   };
@@ -89,8 +89,8 @@ try {
   });
   for(const [width,height] of [[1366,768],[1920,1080],[2560,1440]]) await check(`布局 ${width}x${height}`,async()=>{
     await page.setViewportSize({width,height});await gameSection('首页');
-    const box=await page.locator('.game-category-card').first().boundingBox(); assert.ok(Math.abs(box.width/box.height-2)<0.04);
     const cover=await page.locator('.game-category-card-cover').first().boundingBox();
+    assert.ok(Math.abs(cover.width/cover.height-2)<0.04,'cover keeps its fixed 2:1 ratio');
     const name=await page.locator('.game-category-card-copy').first().boundingBox();
     assert.ok(cover.height>0 && name.y>=cover.y+cover.height-1,'category name must be below its cover');
     assert.ok(Math.abs(cover.width-name.width)<1,'cover and name span the same card width');
@@ -142,17 +142,20 @@ try {
   await check('封面目录选择、取消和保存不清空原资源',async()=>{
     await gameSection('游戏列表');const card=page.locator('.game-card[data-id="8"]');await card.hover();await card.getByRole('button',{name:'编辑',exact:true}).click();
     assert.equal(await page.getByRole('button',{name:'清除封面',exact:true}).count(),0);
-    await page.locator('.rank-cover-picker button').click();
+    await page.getByRole('button',{name:'全局配置',exact:true}).click();
+    const coverField=page.locator('.global-config-field').filter({has:page.locator('.global-config-cover-preview')});
+    await coverField.getByRole('button',{name:'选择',exact:true}).click();
     await page.locator('.media-picker-row[data-path="A"]').click(); await page.locator('.media-picker-row[data-path="A/B"]').click();
     await page.locator('.media-picker-row[data-path="A/B/same.png"]').dblclick();
     await page.locator('.media-picker-dialog').waitFor({state:'hidden'});
-    assert.match(await page.locator('.rank-cover-picker input').inputValue(),/A\/B\/same.png/);
-    await page.locator('.rank-actions .primary').click();await page.locator('.editor-save-dialog button').click();await page.locator('.rank-cover-picker button').click();
+    assert.match(await coverField.locator('input').inputValue(),/A\/B\/same.png/);
+    await page.locator('.global-config-actions .primary').click();await page.locator('.editor-save-dialog button').click();
+    await page.getByRole('button',{name:'全局配置',exact:true}).click();await coverField.getByRole('button',{name:'选择',exact:true}).click();
     assert.equal(await page.locator('.media-picker-row[data-path="A/B/same.png"]').count(),1);
     await page.locator('.media-picker-actions .soft-button').click();
-    assert.match(await page.locator('.rank-cover-picker input').inputValue(),/A\/B\/same.png/);
-    const input=page.locator('.rank-editor input').first();await input.fill('Still editable');assert.equal(await input.inputValue(),'Still editable');
-    page.once('dialog',dialog=>dialog.accept());await page.locator('.rank-title .icon-action').click();
+    assert.match(await coverField.locator('input').inputValue(),/A\/B\/same.png/);
+    await page.locator('.global-config-actions .soft-button').click();
+    await page.locator('.rank-toolbar .editor-back-button').click();
   });
   await check('完整游戏列表拖动后重新加载仍保持顺序',async()=>{
     await gameSection('游戏列表');
@@ -186,7 +189,7 @@ try {
       assert.equal(`rgb(${rgba[0]}, ${rgba[1]}, ${rgba[2]})`,palette[color]);
       await page.locator('.spirit-editor-actions .primary').click();await page.locator('.spirit-editor-dialog').waitFor({state:'hidden'});
       assert.equal(await thumbnailColor(page.locator('.spirit-thumbnail-card.selected')),palette[color]);
-      await page.locator('.spirit-browser-toolbar button').first().click();assert.equal(await page.locator('.spirit-editor-colors').count(),0);
+      await page.locator('.spirit-thumbnail-card.selected').hover();await page.locator('.spirit-card-actions button').first().click();assert.equal(await page.locator('.spirit-editor-colors').count(),0);
       await page.locator('.spirit-editor-actions .primary').click();await page.locator('.spirit-editor-dialog').waitFor({state:'hidden'});
     }
     await page.reload();await page.locator('.nav-tab').filter({hasText:'精灵库'}).click();

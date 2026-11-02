@@ -83,3 +83,36 @@ test("clear removes both undo and redo entries", () => {
   assert.equal(history.canUndo, false);
   assert.equal(history.canRedo, false);
 });
+
+test("one effect entry interleaves with matrix edits and isolates complete frame metadata", () => {
+  const history = createRgbEditHistory();
+  const before = {
+    ...snapshot(2), matrices: [],
+    frameLists: [{ levelIndex: 0, frameList: [{
+      repeatTimes: 7, customFrame: { audio: 'before.wav' },
+      matrix: [{ ...snapshot(2).matrices[0].matrix[0], customObject: { tags: ['original'] } }],
+    }] }],
+  };
+  const after = structuredClone(before);
+  after.activeFrameIndex = 2;
+  after.selectedObjectId = '';
+  after.frameLists[0].frameList.push({ repeatTimes: 1, matrix: [] }, { repeatTimes: 1, matrix: [] });
+  history.commit(snapshot(1), snapshot(2), { action: 'move' });
+  history.commit(before, after, { action: 'effect' });
+  history.commit(snapshot(3), snapshot(4), { action: 'move' });
+  assert.equal(history.undoCount, 3);
+  assert.equal(history.undo().snapshot.matrices[0].matrix[0].x, 3);
+  const undone = history.undo();
+  assert.deepEqual(undone.snapshot, before);
+  undone.snapshot.frameLists[0].frameList[0].customFrame.audio = 'mutated';
+  before.frameLists[0].frameList[0].matrix[0].customObject.tags.push('mutated');
+  assert.equal(history.undo().snapshot.matrices[0].matrix[0].x, 1);
+  history.redo();
+  assert.deepEqual(history.redo().snapshot, after);
+  assert.equal(history.redo().snapshot.matrices[0].matrix[0].x, 4);
+  history.undo();
+  assert.equal(history.commit(snapshot(3), snapshot(3)), false);
+  assert.equal(history.canRedo, true);
+  history.undo();
+  assert.equal(history.undo().snapshot.matrices[0].matrix[0].x, 1);
+});

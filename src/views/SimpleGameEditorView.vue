@@ -33,8 +33,11 @@ import { normalizeGameCategoryList } from "../lib/gameCategories.js";
 import {
   applyEffectToFrameList,
   expandEffectFrames,
+  getEffectWriteImpact,
   normalizeEffectConfig,
   normalizeEffectSprite,
+  resolveEffectSprite,
+  validateEffectConfig,
 } from "../lib/effectEditor.js";
 import {
   runGuardedFrameSequence,
@@ -1117,32 +1120,50 @@ function closeEffectDialog() {
 
 function applyEffectResult(result) {
   const level = activeLevel.value;
-  if (!level || !Array.isArray(result?.frames) || !result.frames.length) {
+  if (busyAction.value || !level || !result?.config || !Array.isArray(result.frames) || !result.frames.length) {
     return;
   }
+  const config = normalizeEffectConfig(result.config);
+  if (validateEffectConfig(config, {
+    gridWidth: matrixWidth.value,
+    gridHeight: matrixHeight.value,
+    spirits: effectSpirits.value,
+    sprite: resolveEffectSprite(effectSpirits.value, config),
+  }).length) return;
   const generatedFrames = expandEffectFrames(result.config, {
     spirits: effectSpirits.value,
     idPrefix: effectIdPrefix.value,
+  });
+  // Normalize only generated objects; untouched frames retain their complete data.
+  generatedFrames.forEach((frame, index) => {
+    frame.matrix = frame.matrix.map(object => normalizeMatrixObject(object, frame, index));
   });
   const applied = applyEffectToFrameList(
     level.frameList,
     activeFrameIndex.value,
     generatedFrames,
-    result.config?.mode,
+    config.mode,
   );
-  const startIndex = Math.min(level.frameList.length, Math.max(0, activeFrameIndex.value));
+  const startIndex = Math.min(level.frameList.length, Math.max(0, activeFrameIndex.value) + (config.mode === 'after' ? 1 : 0));
   if (!generatedFrames.every((_frame, offset) => canApplyColorOccupancy(
-    result.config?.mode === 'merge' ? level.frameList[startIndex + offset]?.matrix : [],
+    config.mode === 'merge' ? level.frameList[startIndex + offset]?.matrix : [],
     applied.frameList[startIndex + offset]?.matrix,
   ))) return;
-  applied.frameList.forEach((frame, index) => {
-    frame.matrix = (frame.matrix || []).map(object => normalizeMatrixObject(object, frame, index));
-  });
+  // A no-op must preserve selection and the existing redo branch as well.
+  if (JSON.stringify(level.frameList) === JSON.stringify(applied.frameList)) return;
+  const impact = getEffectWriteImpact(level.frameList.length, activeFrameIndex.value, generatedFrames.length, config.mode);
+  const modeKey = { insert: 'insert', after: 'insertAfter', overwrite: 'overwrite', merge: 'merge' }[config.mode];
+  if (!confirmWithRendererFocus(t('effect.confirmImpact', {
+    ...impact, level: activeLevelIndex.value + 1, mode: t(`effect.${modeKey}`),
+  }))) return;
+  const before = captureEffectHistorySnapshot();
   level.frameList = applied.frameList;
   activeFrameIndex.value = applied.selectedFrameIndex;
   resetMatrixFrameCache();
-  clearRgbEditHistory();
   syncSelectedObject();
+  if (rgbEditHistory.commit(before, captureEffectHistorySnapshot(), { action: 'effect' })) {
+    rgbHistoryRevision.value += 1;
+  }
   scheduleMatrixCacheWarmup(activeFrameIndex.value);
   effectDialogOpen.value = false;
   statusMessage.value = t("effect.applied");
@@ -1675,6 +1696,22 @@ function cloneRgbMatrix(matrix) {
   }));
 }
 
+function cloneEffectFrameList(frameList) {
+  // JSON detaches Vue proxies and preserves all persisted frame/object fields,
+  // while excluding non-enumerable matrix cache versions.
+  return JSON.parse(JSON.stringify(toRaw(frameList)));
+}
+
+function captureEffectHistorySnapshot() {
+  return {
+    ...captureRgbHistorySnapshot([]),
+    frameLists: [{
+      levelIndex: activeLevelIndex.value,
+      frameList: cloneEffectFrameList(activeLevel.value.frameList),
+    }],
+  };
+}
+
 function runRgbEdit(targets, action, mutation, { recenter = true } = {}) {
   const before = captureRgbHistorySnapshot(targets);
   const selection = { mode: selectionMode.value, ids: [...mergeSelectionIds.value] };
@@ -1730,6 +1767,10 @@ function redoRgbEdit() {
 }
 
 function restoreRgbHistorySnapshot(snapshot) {
+  for (const item of snapshot?.frameLists || []) {
+    const level = document.value?.levels?.[item.levelIndex];
+    if (level) level.frameList = cloneEffectFrameList(item.frameList);
+  }
   for (const item of snapshot?.matrices || []) {
     const frame = document.value?.levels?.[item.levelIndex]?.frameList?.[item.frameIndex];
     if (frame) {

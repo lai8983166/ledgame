@@ -374,9 +374,12 @@ onBeforeUnmount(() => {
         <section class="game-effect-preview-section">
           <div class="game-effect-section-head">
             <h3>{{ t("effect.preview") }}</h3>
-            <span class="game-effect-grid-size">
-              {{ previewFrames.length ? t("effect.frameProgress", { current: previewFrameIndex + 1, total: previewFrames.length }) : t("effect.noPreview") }}
-            </span>
+            <div class="game-effect-preview-meta">
+              <span class="game-effect-grid-size">
+                {{ previewFrames.length ? t("effect.frameProgress", { current: previewFrameIndex + 1, total: previewFrames.length }) : t("effect.noPreview") }}
+              </span>
+              <span v-if="previewFrames.length" class="game-effect-generated-count">{{ t('effect.generatedCount', { count: previewFrames.length }) }}</span>
+            </div>
           </div>
           <div class="game-effect-preview-stage">
             <div class="game-effect-preview-grid" :style="previewGridStyle" role="img" :aria-label="t('effect.preview')">
@@ -453,6 +456,9 @@ onBeforeUnmount(() => {
 .game-effect-help { color: var(--ui-muted); font-size: 12px; }
 
 .game-effect-header .game-effect-target { color: var(--ui-accent); font-weight: 700; }
+
+.game-effect-preview-meta { display:flex; flex-wrap:wrap; justify-content:flex-end; align-items:center; gap:6px 12px; min-width:0; }
+.game-effect-generated-count { color:var(--ui-accent); font-size:12px; font-weight:700; }
 
 .game-effect-body {
   display: grid;
