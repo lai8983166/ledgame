@@ -13,7 +13,7 @@ test('repeated app.quit cannot bypass pending backend cleanup',async()=>{
   const source=main.slice(start,main.indexOf('\nasync function releaseElc408LogCapture',start));
   let handler,release,stopped=0,quit=0,prevented=0;
   const context={app:{on:(_name,fn)=>{handler=fn},quit:()=>quit++},quitCleanupStarted:false,quitCleanupFinished:false,
-    mainCloseApproved:true,mainWindow:{isDestroyed:()=>false},startupAbortController:{abort:()=>{}},
+    mainCloseApproved:true,activationConfirmed:true,mainWindow:{isDestroyed:()=>false},startupAbortController:{abort:()=>{}},
     backendReadiness:{get:()=>({status:'ready'}),fail:()=>{}},splashLifecycle:{close:()=>{}},
     stopRuntimeStateStream:()=>{},stopFrameServer:()=>{},stopEmbeddedBackend:()=>stopped++,
     releaseElc408LogCapture:()=>new Promise(resolve=>{release=resolve}),setTimeout:()=>{},

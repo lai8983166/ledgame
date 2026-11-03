@@ -18,7 +18,8 @@ test("backend readiness uses a successful API endpoint instead of the static roo
     mainSource.indexOf("async function waitForBackend"),
     mainSource.indexOf("async function startEmbeddedBackend"),
   );
-  assert.match(waitForBackend, /\/engine\/demo\/state/);
+  assert.match(waitForBackend, /\/dev\/ping/);
+  assert.match(waitForBackend, /data === 'pong'/);
   assert.match(waitForBackend, /response\.ok/);
   assert.doesNotMatch(waitForBackend, /fetch\(baseUrl\)/);
 });

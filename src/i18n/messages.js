@@ -4,6 +4,7 @@ import { kioskMessages } from "./kiosk-messages.js";
 import { rankMessages } from "./rank-messages.js";
 import { generatedTranslations } from "./generated-translations.js";
 import { effectImpactCatalog } from "./effect-impact-messages.js";
+import { activationCatalog } from './activation-messages.js';
 
 function deepMergeMessages(base, addition) {
   const result = { ...base };
@@ -1365,6 +1366,22 @@ const windowControlCopy = {
   "ro-RO": { minimize: "Minimizare", maximize: "Maximizare", close: "Închidere" },
   "ar-SA": { minimize: "تصغير", maximize: "تكبير", close: "إغلاق" },
 };
+const wiringFileLabels = {
+  'zh-CN': ['导出布线', '导入布线', '导入布线的尺寸与当前游戏不匹配。'],
+  'en-US': ['Export wiring', 'Import wiring', 'The imported wiring dimensions do not match the current game.'],
+  'es-ES': ['Exportar cableado', 'Importar cableado', 'Las dimensiones del cableado importado no coinciden con el juego actual.'],
+  'pt-PT': ['Exportar cablagem', 'Importar cablagem', 'As dimensões da cablagem importada não correspondem ao jogo atual.'],
+  'fr-FR': ['Exporter le câblage', 'Importer le câblage', 'Les dimensions du câblage importé ne correspondent pas au jeu actuel.'],
+  'de-DE': ['Verkabelung exportieren', 'Verkabelung importieren', 'Die Abmessungen der importierten Verkabelung passen nicht zum aktuellen Spiel.'],
+  'pl-PL': ['Eksportuj okablowanie', 'Importuj okablowanie', 'Wymiary importowanego okablowania nie pasują do bieżącej gry.'],
+  'ru-RU': ['Экспорт разводки', 'Импорт разводки', 'Размеры импортированной разводки не соответствуют текущей игре.'],
+  'vi-VN': ['Xuất sơ đồ dây', 'Nhập sơ đồ dây', 'Kích thước sơ đồ dây đã nhập không khớp với trò chơi hiện tại.'],
+  'it-IT': ['Esporta cablaggio', 'Importa cablaggio', 'Le dimensioni del cablaggio importato non corrispondono al gioco corrente.'],
+  'cs-CZ': ['Exportovat zapojení', 'Importovat zapojení', 'Rozměry importovaného zapojení neodpovídají aktuální hře.'],
+  'ko-KR': ['배선 내보내기', '배선 가져오기', '가져온 배선의 크기가 현재 게임과 일치하지 않습니다.'],
+  'ro-RO': ['Exportă cablajul', 'Importă cablajul', 'Dimensiunile cablajului importat nu corespund jocului curent.'],
+  'ar-SA': ['تصدير التوصيلات', 'استيراد التوصيلات', 'أبعاد التوصيلات المستوردة لا تتطابق مع اللعبة الحالية.'],
+};
 for (const locale of canonicalLocales) {
   mergedMessages[locale] = mergeCatalog(mergedMessages[locale] || {}, { windowControls: windowControlCopy[locale] });
   if (languageCopy[locale]) {
@@ -1572,7 +1589,10 @@ for (const [locale, overwrite] of Object.entries(effectOverwriteCopy)) {
 
 for (const locale of canonicalLocales) {
   mergedMessages[locale] = mergeCatalog(mergedMessages[locale], feedback23Catalog(locale));
+  const [exportLabel, importLabel, importSizeMismatch] = wiringFileLabels[locale];
+  mergedMessages[locale].gameWiring = { ...mergedMessages[locale].gameWiring, export: exportLabel, import: importLabel, importSizeMismatch };
   mergedMessages[locale] = mergeCatalog(mergedMessages[locale], { effect: effectImpactCatalog(locale) });
+  mergedMessages[locale] = mergeCatalog(mergedMessages[locale], { activation: activationCatalog(locale) });
 }
 
 export const authoredMessages = Object.fromEntries(

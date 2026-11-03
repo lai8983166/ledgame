@@ -17,6 +17,7 @@ import ApplicationSettingsView from "./views/ApplicationSettingsView.vue";
 import SecondaryDisplayView from "./views/SecondaryDisplayView.vue";
 import SecondaryDisplayPickerDialog from "./components/SecondaryDisplayPickerDialog.vue";
 import LanguageSelectionDialog from "./components/LanguageSelectionDialog.vue";
+import GameActivationDialog from './components/GameActivationDialog.vue';
 import EditorLeaveDialog from './components/EditorLeaveDialog.vue';
 import { resolveEditorDeparture } from './lib/editorLeaveGuard.js';
 
@@ -41,6 +42,15 @@ const gameButtonRef = ref(null);
 const gameMenuRef = ref(null);
 const languageDialogOpen = ref(false);
 const languageButtonRef = ref(null);
+const activationStatus = ref(null);
+const activationDialogOpen = ref(false);
+const workspaceReady = ref(false);
+const activationStartupError = ref('');
+const workspaceAccessible = computed(() => activationStatus.value?.activated === true && workspaceReady.value);
+let initializationPromise = null;
+let disposed = false;
+let activationReturnTarget = null;
+let removeActivationListener = null;
 const selectedEditorGame = ref(null);
 const editorDebugActive = computed(() => activeView.value === 'game-debug');
 const debugWorkspaceRef = ref(null);
@@ -127,51 +137,62 @@ const runtimeStatusItems = computed(() => {
 });
 
 onMounted(async () => {
-  if (isTouchWindow || isSecondaryWindow) {
-    return;
-  }
   removeCloseRequestListener = api?.onCloseRequested?.(async ({ requestId }) => {
     let allowed = false;
-    try { allowed = await leaveCurrentWorkspace(); }
+    try { allowed = !workspaceAccessible.value || await leaveCurrentWorkspace(); }
     finally { api.respondToClose?.(requestId, allowed); }
   });
-  removeEngineStateListener = api?.onEngineState?.((state) => {
-    applyState(state);
-  });
-
-  if (isDebugWindow) {
-    removeLedFrameListener = api?.onLedFrame?.((frame) => {
-      frameState.value = decodeFrame(frame);
-    });
-    const latestFrame = await api?.latestFrame?.();
-    if (latestFrame) {
-      frameState.value = decodeFrame(latestFrame);
-    }
-  }
-
-  attachHelpMenuListeners();
-  if (window.appSettings?.get) {
-    const settings = await window.appSettings.get();
-    applyApplicationSettings(settings);
-    await loadApplicationIcon();
-    removeApplicationSettingsListener = window.appSettings.onChanged?.((settings) => {
-      applyApplicationSettings(settings);
-      void loadApplicationIcon();
-    }) || null;
-  }
-  removeSecondaryDisplayListener =
-    window.secondaryDisplay?.onChanged?.((state) => applySecondaryDisplayState(state)) || null;
-  await Promise.all([refreshState(), refreshSecondaryDisplayState()]);
+  removeActivationListener = api?.onActivationChanged?.(applyActivationStatus) || null;
+  await refreshActivationStatus();
 });
+
+function initializeWorkspace() {
+  if (workspaceReady.value || disposed) return;
+  if (initializationPromise) return initializationPromise;
+  activationStartupError.value = '';
+  initializationPromise = (async () => {
+    try {
+      if (isTouchWindow || isSecondaryWindow) {
+        workspaceReady.value = true;
+        return;
+      }
+      const [settings, state, secondaryState, latestFrame] = await Promise.all([
+        window.appSettings?.get?.(), api?.state?.(), window.secondaryDisplay?.list?.(),
+        isDebugWindow ? api?.latestFrame?.() : undefined,
+      ]);
+      if (disposed || activationStatus.value?.activated !== true) return;
+      applyApplicationSettings(settings);
+      applyState(state?.data ?? state);
+      applySecondaryDisplayState(secondaryState);
+      if (latestFrame) frameState.value = decodeFrame(latestFrame);
+      await loadApplicationIcon();
+      if (disposed || activationStatus.value?.activated !== true) return;
+      removeEngineStateListener = api?.onEngineState?.(applyState) || null;
+      if (isDebugWindow) removeLedFrameListener = api?.onLedFrame?.((frame) => { frameState.value = decodeFrame(frame); }) || null;
+      attachHelpMenuListeners();
+      removeApplicationSettingsListener = window.appSettings?.onChanged?.((value) => {
+        applyApplicationSettings(value);
+        void loadApplicationIcon();
+      }) || null;
+      removeSecondaryDisplayListener = window.secondaryDisplay?.onChanged?.(applySecondaryDisplayState) || null;
+      workspaceReady.value = true;
+    } catch (error) {
+      activationStartupError.value = error?.message || t('common.operationFailed');
+    } finally { initializationPromise = null; }
+  })();
+  return initializationPromise;
+}
 const runtimeMode = computed(() => String(gameRuntimeState.value?.runtimeMode || "PRODUCTION"));
 
 onUnmounted(() => {
+  disposed = true;
   removeCloseRequestListener?.();
   resolveLeaveChoice?.('stay');
   removeLedFrameListener?.();
   removeEngineStateListener?.();
   removeSecondaryDisplayListener?.();
   removeApplicationSettingsListener?.();
+  removeActivationListener?.();
   removeHelpMenuListeners?.();
   hoverCell.value = null;
 });
@@ -360,6 +381,7 @@ function openDebugPanel() {
 }
 
 async function enterGameFlow() {
+  if (!await ensureActivated()) return;
   if (!await leaveCurrentWorkspace()) return;
   if (!api?.enterGameFlow) {
     errorMessage.value = t("debug.entryApiUnavailable");
@@ -370,6 +392,7 @@ async function enterGameFlow() {
 
 async function openGameDebug(game) {
   if (navigationBusy.value || busyAction.value) return;
+  if (!await ensureActivated()) return;
   if (!await leaveCurrentWorkspace()) return;
   busyAction.value = 'game-debug'; secondaryErrorMessage.value = '';
   try {
@@ -411,6 +434,49 @@ async function selectGameSection(value) {
 function toggleGameMenu() {
   closeHelpMenu(); closeSecondaryMenu();
   gameMenuOpen.value = !gameMenuOpen.value;
+}
+
+function applyActivationStatus(status) {
+  if (disposed) return;
+  activationStatus.value = status && typeof status.activated === 'boolean'
+    ? status : { activated: false, machineCode: '' };
+  if (activationStatus.value.activated) void initializeWorkspace();
+}
+
+async function refreshActivationStatus(showIfInactive = false) {
+  try { applyActivationStatus((await api?.activationStatus?.())?.data); }
+  catch (_error) { applyActivationStatus(null); }
+  if (showIfInactive && !activationStatus.value.activated) openActivationDialog();
+  return activationStatus.value?.activated === true;
+}
+
+function openActivationDialog() {
+  closeHelpMenu();
+  activationReturnTarget = document.activeElement;
+  activationDialogOpen.value = true;
+}
+
+async function closeActivationDialog() {
+  if (activationStatus.value?.activated !== true) {
+    await api?.exitUnactivated?.();
+    return;
+  }
+  if (!workspaceReady.value) { await api?.closeWindow?.(); return; }
+  activationDialogOpen.value = false;
+  await nextTick();
+  const target = activationReturnTarget?.isConnected ? activationReturnTarget : helpButtonRef.value;
+  target?.focus?.({ preventScroll: true });
+}
+
+async function ensureActivated() {
+  if (!api?.activationStatus) {
+    applyActivationStatus(null);
+    openActivationDialog();
+    return false;
+  }
+  if (await refreshActivationStatus()) return true;
+  openActivationDialog();
+  return false;
 }
 
 async function closeLanguageDialog() {
@@ -656,7 +722,18 @@ function formatRuntimeValue(value, fallback = "-") {
 </script>
 
 <template>
-  <LedGameTouchView v-if="isTouchWindow" />
+  <main v-if="!workspaceAccessible" class="app-shell" :class="{ 'app-shell--custom-titlebar': api?.customTitleBarEnabled }" data-testid="activation-gate">
+    <div v-if="api?.customTitleBarEnabled" class="window-titlebar" data-testid="window-titlebar">
+      <span class="window-titlebar-drag-region"><span class="window-titlebar-icon window-titlebar-icon--fallback" aria-hidden="true">◆</span><span class="window-titlebar-title">{{ applicationTitle }}</span></span>
+      <span class="window-titlebar-controls">
+        <button type="button" class="window-titlebar-control" :aria-label="t('windowControls.minimize')" @click="api.minimizeWindow?.()">−</button>
+        <button type="button" class="window-titlebar-control" :aria-label="t('windowControls.maximize')" @click="api.toggleMaximizeWindow?.()">□</button>
+        <button type="button" class="window-titlebar-control window-titlebar-control--close" :aria-label="t('windowControls.close')" @click="closeActivationDialog">×</button>
+      </span>
+    </div>
+  </main>
+
+  <LedGameTouchView v-else-if="isTouchWindow" />
 
   <SecondaryDisplayView v-else-if="isSecondaryWindow" />
 
@@ -822,6 +899,9 @@ function formatRuntimeValue(value, fallback = "-") {
             class="nav-help-menu"
             role="menu"
           >
+            <button class="nav-help-item" type="button" role="menuitem" @click="openActivationDialog">
+              {{ t('activation.title') }} · {{ activationStatus?.activated ? t('activation.activated') : t('activation.inactive') }}
+            </button>
             <button
               class="nav-help-item"
               type="button"
@@ -929,4 +1009,5 @@ function formatRuntimeValue(value, fallback = "-") {
       @state="applySecondaryDisplayState"
     />
   </main>
+  <GameActivationDialog v-if="!workspaceAccessible || activationDialogOpen" :status="activationStatus" :startup-error="activationStartupError" @status="applyActivationStatus" @close="closeActivationDialog" />
 </template>

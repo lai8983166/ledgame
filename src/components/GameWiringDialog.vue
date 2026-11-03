@@ -32,7 +32,7 @@ onBeforeUnmount(()=>{mounted=false;previousFocus?.focus?.();});
       <p v-if="fallback">{{ t('gameWiring.newDraft') }}</p>
       <p v-if="error" class="error-line" role="alert">{{ error }}</p>
       <div class="game-wiring-content" :class="{saving}">
-        <Elc408WiringPanel v-if="draft" :initial-document="draft" game-scoped :saving="saving" @save="emit('save',$event)" @save-error="validationError = $event" />
+        <Elc408WiringPanel v-if="draft" :initial-document="draft" game-scoped :saving="saving" @save="emit('save',$event)" @save-error="validationError = $event" @import="fallback = false" />
         <p v-else>{{ t('common.loading') }}</p>
       </div>
     </section>

@@ -23,6 +23,9 @@ await context.addInitScript(()=>{
     frame(frame){lastFrame=frame;frameListeners.forEach(f=>f(frame));},listeners(){return [stateListeners.length,frameListeners.length];}};
   window.appLanguage={get:async()=>'zh-CN',set:async v=>v,onChanged:()=>()=>{}};
   window.ledGame={
+    activationStatus: async () => ({ data: { activated: true, machineCode: 'UI-FIXTURE' } }),
+    importFrameJson: async payload => { window.fixture.fileRequests.push(['import',payload]);return structuredClone(window.fixture.wiringImport); },
+    exportFrameJson: async payload => { window.fixture.fileRequests.push(['export',payload]);return {canceled:false,filePath:'isolated/wiring.json'}; },
     prepareEditorDebugHardware:async()=>{window.fixture.requests.push(['hardware']);if(window.fixture.deferHardware)await new Promise(resolve=>window.fixture.resolveHardware=resolve);if(state.engineState==='STOPPED'){state={engineState:'IDLE',queueSummary:{waiting:[]}};stateListeners.forEach(f=>f(clone(state)));}if(window.fixture.hardwareError)throw Error(window.fixture.hardwareError);return {data:{controllerCount:1}};},
     latestFrame:async()=>clone(lastFrame),
     gameState:async()=>ret(),onEngineState:f=>{stateListeners.push(f);return()=>{stateListeners=stateListeners.filter(x=>x!==f);};},
@@ -60,6 +63,32 @@ try{
     const events=await page.evaluate(()=>window.componentEvents);assert.equal(events[0][0],'save');assert.equal(events[0][1].runtimeEnabled,true);assert.deepEqual(events[0][1].lines,[[[0,0],[1,0]],[]]);
     await button('取消').click();assert.equal((await page.evaluate(()=>window.componentEvents)).at(-1)[0],'cancel');
     await mount('GameWiringDialog',{width:8,height:8});await button('保存此游戏布线').waitFor();await button('保存此游戏布线').click();assert.deepEqual((await page.evaluate(()=>window.componentEvents))[0][1].lines,[[]]);
+  });
+  await check('布线JSON导入导出保留点位和空通道，导入仅改草稿，取消及非法文件不破坏原布线',async()=>{
+    const wiring={width:3,height:2,mode:'TURN_BACK_COL_PRIORITY',maxPointsPerChannel:2,lines:[[[2,1],[0,0]],[],[[1,0]]]};
+    await page.evaluate(wiring=>{window.fixture.fileRequests=[];window.fixture.wiringImport={content:JSON.stringify(wiring)};},wiring);
+    await mount('GameWiringDialog',{width:3,height:2});await button('导入布线').waitFor();
+    await button('导入布线').click();
+    assert.equal((await page.evaluate(()=>window.componentEvents)).length,0);
+    assert.equal(await page.getByText('全局布线与场地尺寸不匹配，已创建空白草稿。',{exact:true}).count(),0);
+    assert.equal(await page.locator('.elc408-channel-list li').count(),3);
+    await button('导出布线').click();
+    const exported=JSON.parse((await page.evaluate(()=>window.fixture.fileRequests)).at(-1)[1].content);
+    for(const key of ['width','height','mode','maxPointsPerChannel','lines'])assert.deepEqual(exported[key],wiring[key]);
+    assert.equal((await page.evaluate(()=>window.componentEvents)).length,0);
+    const draft=()=>page.locator('.elc408-wiring-panel').evaluate(node=>JSON.parse(JSON.stringify(node.__vueParentComponent.setupState.document)));
+    const before=await draft();
+    await page.evaluate(()=>window.fixture.wiringImport={canceled:true});await button('导入布线').click();assert.deepEqual(await draft(),before);
+    for(const content of ['bad',JSON.stringify({...wiring,lines:{length:1}}),JSON.stringify({...wiring,width:4})]){
+      await page.evaluate(content=>window.fixture.wiringImport={content},content);await button('导入布线').click();
+      assert.match(await page.locator('.elc408-error').innerText(),/布线无效|尺寸与当前游戏不匹配/);assert.deepEqual(await draft(),before);
+    }
+    await button('取消').click();assert.deepEqual((await page.evaluate(()=>window.componentEvents)).map(x=>x[0]),['cancel']);
+    await mount('GameWiringDialog',{width:3,height:2});await button('导入布线').waitFor();
+    await page.evaluate(wiring=>window.fixture.wiringImport={content:JSON.stringify(wiring)},wiring);
+    await button('导入布线').click();await button('保存此游戏布线').click();
+    const saved=(await page.evaluate(()=>window.componentEvents))[0];assert.equal(saved[0],'save');assert.deepEqual(saved[1],exported);
+    await page.screenshot({path:path.join(output,'布线导入导出.png')});
   });
   await check('待机/准备/开始说明显示16x36动画，交接后恢复游戏尺寸且拒绝迟到待机帧',async()=>{
     await page.evaluate(()=>{window.fixture.update({engineState:'STOPPED',queueSummary:{waiting:[]}});window.fixture.hardwareError='ELC408_RUNTIME_DISABLED';window.fixture.frame({width:16,height:36,rgb:Array(16*36*3).fill(40)});});

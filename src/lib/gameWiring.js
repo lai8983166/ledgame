@@ -12,7 +12,7 @@ export function createGameWiringDraft(saved, width, height, global) {
 export function serializeGameWiring(draft) {
   if (!Number.isInteger(draft.width) || draft.width < 1 || !Number.isInteger(draft.height) || draft.height < 1
     || !WIRING_MODES.includes(draft.mode) || !Number.isInteger(draft.maxPointsPerChannel)
-    || draft.maxPointsPerChannel < 1 || draft.maxPointsPerChannel > 170 || !draft.lines?.length) {
+    || draft.maxPointsPerChannel < 1 || draft.maxPointsPerChannel > 170 || !Array.isArray(draft.lines) || !draft.lines.length) {
     throw new Error('gameWiring.invalid');
   }
   const occupied = new Set();
@@ -27,6 +27,18 @@ export function serializeGameWiring(draft) {
   }
   return {runtimeEnabled:true,width:draft.width,height:draft.height,mode:draft.mode,
     maxPointsPerChannel:draft.maxPointsPerChannel,cellSize:20,lines:JSON.parse(JSON.stringify(draft.lines))};
+}
+
+export function parseWiringFile(content, current, gameScoped = true) {
+  let source;
+  try { source = JSON.parse(content.replace(/^\uFEFF/, '')); }
+  catch { throw new Error('gameWiring.invalid'); }
+  if (!source || typeof source !== 'object' || Array.isArray(source)) throw new Error('gameWiring.invalid');
+  const wiring = serializeGameWiring({ ...source, mode: source.mode ?? current.mode });
+  if (gameScoped && (wiring.width !== current.width || wiring.height !== current.height)) {
+    throw new Error('gameWiring.importSizeMismatch');
+  }
+  return { ...wiring, activeChannelIndex: 0 };
 }
 
 export async function saveGameWiring(api, gameId, rank, wiring, liveDocument) {

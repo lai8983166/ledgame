@@ -20,10 +20,10 @@ import {
   extractBackendError,
 } from "../../lib/elc408/elc408ToolsState.js";
 import Elc408WiringCanvas from "./Elc408WiringCanvas.vue";
-import { serializeGameWiring } from "../../lib/gameWiring.js";
+import { parseWiringFile, serializeGameWiring } from "../../lib/gameWiring.js";
 
 const props = defineProps({ initialDocument: {type:Object, default:null}, gameScoped:Boolean, saving:Boolean });
-const emit = defineEmits(["save", "save-error"]);
+const emit = defineEmits(["save", "save-error", "import"]);
 
 const { t } = useI18n({ useScope: "global" });
 const api = window.elc408Tools;
@@ -33,6 +33,30 @@ const errorMessage = ref("");
 const successMessage = ref("");
 const infoMessage = ref(t("elc408.wiring.clickHint"));
 const downloading = ref(false);
+const transferring = ref(false);
+
+async function transferWiring(importing) {
+  if (transferring.value || downloading.value || props.saving) return;
+  transferring.value = true;
+  errorMessage.value = "";
+  successMessage.value = "";
+  try {
+    if (importing) {
+      if (!window.ledGame?.importFrameJson) throw new Error(t('simple.importApiUnavailable'));
+      const result = await window.ledGame.importFrameJson({ title: t('gameWiring.import') });
+      if (result?.canceled) return;
+      const imported = parseWiringFile(result?.content, document, props.gameScoped);
+      Object.assign(document, imported);
+      emit('import');
+    } else {
+      if (!window.ledGame?.exportFrameJson) throw new Error(t('simple.exportApiUnavailable'));
+      const content = JSON.stringify(serializeGameWiring(document), null, 2);
+      await window.ledGame.exportFrameJson({ title: t('gameWiring.export'), defaultFileName: 'wiring.json', content });
+    }
+  } catch (error) {
+    errorMessage.value = error.message?.startsWith('gameWiring.') ? t(error.message) : error.message;
+  } finally { transferring.value = false; }
+}
 
 const channelSummaries = computed(() => summarizeChannels(document));
 
@@ -237,11 +261,15 @@ async function download() {
         <button
           type="button"
           class="primary"
-          :disabled="downloading || saving"
+          :disabled="downloading || transferring || saving"
           @click="download"
         >
-          {{ gameScoped ? t(saving ? 'gameWiring.saving' : 'gameWiring.save') : downloading ? t("elc408.wiring.downloading") : t("elc408.wiring.download") }}
+          {{ gameScoped ? t(saving ? 'gameWiring.saving' : 'gameWiring.save') : downloading ? t("elc408.wiring.downloading") : t("gameWiring.export") }}
         </button>
+      </div>
+      <div class="elc408-actions elc408-file-actions">
+        <button v-if="gameScoped" type="button" :disabled="downloading || transferring || saving" @click="transferWiring(false)">{{ t('gameWiring.export') }}</button>
+        <button type="button" :disabled="downloading || transferring || saving" @click="transferWiring(true)">{{ t('gameWiring.import') }}</button>
       </div>
       <p v-if="successMessage" class="elc408-success">{{ successMessage }}</p>
       <p v-if="errorMessage" class="elc408-error">{{ errorMessage }}</p>
@@ -398,6 +426,7 @@ async function download() {
 .elc408-actions {
   display: flex;
 }
+.elc408-file-actions { gap: 8px; }
 .elc408-actions button {
   flex: 1;
   min-height: 38px;

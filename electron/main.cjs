@@ -6,7 +6,9 @@ const fs = require('node:fs/promises')
 const { gameId: normalizeGameRecordId, exportGameRecord, importGameRecord } = require('./game-transfer.cjs')
 const { createLibraryFolder, importMediaFiles, resolveLibraryFolder } = require('./media-library-import.cjs')
 const { pathToFileURL } = require('node:url')
-const { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, protocol, shell, net: electronNet, screen } = require('electron')
+const { app, BrowserWindow, clipboard, dialog, ipcMain: nativeIpcMain, Menu, nativeImage, protocol, shell, net: electronNet, screen } = require('electron')
+const { registerActivationIpc, createActivationIpcGate } = require('./game-activation.cjs')
+const ipcMain = createActivationIpcGate({ ipcMain: nativeIpcMain, requireActivated: requireGameActivation })
 const {
   appendPreparationWristband,
   debugGameSplitBounds,
@@ -152,6 +154,8 @@ let quitCleanupFinished = false
 let mainCloseApproved = false
 let quitRequestPromise = null
 let mainCloseListening = false
+let activationConfirmed = false
+let activationFeaturesStarted = false
 const startupAbortController = new AbortController()
 const backendReadiness = createBackendReadiness((state) => {
   for (const window of BrowserWindow.getAllWindows()) {
@@ -1113,6 +1117,26 @@ async function backendRequest(pathname, options = {}) {
   return data
 }
 
+async function applyActivationState(state) {
+  activationConfirmed = state?.activated === true
+  if (!activationConfirmed) {
+    activationFeaturesStarted = false
+    stopRuntimeStateStream()
+    stopFrameServer()
+    return
+  }
+  if (!activationFeaturesStarted && !quitCleanupStarted) {
+    activationFeaturesStarted = true
+    startFrameServer()
+    startRuntimeStateStream()
+  }
+}
+
+async function requireGameActivation() {
+  if (!activationConfirmed) await applyActivationState((await backendRequest('/activation'))?.data)
+  if (!activationConfirmed) throw new Error('游戏端尚未激活，请先在本机完成激活')
+}
+
 function getResourcesPath() {
   return app.isPackaged ? process.resourcesPath : path.resolve(__dirname, '..', 'build-resources')
 }
@@ -1237,8 +1261,8 @@ async function waitForBackend(baseUrl, timeoutMs = 30000) {
         startupAbortController.signal,
         AbortSignal.timeout(Math.min(1500, Math.max(1, timeoutMs - (Date.now() - startedAt)))),
       ])
-      const response = await fetch(new URL('/engine/demo/state', baseUrl), { signal })
-      if (response.ok) return
+      const response = await fetch(new URL('/dev/ping', baseUrl), { signal })
+      if (response.ok && (await response.json())?.data === 'pong') return
     } catch (_error) {
       startupAbortController.signal.throwIfAborted()
     }
@@ -1299,6 +1323,7 @@ async function startEmbeddedBackend() {
       // Windows termination cannot run Java's shutdown hook: acknowledge commits only after the H2 log is flushed.
       SPRING_DATASOURCE_URL: `jdbc:h2:file:${getUserDatabaseBasePath()};MODE=MySQL;DATABASE_TO_LOWER=TRUE;WRITE_DELAY=0`,
       LED_MEDIA_ROOT: mediaRoot,
+      LED_ACTIVATION_DIRECTORY: path.join(app.getPath('userData'), 'activation'),
       LED_BRIDGE_ENABLED: process.env.LED_BRIDGE_ENABLED || 'false',
       MEMBER_PLATFORM_BASE_URL: `http://${savedApplicationSettings.memberPlatformHost}:${savedApplicationSettings.memberPlatformPort}`,
       LED_ROOM_CONNECTION_ENABLED: process.env.LED_ROOM_CONNECTION_ENABLED ?? 'true',
@@ -1803,6 +1828,7 @@ async function openMediaFolder() {
 
 function registerMediaProtocol() {
   protocol.handle(mediaProtocol, async (request) => {
+    try { await requireGameActivation() } catch { return new Response('Software activation required', { status: 403 }) }
     const requestUrl = new URL(request.url)
     const relativePath = decodeURIComponent(requestUrl.pathname.replace(/^\/+/, ''))
     const resolvedPath = resolveMediaPath(relativePath)
@@ -1818,6 +1844,21 @@ ipcMain.handle('open-debug-panel', () => {
   createDebugWindow()
 })
 ipcMain.handle('backend:status', () => backendReadiness.get())
+registerActivationIpc({
+  ipcMain, backendRequest, clipboard,
+  isMainSender: (event) => Boolean(mainWindow && !mainWindow.isDestroyed() && event.sender === mainWindow.webContents),
+  broadcast: (state) => {
+    for (const window of BrowserWindow.getAllWindows()) {
+      if (!window.isDestroyed()) window.webContents.send('activation-changed', state)
+    }
+  },
+  onStatus: applyActivationState,
+  exitUnactivated: async () => {
+    if (activationConfirmed) return false
+    await requestApplicationQuit()
+    return true
+  },
+})
 ipcMain.on('window:close-listening', (event) => {
   if (mainWindow && !mainWindow.isDestroyed() && event.sender === mainWindow.webContents) {
     mainCloseListening = true
@@ -2448,6 +2489,7 @@ if (layoutDiagnosticsEnabled) {
 
 function registerIdleMediaProtocol() {
   protocol.handle(idleMediaProtocol, async () => {
+    try { await requireGameActivation() } catch { return new Response('Software activation required', { status: 403 }) }
     const settings = await applicationSettings.get()
     const configuredPath = settings.secondaryIdleMediaPath
     if (!isManagedSecondaryIdleMediaPath(configuredPath)) {
@@ -2476,12 +2518,10 @@ app.whenReady()
     registerMediaProtocol()
     registerIdleMediaProtocol()
     createWindow()
-    startFrameServer()
     // Render the management shell while its data requests wait for backend readiness.
     void startEmbeddedBackend().then(() => {
       if (quitCleanupStarted) return
       backendReadiness.complete()
-      startRuntimeStateStream()
     }).catch((error) => {
       if (quitCleanupStarted) return
       appendStartupLog(`Backend startup failed: ${error.message || String(error)}`)
@@ -2543,7 +2583,7 @@ app.on('before-quit', (event) => {
   stopRuntimeStateStream()
   stopFrameServer()
   Promise.race([
-    backendReadiness.get().status === 'ready' ? releaseElc408LogCapture() : Promise.resolve(),
+    activationConfirmed && backendReadiness.get().status === 'ready' ? releaseElc408LogCapture() : Promise.resolve(),
     new Promise((resolve) => setTimeout(resolve, 500)),
   ]).finally(() => {
     stopEmbeddedBackend()

@@ -2,6 +2,7 @@ const childProcess = require('node:child_process')
 const fs = require('node:fs')
 const path = require('node:path')
 const { writeDefaultElc408Files } = require('./elc408-defaults.cjs')
+const { verifyActivationPublicKey } = require('./activation-release-check.cjs')
 
 const frontendRoot = path.resolve(__dirname, '..')
 const backendRoot = path.resolve(process.env.BACKEND_DIR || path.join(frontendRoot, '..', 'ledGame-backend'))
@@ -227,6 +228,7 @@ function main() {
     throw new Error(`Backend project was not found: ${backendRoot}`)
   }
 
+  verifyActivationPublicKey(backendRoot)
   removeDirectory(backendResourceDir)
   buildBackendJar()
   prepareJre()

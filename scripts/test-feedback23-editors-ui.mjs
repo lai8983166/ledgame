@@ -27,6 +27,7 @@ await page.addInitScript(()=>{
   window.appLanguage={get:async()=>'zh-CN',onChanged:()=>()=>{}};
   window.appSettings={get:async()=>({applicationTitle:'客户品牌'}),getIconData:async()=>({dataUrl:'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"><rect width="20" height="20" fill="red"/></svg>'}),onChanged:()=>()=>{}};
   window.ledGame={windowKind:'main',onCloseRequested:cb=>{window.fixture.close=cb;return()=>{};},respondToClose:(id,allowed)=>window.fixture.closeResponses.push({id,allowed}),
+    activationStatus:async()=>({data:{activated:true,machineCode:'UI-FIXTURE'}}),
     state:async()=>({data:{engineState:'IDLE'}}),onEngineState:()=>()=>{},getGameEditor:async()=>({data:structuredClone(simple)}),getRankGameEditor:async()=>({data:structuredClone(rank)}),
     listGames:async()=>({data:[]}),listGameCategories:async()=>({data:[{name:'娱乐挑战'}]}),saveGameEditor:save,saveRankGameEditor:save,validateRankGameEditor:async()=>({data:{valid:true}})};
   window.spiritLibrary={list:async()=>({data:[]})};

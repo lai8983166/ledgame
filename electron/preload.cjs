@@ -85,12 +85,28 @@ function onEngineState(callback) {
 }
 
 const secondaryRuntimeApi = {
+  activationStatus: () => ipcRenderer.invoke('activation:status'),
+  onActivationChanged: (callback) => {
+    const listener = (_event, state) => callback(state)
+    ipcRenderer.on('activation-changed', listener)
+    return () => ipcRenderer.removeListener('activation-changed', listener)
+  },
   windowKind,
   touchGameState: () => ipcRenderer.invoke('game:state'),
   onEngineState,
 }
 
 const fullLedGameApi = {
+  activationStatus: () => ipcRenderer.invoke('activation:status'),
+  activate: (activationCode) => ipcRenderer.invoke('activation:submit', activationCode),
+  copyMachineCode: () => ipcRenderer.invoke('activation:copy-machine'),
+  pasteActivationCode: () => ipcRenderer.invoke('activation:paste-code'),
+  exitUnactivated: () => ipcRenderer.invoke('activation:exit'),
+  onActivationChanged: (callback) => {
+    const listener = (_event, state) => callback(state)
+    ipcRenderer.on('activation-changed', listener)
+    return () => ipcRenderer.removeListener('activation-changed', listener)
+  },
   windowKind,
   customTitleBarEnabled,
   backendStatus: () => ipcRenderer.invoke('backend:status'),

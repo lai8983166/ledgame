@@ -30,6 +30,7 @@ await context.addInitScript(() => {
   const idleState = {data:{engineState:'STOPPED',runtimeMode:'SIMULATION',running:false}};
   window.appLanguage = {get:async()=>localStorage.getItem('ui.locale')||'zh-CN',set:async value=>{if(window.uiTest.failLanguage)throw new Error('UI language save failed');localStorage.setItem('ui.locale',value);return value;},onChanged:()=>()=>{}};
   window.ledGame = {
+    activationStatus: async () => ({ data: { activated: true, machineCode: 'UI-FIXTURE' } }),
     state:async()=>idleState, seedSimpleVariants:async()=>{},seedRankType1:async()=>{},
     listManageableGames:async()=>({data:structuredClone(games)}),listPlayableGames:async()=>({data:structuredClone(games)}),listGameCategories:async()=>({data:structuredClone(categories)}),
     onEngineState:()=>()=>{},enterGameFlow:async()=>{window.uiTest.entered++;return idleState;},

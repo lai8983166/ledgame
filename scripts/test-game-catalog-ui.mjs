@@ -30,6 +30,7 @@ await page.addInitScript(() => {
   const f = window.fixture;
   window.appLanguage = { get: async () => 'zh-CN', onChanged: () => () => {}, set: async v => v };
   window.ledGame = {
+    activationStatus: async () => ({ data: { activated: true, machineCode: 'UI-FIXTURE' } }),
     state: async () => ret(), gameState: async () => ret(), customTitleBarEnabled: true,
     listManageableGames: async () => ({ data: structuredClone(games) }), listGameCategories: async () => ({ data: structuredClone(categories) }),
     getGameEditor: async id => ({ data: structuredClone(games.find(g => g.id === id)) }),
