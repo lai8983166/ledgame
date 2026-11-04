@@ -17,6 +17,17 @@ import {
 } from "../src/fixtures/gameFlowFixtures.js";
 
 const require = createRequire(import.meta.url);
+
+test('intro video follows active runtime state and cannot leak into idle or stopped screens', () => {
+  const introVideo = { id: 'stage-1', assetReference: 'intro/one.mp4', positionMillis: 1250, paused: true };
+  for (const engineState of ['STARTING', 'RUNNING', 'SETTLING', 'PAUSED']) {
+    assert.deepEqual(normalizeRuntimeState({ engineState, introVideo }).introVideo, introVideo);
+  }
+  for (const engineState of ['IDLE', 'PREPARING', 'STOPPED', 'UNKNOWN']) {
+    assert.equal(normalizeRuntimeState({ engineState, introVideo }).introVideo, null);
+  }
+  assert.equal(normalizeRuntimeState({ engineState: 'RUNNING', introVideo: { id: 'x' } }).introVideo, null);
+});
 const {
   detectWindowKind,
   appendPreparationWristband,

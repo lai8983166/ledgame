@@ -5,6 +5,7 @@ import { rankMessages } from "./rank-messages.js";
 import { generatedTranslations } from "./generated-translations.js";
 import { effectImpactCatalog } from "./effect-impact-messages.js";
 import { activationCatalog } from './activation-messages.js';
+import { gameIntroCatalog } from './game-intro-messages.js';
 
 function deepMergeMessages(base, addition) {
   const result = { ...base };
@@ -1593,6 +1594,7 @@ for (const locale of canonicalLocales) {
   mergedMessages[locale].gameWiring = { ...mergedMessages[locale].gameWiring, export: exportLabel, import: importLabel, importSizeMismatch };
   mergedMessages[locale] = mergeCatalog(mergedMessages[locale], { effect: effectImpactCatalog(locale) });
   mergedMessages[locale] = mergeCatalog(mergedMessages[locale], { activation: activationCatalog(locale) });
+  mergedMessages[locale] = mergeCatalog(mergedMessages[locale], { gameIntro: gameIntroCatalog(locale) });
 }
 
 export const authoredMessages = Object.fromEntries(

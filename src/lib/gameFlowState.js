@@ -57,6 +57,20 @@ export function normalizeRuntimeState(value) {
     gameTime: normalizeGameTime(state.gameTime),
     childMode: Boolean(state.childMode),
     gameplay: state.gameplay && typeof state.gameplay === "object" ? { ...state.gameplay } : null,
+    introVideo: ['STARTING', 'RUNNING', 'SETTLING', 'PAUSED'].includes(String(state.engineState).toUpperCase())
+      ? normalizeIntroVideo(state.introVideo) : null,
+  };
+}
+
+export function normalizeIntroVideo(value) {
+  if (!value || typeof value.id !== 'string' || !value.id.trim()
+    || typeof value.assetReference !== 'string' || !value.assetReference.trim()) return null;
+  const position = Number(value.positionMillis);
+  return {
+    id: value.id,
+    assetReference: value.assetReference,
+    positionMillis: Number.isFinite(position) ? Math.max(0, position) : 0,
+    paused: value.paused === true,
   };
 }
 

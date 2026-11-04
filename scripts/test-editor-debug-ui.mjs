@@ -55,11 +55,11 @@ const button=(name)=>page.getByRole('button',{name,exact:true});
 async function check(name,fn){await fn();passed.push(name);console.log('通过：'+name);}
 try{
   await page.goto(`http://127.0.0.1:${server.httpServer.address().port}/tests/ui/catalog-library-harness.html`);await page.waitForFunction(()=>window.mountComponent);
-  await check('复用布线组件：四种模式、通道增删、保存隔离、取消、场地尺寸锁定',async()=>{
+  await check('复用布线组件：四种模式、移除手动通道按钮、保存隔离、取消、场地尺寸锁定',async()=>{
     await mount('GameWiringDialog',{width:16,height:36});await button('保存此游戏布线').waitFor();
     assert.equal(await page.locator('.elc408-wiring-controls fieldset').first().locator('input[type=number]').count(),1);
     for(const label of ['单行','单列','折返行','折返列'])await page.getByText(label,{exact:true}).click();
-    await button('增加通道').click();await button('删除末尾空通道').click();await button('保存此游戏布线').click();
+    assert.equal(await button('增加通道').count(),0);assert.equal(await button('删除末尾空通道').count(),0);await button('保存此游戏布线').click();
     const events=await page.evaluate(()=>window.componentEvents);assert.equal(events[0][0],'save');assert.equal(events[0][1].runtimeEnabled,true);assert.deepEqual(events[0][1].lines,[[[0,0],[1,0]],[]]);
     await button('取消').click();assert.equal((await page.evaluate(()=>window.componentEvents)).at(-1)[0],'cancel');
     await mount('GameWiringDialog',{width:8,height:8});await button('保存此游戏布线').waitFor();await button('保存此游戏布线').click();assert.deepEqual((await page.evaluate(()=>window.componentEvents))[0][1].lines,[[]]);

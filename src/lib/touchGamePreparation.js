@@ -105,6 +105,7 @@ export function normalizeTouchGameDocument(value, fallback = {}) {
     id: finiteNumber(document.id ?? fallback.id),
     name: String(document.name || fallback.name || "Game"),
     description: String(document.description || "").trim(),
+    playIntroVideo: String(document.commonConfig?.playIntroVideo || '').trim(),
     globalTimeLimit: Boolean(document.globalTimeLimit),
     globalTimeLimitValue: positiveInteger(document.globalTimeLimitValue),
     globalLifeLimit: Boolean(document.globalLifeLimit),

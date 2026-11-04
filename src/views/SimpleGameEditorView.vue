@@ -11,6 +11,7 @@ import SimpleMatrixCanvas from "../components/SimpleMatrixCanvas.vue";
 import SimpleLevelPreviewDialog from "../components/SimpleLevelPreviewDialog.vue";
 import GameGlobalConfigDialog from "../components/GameGlobalConfigDialog.vue";
 import MediaPickerDialog from "../components/MediaPickerDialog.vue";
+import MediaResourceButton from "../components/MediaResourceButton.vue";
 import PixelLightLayoutDialog from "../components/PixelLightLayoutDialog.vue";
 import GameEffectDialog from "../components/GameEffectDialog.vue";
 import GameWiringDialog from "../components/GameWiringDialog.vue";
@@ -76,14 +77,15 @@ const statusMessage = ref("");
 const globalConfigOpen = ref(false);
 let initialGlobalConfigOpened = false;
 const levelMediaPicker = ref(null);
-const levelBackgroundMusic = computed(() => activeLevel.value?.option?.bgVoice || '');
+const levelMediaFields = computed(() => [
+  { key: 'bgVoice', id: 'level-background-music', label: t('simple.levelBackgroundMusic'), accept: 'audio' },
+  { key: 'playIntroVideo', id: 'level-gameplay-intro', label: t('gameIntro.gameplayIntro'), accept: 'video' },
+  { key: 'voiceDesc', id: 'level-voice-description', label: t('gameIntro.voiceDescription'), accept: 'audio' },
+]);
 function selectLevelMedia(value) {
-  const level = levelMediaPicker.value;
-  if (level && !busyAction.value && document.value?.levels.includes(level)) level.option.bgVoice = value;
+  const picker = levelMediaPicker.value;
+  if (picker && !busyAction.value && document.value?.levels.includes(picker.level)) picker.level.option[picker.field.key] = value;
   levelMediaPicker.value = null;
-}
-function levelMediaUrl() {
-  return 'led-media://preview/' + levelBackgroundMusic.value.split('/').map(encodeURIComponent).join('/');
 }
 const gameWiringOpen = ref(false);
 const gameWiringSaving = ref(false);
@@ -3686,14 +3688,14 @@ function formatRuntimeSummary(value) {
           </template>
         </section>
         <section v-if="activeLevel" class="editor-level-media">
+          <div v-for="field in levelMediaFields" :key="field.key" class="editor-level-media-field">
+            <label :for="field.id">{{ field.label }}</label>
+            <MediaResourceButton :id="field.id" :value="activeLevel.option[field.key] || ''" :label="field.label" :accept="field.accept"
+              :context-key="activeLevel" :disabled="Boolean(busyAction)" @select="levelMediaPicker = { level: activeLevel, field }" @clear="activeLevel.option[field.key] = ''" />
+          </div>
           <div class="editor-level-media-field">
-            <label for="level-background-music">{{ t('simple.levelBackgroundMusic') }}</label>
-            <div class="editor-level-media-row">
-              <input id="level-background-music" :value="levelBackgroundMusic" :title="levelBackgroundMusic" :placeholder="t('globalConfig.notSelected')" readonly />
-              <button class="soft-button compact-button" type="button" :disabled="Boolean(busyAction)" :aria-label="t('globalConfig.choose') + ' ' + t('simple.levelBackgroundMusic')" @click="levelMediaPicker = activeLevel">{{ t('globalConfig.choose') }}</button>
-              <button class="soft-button compact-button" type="button" :disabled="Boolean(busyAction) || !levelBackgroundMusic" :aria-label="t('globalConfig.clear') + ' ' + t('simple.levelBackgroundMusic')" @click="activeLevel.option.bgVoice = ''">{{ t('globalConfig.clear') }}</button>
-            </div>
-            <audio v-if="levelBackgroundMusic" :key="levelBackgroundMusic" :src="levelMediaUrl()" :aria-label="t('simple.levelBackgroundMusic')" preload="none" controls />
+            <label for="level-game-description">{{ t('gameIntro.gameDescription') }}</label>
+            <textarea id="level-game-description" v-model="activeLevel.option.desc" :disabled="Boolean(busyAction)" rows="3" />
           </div>
         </section>
       </aside>
@@ -3967,7 +3969,7 @@ function formatRuntimeSummary(value) {
       @cancel="globalConfigOpen = false"
       @save="saveGlobalConfig"
     />
-    <MediaPickerDialog v-if="levelMediaPicker" accept="audio" :current-value="levelMediaPicker.option.bgVoice || ''" :title="t('simple.levelBackgroundMusic')" @cancel="levelMediaPicker = null" @select="selectLevelMedia" />
+    <MediaPickerDialog v-if="levelMediaPicker" :accept="levelMediaPicker.field.accept" :current-value="levelMediaPicker.level.option[levelMediaPicker.field.key] || ''" :title="levelMediaPicker.field.label" @cancel="levelMediaPicker = null" @select="selectLevelMedia" />
     <PixelLightLayoutDialog
       v-if="pixelLightLayoutOpen"
       :layout="pixelLightLayoutDraft"
@@ -4021,8 +4023,5 @@ function formatRuntimeSummary(value) {
 .editor-circle-countdown input[type=number]{width:90px;min-width:0}
 .editor-circle-countdown .circle-countdown-toggle input{width:16px;height:16px;margin:0;flex:0 0 16px}
 .editor-level-media-field{display:grid;gap:6px;min-width:0}
-.editor-level-media-row{display:flex;align-items:center;gap:6px;min-width:0}
-.editor-level-media-row input{flex:1;min-width:0;text-overflow:ellipsis}
-.editor-level-media-row button{flex-shrink:0}
-.editor-level-media-field audio{width:100%;height:32px}
+.editor-level-media-field textarea{width:100%;min-width:0;resize:vertical;padding:8px;border:1px solid var(--ui-border);border-radius:6px;background:var(--ui-input);color:var(--ui-text)}
 </style>

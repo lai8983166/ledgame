@@ -3,6 +3,7 @@ import { GAME_FIELD_DIMENSION_MAX, gameFieldDimensionsValid } from '../lib/gameF
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import MediaPickerDialog from "./MediaPickerDialog.vue";
+import MediaResourceButton from './MediaResourceButton.vue';
 import EditorSaveDialog from './EditorSaveDialog.vue';
 import { requiredGlobalConfigFields, requiredEditorFields } from '../lib/editorRequiredFields.js';
 
@@ -66,6 +67,7 @@ const sections = computed(() => {
   {
     title: t("globalConfig.voice"),
     fields: [
+      { label: t('gameIntro.gameplayIntro'), path: 'commonConfig.playIntroVideo', kind: 'media', accept: 'video' },
       { label: t("globalConfig.gameStartVoice"), path: "commonConfig.gameStartAudio", kind: "media", accept: "audio", marked: true },
       { label: t("globalConfig.gameSuccessVoice"), path: "commonConfig.gameEndSuccessAudio", kind: "media", accept: "audio", marked: true },
       { label: t("globalConfig.gameFailureVoice"), path: "commonConfig.gameEndFailAudio", kind: "media", accept: "audio", marked: true },
@@ -268,7 +270,7 @@ onBeforeUnmount(() => {
         <section v-for="section in sections" :key="section.title" class="global-config-section">
           <h3 v-if="!section.hideTitle">{{ section.title }}</h3>
           <div class="global-config-fields" :style="gridStyle(section)">
-            <label
+            <component :is="field.path === 'commonConfig.playIntroVideo' ? 'div' : 'label'"
               v-for="field in section.fields"
               :key="field.path"
               class="global-config-field"
@@ -323,6 +325,9 @@ onBeforeUnmount(() => {
                 <span>{{ t(getPath(field.path) ? "globalConfig.enabled" : "globalConfig.disabled") }}</span>
               </label>
 
+              <MediaResourceButton v-else-if="field.path === 'commonConfig.playIntroVideo'" id="global-gameplay-intro"
+                :value="getPath(field.path) || ''" :label="field.label" accept="video" :context-key="config" :disabled="saving"
+                @select="openPicker(field)" @clear="clearMedia(field)" />
               <template v-else-if="field.kind === 'media'">
                 <div class="global-config-media">
                   <input
@@ -335,7 +340,7 @@ onBeforeUnmount(() => {
                   />
                   <button class="soft-button compact-button" type="button" :disabled="saving" @click="openPicker(field)">{{ t("globalConfig.choose") }}</button>
                   <button
-                    v-if="field.accept === 'audio'"
+                    v-if="field.accept === 'audio' || field.accept === 'video'"
                     class="soft-button compact-button"
                     type="button"
                     :disabled="saving || !getPath(field.path)"
@@ -359,9 +364,10 @@ onBeforeUnmount(() => {
                   <img v-if="getPath(field.path)" :src="buildMediaPreviewUrl(getPath(field.path))" :alt="getPath(field.path)" />
                   <span v-else class="global-config-inline-preview-placeholder">{{ t("globalConfig.notSelected") }}</span>
                 </div>
+                <video v-else-if="field.accept === 'video' && getPath(field.path)" class="global-config-video-preview" :key="getPath(field.path)" :src="buildMediaPreviewUrl(getPath(field.path))" :aria-label="field.label" preload="none" controls playsinline />
               </template>
               <small v-if="field.path === 'globalLifeLimitValue' && lifeError" class="global-config-error">{{ t('globalConfig.lifePositive') }}</small>
-            </label>
+            </component>
           </div>
         </section>
       </div>
@@ -537,6 +543,7 @@ onBeforeUnmount(() => {
   gap: 12px;
 }
 
+.global-config-video-preview { display:block; width:100%; max-height:180px; object-fit:contain; background:#000; }
 .global-config-inline-preview {
   width: 150px;
   height: 150px;

@@ -225,6 +225,7 @@ test("Vue UI keeps Han interface copy inside the locale catalog", async () => {
     "i18n/feedback23.js",
     "i18n/effect-impact-messages.js",
     "i18n/activation-messages.js",
+    "i18n/game-intro-messages.js",
     "lib/applicationLanguages.js",
   ]);
   const violations = [];

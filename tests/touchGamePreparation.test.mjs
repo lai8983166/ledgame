@@ -61,12 +61,14 @@ test("Touch game preparation exposes real level indexes and normalized limits", 
       id: 8,
       name: "normal",
       description: "Clear every scoring tile.",
+      commonConfig: { playIntroVideo: 'intro/game.mp4' },
       globalTimeLimit: true,
       globalTimeLimitValue: 900,
       levels: [
         {
           label: "Opening",
           option: {
+            playIntroVideo: 'intro/level.mp4', voiceDesc: 'intro/level.mp3', desc: 'Level instructions',
             timeLimitMode: "CYCLE_SECONDS",
             timeLimitValue: 30,
             lifeLimitMode: "LIMITED",
@@ -79,6 +81,10 @@ test("Touch game preparation exposes real level indexes and normalized limits", 
   });
 
   assert.equal(document.levels[0].index, 0);
+  assert.equal(document.playIntroVideo, 'intro/game.mp4');
+  assert.equal(document.levels[0].option.playIntroVideo, 'intro/level.mp4');
+  assert.equal(document.levels[0].option.voiceDesc, 'intro/level.mp3');
+  assert.equal(document.levels[0].option.desc, 'Level instructions');
   assert.equal(document.levels[0].label, "Opening");
   assert.equal(document.levels[0].option.timeLimitValue, 30);
   assert.equal(document.levels[0].option.lifeLimitValue, 3);

@@ -5,6 +5,14 @@ import {
   validateLevelOption,
 } from "../src/lib/simpleLevelOptions.js";
 
+test('legacy level instructions and media survive normalization and JSON round trip without becoming required', () => {
+  const source={playIntroVideo:'videos/tutorial.mp4',voiceDesc:'audio/instructions.mp3',desc:'Level instructions',bgVoice:'audio/background.mp3'};
+  const normalized=normalizeLevelOption(JSON.parse(JSON.stringify(source)));
+  for(const key of Object.keys(source))assert.equal(normalized[key],source[key]);
+  assert.deepEqual(validateLevelOption(normalized),[]);
+  assert.deepEqual(validateLevelOption(normalizeLevelOption()),[]);
+});
+
 test("normalizes legacy level limits into canonical modes", () => {
   assert.deepEqual(
     normalizeLevelOption({ timeLimit: true, timeLimitValue: "8", lifeLimit: true, lifeLimitValue: "3" }),

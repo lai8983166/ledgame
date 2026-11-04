@@ -25,7 +25,7 @@ await page.addInitScript(() => {
   window.fixture = { status: { activated: false, machineCode: 'GAME-MACHINE-123', reasonCode: 'ACTIVATION_REQUIRED' }, calls: [], failStatus: false, deferStatus: false, failWorkspace: false };
   const business = name => { window.fixture.calls.push(name); if (window.fixture.failWorkspace) throw Error('workspace unavailable'); };
   window.appLanguage = { get: async () => 'zh-CN', onChanged: () => () => {} };
-  window.appSettings = { get: async () => { business('settings'); return {}; }, getIconData: async () => { business('icon'); return {}; }, onChanged: () => () => {} };
+  window.appSettings = { get: async () => { business('settings'); if (window.fixture.deferWorkspace) await new Promise(resolve => { window.fixture.resolveWorkspace = resolve; }); return {}; }, getIconData: async () => { business('icon'); return {}; }, onChanged: () => () => {} };
   window.secondaryDisplay = { list: async () => { business('secondary'); return { displays: [] }; }, onChanged: () => () => {} };
   window.ledGame = {
     state: async () => { business('state'); return { data: { engineState: 'STOPPED' } }; },
@@ -71,11 +71,9 @@ const businessCalls = () => page.evaluate(() => window.fixture.calls.filter(call
 try {
   await page.goto(`http://127.0.0.1:${server.address().port}/tests/ui/catalog-library-harness.html`, { timeout: 60000 });
   await page.waitForFunction(() => window.mountComponent);
-  await check('激活查询等待期间不误报失败、不显示重试或未激活，不挂载业务及调用业务 API', async () => {
+  await check('激活查询等待期间不挂载激活窗口或业务，返回未激活后才显示窗口', async () => {
     await page.evaluate(() => { window.fixture.deferStatus = true; });
-    await mount(); await dialog().waitFor(); await noWorkspace();
-    await expect(dialog().getByRole('alert')).toHaveCount(0);
-    await expect(dialog().getByRole('status')).toHaveCount(0);
+    await mount(); await noWorkspace(); await expect(dialog()).toHaveCount(0);
     await expect(button('重试')).toHaveCount(0);
     assert.deepEqual(await businessCalls(), []);
     await page.screenshot({ path: path.join(output, '启动查询等待无误报.png') });
@@ -140,9 +138,26 @@ try {
     await dialog().waitFor(); await noWorkspace();
     await page.screenshot({ path: path.join(output, '未激活仅激活界面.png') });
   });
-  await check('首次已激活直接初始化一次，主界面不出现激活弹窗', async () => {
-    await page.evaluate(() => { window.fixture.status = { activated: true, machineCode: 'GAME-MACHINE-123' }; window.fixture.calls = []; });
-    await mount(); await expect(page.getByTestId('game-menu-button')).toBeVisible(); await expect(dialog()).toHaveCount(0);
+  await check('已激活启动在查询和工作区初始化整个等待过程都不闪出激活框，只初始化一次', async () => {
+    await page.evaluate(() => {
+      window.fixture.status = { activated: true, machineCode: 'GAME-MACHINE-123' }; window.fixture.calls = [];
+      window.fixture.deferStatus = true; window.fixture.deferWorkspace = true;
+    });
+    await mount(); await noWorkspace(); await expect(dialog()).toHaveCount(0);
+    await page.evaluate(() => {
+      window.fixture.activationFlashed = false;
+      window.fixture.dialogObserver = new MutationObserver(records => {
+        if (records.some(record => [...record.addedNodes].some(node => node.nodeType === 1
+          && (node.matches('.activation-dialog') || node.querySelector('.activation-dialog'))))) window.fixture.activationFlashed = true;
+      });
+      window.fixture.dialogObserver.observe(document.body, { childList: true, subtree: true });
+      window.fixture.deferStatus = false; window.fixture.resolveStatus();
+    });
+    await page.waitForFunction(() => window.fixture.resolveWorkspace);
+    await noWorkspace(); await expect(dialog()).toHaveCount(0);
+    await page.evaluate(() => { window.fixture.deferWorkspace = false; window.fixture.resolveWorkspace(); });
+    await expect(page.getByTestId('game-menu-button')).toBeVisible(); await expect(dialog()).toHaveCount(0);
+    assert.equal(await page.evaluate(() => { window.fixture.dialogObserver.disconnect(); return window.fixture.activationFlashed; }), false);
     const calls = await businessCalls();
     for (const name of ['settings', 'state', 'secondary', 'icon']) assert.equal(calls.filter(call => call === name).length, 1, name);
   });

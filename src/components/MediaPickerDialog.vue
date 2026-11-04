@@ -5,7 +5,7 @@ import { createLatestAsyncValueLoader } from "../lib/latestAsyncTask.js";
 import { filterMediaTree, visibleMediaRows } from "../lib/mediaSelectionTree.js";
 
 const props = defineProps({
-  accept: { type: String, default: "any" }, // 'image' | 'audio' | 'any'
+  accept: { type: String, default: "any" }, // 'image' | 'audio' | 'video' | 'any'
   currentValue: { type: String, default: "" },
   title: { type: String, default: "" },
 });
@@ -48,6 +48,7 @@ const previewLoader = createLatestAsyncValueLoader({
 const acceptLabel = computed(() => {
   if (props.accept === "audio") return t("mediaPicker.audio");
   if (props.accept === "image") return t("mediaPicker.images");
+  if (props.accept === 'video') return t('gameIntro.video');
   return t("mediaPicker.allMedia");
 });
 const dialogTitle = computed(() => props.title || t("mediaPicker.title"));

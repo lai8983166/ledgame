@@ -47,6 +47,8 @@ const activationDialogOpen = ref(false);
 const workspaceReady = ref(false);
 const activationStartupError = ref('');
 const workspaceAccessible = computed(() => activationStatus.value?.activated === true && workspaceReady.value);
+const activationDialogVisible = computed(() => activationDialogOpen.value
+  || activationStatus.value?.activated === false || Boolean(activationStartupError.value));
 let initializationPromise = null;
 let disposed = false;
 let activationReturnTarget = null;
@@ -457,6 +459,7 @@ function openActivationDialog() {
 }
 
 async function closeActivationDialog() {
+  if (!activationStatus.value) { await api?.closeWindow?.(); return; }
   if (activationStatus.value?.activated !== true) {
     await api?.exitUnactivated?.();
     return;
@@ -1009,5 +1012,5 @@ function formatRuntimeValue(value, fallback = "-") {
       @state="applySecondaryDisplayState"
     />
   </main>
-  <GameActivationDialog v-if="!workspaceAccessible || activationDialogOpen" :status="activationStatus" :startup-error="activationStartupError" @status="applyActivationStatus" @close="closeActivationDialog" />
+  <GameActivationDialog v-if="activationDialogVisible" :status="activationStatus" :startup-error="activationStartupError" @status="applyActivationStatus" @close="closeActivationDialog" />
 </template>

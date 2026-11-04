@@ -8,20 +8,22 @@ const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 const {chromium}=createRequire(path.join(root,'../ledGame-platform/package.json'))('playwright');
 const cache=path.join(process.env.LOCALAPPDATA,'ms-playwright'),chrome=(await readdir(cache)).filter(name=>/^chromium-\d+$/.test(name)).sort().at(-1);
 const output=path.join(root,'.build/editor-global-tools');await mkdir(output,{recursive:true});
-const server=await createServer({root,server:{host:'127.0.0.1',port:0}});await server.listen();
+const server=await createServer({root,server:{host:'127.0.0.1',port:0,hmr:false}});await server.listen();
 const browser=await chromium.launch({executablePath:path.join(cache,chrome,'chrome-win64/chrome.exe')});
 const page=await browser.newPage({viewport:{width:1366,height:900}});page.setDefaultTimeout(10000);
 const passed=[],errors=[];page.on('pageerror',error=>errors.push(error.message));
 await page.addInitScript(()=>{
   window.fixture={calls:0,fail:false,doc:{id:7,name:'游戏',description:'原描述',remark:'原备注',type:'default',mode:'[1]',cover:'cover.png',firstCatalog:'1',siteSizeWidth:16,siteSizeHeight:36,
     audio:{scoreSound:'score.mp3',injurySound:'injury.mp3',purpleSound:'double.mp3'},gif:{standby:'idle.gif',gameFailure:'fail.gif',gameOver:'over.gif'},
-    commonConfig:{gameStartAudio:'start.mp3',gameEndSuccessAudio:'success.mp3',gameEndFailAudio:'fail.mp3',levelPassAudio:'pass.mp3',levelRestartAudio:'restart.mp3'},
-    levels:[{label:'关卡',option:{rewardPoints:0,timeLimitMode:'UNLIMITED',lifeLimitMode:'UNLIMITED'},frameList:[{repeatTimes:1,matrix:[]}]}]}};
+    commonConfig:{gameStartAudio:'start.mp3',gameEndSuccessAudio:'success.mp3',gameEndFailAudio:'fail.mp3',levelPassAudio:'pass.mp3',levelRestartAudio:'restart.mp3',playIntroVideo:'legacy-global.mp4'},
+    levels:[{label:'关卡',option:{rewardPoints:0,timeLimitMode:'UNLIMITED',lifeLimitMode:'UNLIMITED',bgVoice:'legacy-bgm.mp3',playIntroVideo:'legacy-level.mp4',voiceDesc:'legacy-voice.mp3',desc:'原关卡说明'},frameList:[{repeatTimes:1,matrix:[]}]}]}};
   const get=async()=>({data:structuredClone(window.fixture.doc)});
   const save=async(id,doc)=>{window.fixture.calls++;if(window.fixture.fail)throw Error('模拟保存失败');window.fixture.doc=structuredClone(doc);return{data:{saved:true,gameId:id}};};
-  window.ledGame={getGameEditor:get,getRankGameEditor:get,saveGameEditor:save,saveRankGameEditor:save,validateRankGameEditor:async()=>({data:{valid:true}}),listGameCategories:async()=>({data:[{id:1,name:'分类'}]})};
+  window.ledGame={getGameEditor:get,getRankGameEditor:get,saveGameEditor:save,saveRankGameEditor:save,validateRankGameEditor:async()=>({data:{valid:true}}),listGameCategories:async()=>({data:[{id:1,name:'分类'}]}),
+    exportFrameJson:async payload=>{window.fixture.exportedLevel=JSON.parse(payload.content);return{canceled:false,filePath:'isolated-level.json'};},
+    importFrameJson:async()=>({canceled:false,content:JSON.stringify(window.fixture.exportedLevel)})};
   window.spiritLibrary={list:async()=>({data:[]})};
-  window.mediaLibrary={list:async()=>({items:[{kind:'file',name:'intro.gif',relativePath:'intro.gif',mediaType:'image'},{kind:'file',name:'voice.mp3',relativePath:'voice.mp3',mediaType:'audio'}]}),getPreviewUrl:async()=>({url:'',mediaType:'image'})};
+  window.mediaLibrary={list:async()=>({items:[{kind:'file',name:'intro.gif',relativePath:'intro.gif',mediaType:'image'},{kind:'file',name:'voice.mp3',relativePath:'voice.mp3',mediaType:'audio'},{kind:'file',name:'intro.mp4',relativePath:'intro.mp4',mediaType:'video'}]}),getPreviewUrl:async path=>({url:'',mediaType:path.endsWith('.mp4')?'video':path.endsWith('.mp3')?'audio':'image'})};
 });
 const mount=async name=>{await page.evaluate(name=>window.mountComponent(name,{gameId:7}),name);await page.waitForFunction(()=>Boolean(window.getComponentSetup()?.document));};
 const button=name=>page.getByRole('button',{name,exact:true});
@@ -37,13 +39,47 @@ async function assertHeadingIcons(){
   for(const icon of icons){assert.ok(icon.ratio>=0.7,`图标占比不足：${JSON.stringify(icon)}`);assert.ok(icon.square<0.5,`按钮应为正方形：${JSON.stringify(icon)}`);assert.ok(icon.dx<0.5&&icon.dy<0.5,`图标未居中：${JSON.stringify(icon)}`);}
 }
 try {
-  await page.goto(`http://127.0.0.1:${server.httpServer.address().port}/tests/ui/catalog-library-harness.html`);await page.waitForFunction(()=>window.mountComponent);await mount('SimpleGameEditorView');
+  await page.goto(`http://127.0.0.1:${server.httpServer.address().port}/tests/ui/catalog-library-harness.html`, { timeout: 30000 });await page.waitForFunction(()=>window.mountComponent);await mount('SimpleGameEditorView');
   await check('Simple首行保存/配置/布线在关卡增删列表之前且无重复入口',async()=>{
     await page.waitForFunction(()=>window.getComponentSetup().editorFitReady);
     const row=page.locator('.editor-heading-row');
     const controls=[];for(const name of ['保存','全局配置','地砖布线','添加关卡']){const control=row.getByRole('button',{name,exact:true});assert.equal(await button(name).count(),1);controls.push(await control.boundingBox());}
     for(let i=1;i<controls.length;i++){assert.ok(controls[i].x>=controls[i-1].x+controls[i-1].width);assert.ok(Math.abs(controls[i].y+controls[i].height/2-controls[0].y-controls[0].height/2)<2);}
     assert.equal(await page.locator('.editor-center .level-sequence-row').count(),0);await assertHeadingIcons();await page.screenshot({path:path.join(output,'Simple首行.png')});
+  });
+  await check('旧说明字段回显，关卡资源顺序、视频筛选、全局取消与独立保存不提交关卡草稿',async()=>{
+    assert.deepEqual(await page.locator('.editor-level-media-field > label').allTextContents(),['关卡背景音乐','玩法介绍','语音说明','游戏说明']);
+    assert.equal(await page.locator('#level-gameplay-intro').locator('..').getAttribute('data-resource'),'legacy-level.mp4');
+    assert.equal(await page.locator('#level-voice-description').locator('..').getAttribute('data-resource'),'legacy-voice.mp3');
+    assert.equal(await page.locator('#level-game-description').inputValue(),'原关卡说明');
+    await button('清除 玩法介绍').click();await button('选择 玩法介绍').click();await page.locator('.media-picker-dialog').waitFor();
+    assert.deepEqual(await page.locator('.media-picker-row').getAttribute('data-path'),'intro.mp4');
+    assert.equal(await page.locator('.media-picker-row').count(),1);
+    await page.locator('.media-picker-row[data-path="intro.mp4"]').dblclick();
+    await button('清除 语音说明').click();await button('选择 语音说明').click();await page.locator('.media-picker-row[data-path="voice.mp3"]').dblclick();
+    await page.locator('#level-game-description').fill('未保存的关卡说明');
+    assert.equal(await page.evaluate(()=>window.fixture.doc.levels[0].option.desc),'原关卡说明');
+    await button('全局配置').click();
+    const globalIntro=page.locator('.global-config-field').filter({has:page.locator('.global-config-label').filter({hasText:/^玩法介绍$/})});
+    assert.equal(await globalIntro.locator('.media-resource').getAttribute('data-resource'),'legacy-global.mp4');
+    await globalIntro.getByRole('button',{name:'清除 玩法介绍',exact:true}).click();await globalIntro.getByRole('button',{name:'选择 玩法介绍',exact:true}).click();await page.locator('.media-picker-row[data-path="intro.mp4"]').dblclick();
+    await page.locator('.global-config-actions').getByRole('button',{name:'取消',exact:true}).click();
+    assert.equal(await page.evaluate(()=>window.fixture.doc.commonConfig.playIntroVideo),'legacy-global.mp4');
+    await button('全局配置').click();await globalIntro.getByRole('button',{name:'清除 玩法介绍',exact:true}).click();await globalIntro.getByRole('button',{name:'选择 玩法介绍',exact:true}).click();await page.locator('.media-picker-row[data-path="intro.mp4"]').dblclick();
+    await page.locator('.global-config-actions .primary').click();await page.locator('.editor-save-dialog').waitFor();await close();
+    assert.equal(await page.evaluate(()=>window.fixture.doc.commonConfig.playIntroVideo),'intro.mp4');
+    assert.equal(await page.evaluate(()=>window.fixture.doc.levels[0].option.desc),'原关卡说明');
+    assert.equal(await page.locator('#level-game-description').inputValue(),'未保存的关卡说明');
+    await button('保存').click();await page.locator('.editor-save-dialog').waitFor();await close();
+    const saved=await page.evaluate(()=>window.fixture.doc.levels[0].option);
+    assert.equal(saved.playIntroVideo,'intro.mp4');assert.equal(saved.voiceDesc,'voice.mp3');assert.equal(saved.desc,'未保存的关卡说明');
+    await button('导出当前关卡').click();
+    assert.deepEqual(await page.evaluate(()=>window.fixture.exportedLevel.option),saved);
+    await page.locator('#level-game-description').fill('导入前临时文字');
+    page.once('dialog',dialog=>dialog.accept());await button('导入替换当前关卡').click();
+    assert.equal(await page.locator('#level-game-description').inputValue(),'未保存的关卡说明');
+    assert.equal(await page.locator('#level-gameplay-intro').locator('..').getAttribute('data-resource'),'intro.mp4');assert.equal(await page.locator('#level-voice-description').locator('..').getAttribute('data-resource'),'voice.mp3');
+    await page.screenshot({path:path.join(output,'关卡说明与玩法介绍.png')});
   });
   await check('游戏级字段仅全局可编辑，保存/取消与关卡草稿隔离',async()=>{
     assert.equal(await page.locator('.editor-left input[type=text]').count(),0);
@@ -78,7 +114,7 @@ try {
       editor.activeFrame.matrix=[0,1,2,3].map(color=>({id:`color-${color}`,x:color,y:0,color,points:[[0,0]]}));
       editor.frames.push({repeatTimes:1,matrix:[]});
     });
-    const expected=['rgb(63, 140, 99)','rgb(79, 120, 187)','rgb(188, 85, 90)','rgb(166, 92, 145)'];
+    const expected=['rgb(0, 255, 0)','rgb(64, 128, 255)','rgb(255, 64, 64)','rgb(255, 0, 255)'];
     const waitForColors=()=>page.waitForFunction(expected=>[...document.querySelectorAll('.color-copy-button svg rect:first-child')].every((node,index)=>getComputedStyle(node).fill===expected[index]),expected);
     await waitForColors();
     const controls=page.locator('.color-copy-button');

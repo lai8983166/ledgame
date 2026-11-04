@@ -13,6 +13,7 @@ import LanguageSelectionPanel from "../components/LanguageSelectionPanel.vue";
 import IdlePromptDisplay from "../components/IdlePromptDisplay.vue";
 import TouchMatrixCanvas from "../components/TouchMatrixCanvas.vue";
 import TouchCategoryRail from "../components/TouchCategoryRail.vue";
+import GameplayIntroVideo from '../components/GameplayIntroVideo.vue';
 import {
   extractErrorMessage,
   hasTermination,
@@ -100,6 +101,18 @@ const queueUid = ref("");
 const queueGameId = ref(null);
 const queueSubmitting = ref(false);
 const gamePreparationStep = ref("players");
+const manualIntroVideo = ref('');
+let introReturnFocus = null;
+function openIntroVideo(asset) {
+  if (!asset || busyAction.value) return;
+  introReturnFocus = document.activeElement;
+  manualIntroVideo.value = asset;
+  void nextTick(() => document.querySelector('[data-testid="touch-intro-dialog"] button')?.focus());
+}
+function closeIntroVideo() {
+  manualIntroVideo.value = '';
+  if (introReturnFocus?.isConnected) void nextTick(() => introReturnFocus?.focus({ preventScroll: true }));
+}
 const touchPreparationTimeoutSeconds = ref(TOUCH_PREPARATION_STEP_TIMEOUT_SECONDS);
 const preparationStepSecondsRemaining = ref(
   TOUCH_PREPARATION_STEP_TIMEOUT_SECONDS,
@@ -654,6 +667,10 @@ function applyRuntimeState(value) {
   }
 }
 
+watch(() => [view.value, preparation.value?.sessionId, gameDocument.value?.id, gamePreparationStep.value], () => {
+  manualIntroVideo.value = '';
+});
+
 async function runAction(name, action, { refreshOnError = false } = {}) {
   if (busyAction.value) return null;
   busyAction.value = name;
@@ -1076,12 +1093,14 @@ function rankTouchDocument(game) {
     id: game.id,
     name: game.displayName || game.name,
     description: game.description || "",
+    commonConfig: game.commonConfig,
     globalTimeLimit: Boolean(game.globalTimeLimit),
     globalTimeLimitValue: game.globalTimeLimitValue,
     palette: game.palette,
     levels: (game.levels || []).map((level) => ({
       label: level.label,
       option: {
+        playIntroVideo: level.playIntroVideo,
         timeLimit: true,
         timeLimitMode: "CYCLE_SECONDS",
         timeLimitValue: level.durationSeconds,
@@ -1624,6 +1643,9 @@ async function confirmReturnToIdle() {
         <div class="touch-game-description">
           <strong>{{ t("touch.gameDescription") }} <span>{{ gameDocument?.name || selectedGame?.displayName || selectedGame?.name }}</span></strong>
           <p>{{ gameDocument?.description || t("touch.noGameDescription") }}</p>
+          <button v-if="gameDocument?.playIntroVideo" type="button" class="touch-intro-button"
+            :disabled="Boolean(busyAction)" data-testid="game-intro-open"
+            @click="openIntroVideo(gameDocument.playIntroVideo)">{{ t('gameIntro.gameplayIntro') }}</button>
         </div>
 
         <div class="touch-level-summary">
@@ -1647,9 +1669,8 @@ async function confirmReturnToIdle() {
         <section class="touch-level-picker" :aria-label="t('touch.selectLevelTitle')">
           <h2>{{ t("touch.selectLevelTitle") }}</h2>
           <div class="touch-level-grid">
+            <div v-for="level in gameLevels" :key="level.index" class="touch-level-choice">
             <button
-              v-for="level in gameLevels"
-              :key="level.index"
               :data-testid="`game-level-${level.index}`"
               type="button"
               :class="{ selected: draft.startLevelIndex === level.index }"
@@ -1658,6 +1679,10 @@ async function confirmReturnToIdle() {
             >
               {{ level.index + 1 }}. {{ level.label }}
             </button>
+            <button v-if="level.option.playIntroVideo" type="button" class="touch-level-intro"
+              :data-testid="`level-intro-${level.index}`" :aria-label="t('gameIntro.gameplayIntro') + ' ' + level.label"
+              :title="t('gameIntro.gameplayIntro')" @click="openIntroVideo(level.option.playIntroVideo)">▶</button>
+            </div>
           </div>
         </section>
 
@@ -2202,6 +2227,16 @@ async function confirmReturnToIdle() {
         />
       </section>
     </div>
+    <GameplayIntroVideo v-if="runtimeState.introVideo" class="touch-auto-intro"
+      :key="runtimeState.introVideo.id" :asset-reference="runtimeState.introVideo.assetReference"
+      :playback-id="runtimeState.introVideo.id" :position-millis="runtimeState.introVideo.positionMillis"
+      :paused="runtimeState.introVideo.paused" :aria-label="t('gameIntro.gameplayIntro')" />
+    <div v-if="manualIntroVideo" class="touch-intro-backdrop" @click.self="closeIntroVideo" @keydown.esc.stop="closeIntroVideo">
+      <section class="touch-intro-dialog" role="dialog" aria-modal="true" :aria-label="t('gameIntro.gameplayIntro')" data-testid="touch-intro-dialog">
+        <button type="button" class="touch-intro-close" :aria-label="t('common.close')" @click="closeIntroVideo">×</button>
+        <GameplayIntroVideo :asset-reference="manualIntroVideo" :aria-label="t('gameIntro.gameplayIntro')" @unavailable="closeIntroVideo" />
+      </section>
+    </div>
     <div v-if="hardwareNoticeOpen" class="touch-hardware-backdrop" @click.self="closeHardwareNotice">
       <section ref="hardwareNoticeDialog" class="touch-hardware-dialog" role="dialog" aria-modal="true" :aria-label="t('editorDebug.deviceNotConnected')" data-testid="touch-hardware-notice" @keydown.esc.stop="closeHardwareNotice">
         <p>{{ t('editorDebug.deviceNotConnected') }}</p>
@@ -2212,6 +2247,14 @@ async function confirmReturnToIdle() {
 </template>
 
 <style scoped>
+.touch-auto-intro { position: absolute; inset: 0; z-index: 20; pointer-events: none; }
+.touch-intro-backdrop { position: fixed; inset: 0; z-index: 1050; display: grid; place-items: center; background: #000b; }
+.touch-intro-dialog { position: relative; width: min(1280px, 92vw); height: min(720px, 86vh); background: #000; }
+.touch-intro-close { position: absolute; top: 6px; right: 8px; z-index: 1; width: 44px; height: 44px; border: 1px solid #fff8; color: #fff; background: #000a; font-size: 30px; cursor: pointer; }
+.touch-intro-button { border: 1px solid #75e6ff; color: #fff; background: #164f77; padding: 6px 18px; cursor: pointer; }
+.touch-level-choice { display: flex; min-width: 0; }
+.touch-level-choice > button:first-child { flex: 1; min-width: 0; }
+.touch-level-panel .touch-level-grid .touch-level-intro { flex: none; padding: 4px 10px; }
 .touch-hardware-backdrop{position:fixed;inset:0;z-index:1100;display:grid;place-items:center;background:#0008}
 .touch-hardware-dialog{display:flex;align-items:center;gap:32px;padding:24px 28px;border:1px solid #ddd;border-radius:12px;background:#fff;color:#111;box-shadow:0 12px 48px #0008}
 .touch-hardware-dialog p{margin:0;font-size:24px;font-weight:600}

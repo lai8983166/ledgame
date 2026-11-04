@@ -7,6 +7,7 @@ import {
   SECONDARY_DISPLAY_MODES,
 } from "../lib/secondaryDisplayPresentation.js";
 import IdlePromptDisplay from "../components/IdlePromptDisplay.vue";
+import GameplayIntroVideo from '../components/GameplayIntroVideo.vue';
 import stageSuccessImage from "../assets/secondary-display/stage-success.png";
 import stageFailureImage from "../assets/secondary-display/stage-failure.png";
 import gameSuccessImage from "../assets/secondary-display/game-success.png";
@@ -260,6 +261,10 @@ function displayValue(value) {
       aria-hidden="true"
     ></div>
     <div class="secondary-runtime-grid" aria-hidden="true"></div>
+    <GameplayIntroVideo v-if="runtimeState.introVideo" class="secondary-intro-video"
+      :key="runtimeState.introVideo.id" :asset-reference="runtimeState.introVideo.assetReference"
+      :playback-id="runtimeState.introVideo.id" :position-millis="runtimeState.introVideo.positionMillis"
+      :paused="runtimeState.introVideo.paused" :aria-label="t('gameIntro.gameplayIntro')" />
 
     <section v-if="errorMessage" class="secondary-runtime-center secondary-runtime-error">
       <span>CONNECTION</span>
@@ -395,6 +400,7 @@ function displayValue(value) {
 </template>
 
 <style scoped>
+.secondary-intro-video { position: absolute; inset: 0; z-index: 8; pointer-events: none; }
 .secondary-runtime { --secondary-panel-alpha: 0.94; --secondary-header-alpha: 0.9; --secondary-result-alpha: 0.91; position: relative; width: 100vw; height: 100vh; overflow: hidden; color: #f5f8fb; background: #071019; user-select: none; }
 .secondary-runtime::before { content: ""; position: absolute; inset: 0 0 auto; height: 7px; background: #26b9d6; box-shadow: 0 0 24px rgba(38, 185, 214, 0.5); }
 .secondary-runtime-background { position: absolute; z-index: 0; inset: 0; pointer-events: none; background-position: center; background-repeat: no-repeat; background-size: 100% 100%; opacity: 0.3; }

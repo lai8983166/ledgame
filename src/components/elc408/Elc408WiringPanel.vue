@@ -252,10 +252,6 @@ async function download() {
             </span>
           </li>
         </ul>
-        <div v-if="gameScoped" class="elc408-actions">
-          <button type="button" @click="document.lines.push([])">{{ t('gameWiring.addChannel') }}</button>
-          <button type="button" :disabled="document.lines.length <= 1 || document.lines.at(-1).length > 0" @click="document.lines.pop(); document.activeChannelIndex = Math.min(document.activeChannelIndex, document.lines.length - 1)">{{ t('gameWiring.removeChannel') }}</button>
-        </div>
       </fieldset>
       <div class="elc408-actions">
         <button
