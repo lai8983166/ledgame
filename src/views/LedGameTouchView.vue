@@ -1578,6 +1578,7 @@ async function confirmReturnToIdle() {
               v-for="slot in carouselSlots"
               :key="slot.key"
               :data-testid="`game-carousel-${slot.item.id}`"
+              :data-carousel-offset="slot.offset"
               class="touch-carousel-card"
               :class="{
                 current: slot.offset === 0,
@@ -4135,14 +4136,22 @@ fieldset:disabled {
 .touch-game-panel .touch-wizard-heading{width:100%;}
 .touch-game-panel .touch-wizard-heading h1{font-size:clamp(28px,3.2vw,62px);margin:0;line-height:1.1;color:#e1ffff;}
 .touch-game-panel .touch-carousel-shell{width:100%;min-height:0;height:100%;grid-template-columns:40px minmax(0,1fr) 40px;}
-.touch-game-panel .touch-game-carousel{height:100%;min-height:0;padding:12px 16px;gap:8px;grid-template-columns:1.05fr .9fr .55fr;perspective:1000px;overflow:hidden;}
-.touch-game-panel .touch-carousel-card{max-width:100%;width:min(100%,calc((183 / 308) * min(49vh,400px)));height:auto;aspect-ratio:183 / 308;border-radius:0;clip-path:none;border-color:#844fbc;padding:7px;opacity:.9;}
-.touch-game-panel .touch-carousel-card.current{order:1;transform:scale(.96);filter:drop-shadow(0 0 14px #0af5ff66);border-color:#d866e5;background:#664c9f;animation:touch-current-card-glow 1.8s ease-in-out infinite;}
+.touch-game-panel .touch-game-carousel{position:relative;display:block;height:100%;min-height:0;padding:0;perspective:1100px;overflow:hidden;}
+.touch-game-panel .touch-carousel-card{position:absolute;left:50%;top:50%;max-width:none;width:min(35%,calc((183 / 308) * min(49vh,400px)));height:auto;aspect-ratio:183 / 308;border-radius:6px;clip-path:none;border-color:#844fbc;padding:7px;opacity:1;filter:brightness(.68);z-index:1;transform:translate(-50%,-50%) rotateY(var(--card-angle,0deg)) scale(var(--card-scale,1));transition:left 360ms ease,transform 360ms ease,opacity 360ms ease,filter 360ms ease;}
+.touch-game-panel .touch-carousel-card[data-carousel-offset="-1"]{left:28%;--card-angle:42deg;--card-scale:.86;z-index:3;filter:brightness(.88);}
+.touch-game-panel .touch-carousel-card[data-carousel-offset="1"]{left:72%;--card-angle:-42deg;--card-scale:.86;z-index:3;filter:brightness(.88);}
+.touch-game-panel .touch-carousel-card[data-carousel-offset="-2"]{left:16%;--card-angle:52deg;--card-scale:.72;z-index:2;filter:brightness(.76);}
+.touch-game-panel .touch-carousel-card[data-carousel-offset="2"]{left:84%;--card-angle:-52deg;--card-scale:.72;z-index:2;filter:brightness(.76);}
+.touch-game-panel .touch-carousel-card[data-carousel-offset="-3"]{left:7%;--card-angle:62deg;--card-scale:.60;z-index:1;}
+.touch-game-panel .touch-carousel-card[data-carousel-offset="3"]{left:93%;--card-angle:-62deg;--card-scale:.60;z-index:1;}
+.touch-game-panel .touch-carousel-card.current{z-index:4;opacity:1;--card-angle:0deg;--card-scale:1;filter:drop-shadow(0 0 14px #0af5ff66);border-color:#d866e5;background:#664c9f;animation:touch-current-card-glow 1.8s ease-in-out infinite;}
 @keyframes touch-current-card-glow{0%,100%{border-color:#d866e5;box-shadow:0 0 8px #ee72f466,inset 0 0 8px #e76cf433;}50%{border-color:#b4fbff;box-shadow:0 0 24px #30e9ffcc,inset 0 0 16px #30e9ff66;}}
-@media(prefers-reduced-motion:reduce){.touch-game-panel .touch-carousel-card.current{animation:none;}}
-.touch-game-panel .touch-carousel-card.next{order:2;transform:scale(.88) rotateY(-24deg);}
-.touch-game-panel .touch-carousel-card.previous{order:3;transform:scale(.78) rotateY(-55deg);}
-.touch-game-panel .touch-carousel-card:only-child{grid-column:1 / -1;}
+@media(prefers-reduced-motion:reduce){.touch-game-panel .touch-carousel-card{transition:none;}.touch-game-panel .touch-carousel-card.current{animation:none;}}
+@media(max-width:1100px){
+ .touch-game-panel .touch-carousel-card[data-carousel-offset="-3"],.touch-game-panel .touch-carousel-card[data-carousel-offset="3"]{display:none;}
+ .touch-game-panel .touch-carousel-card[data-carousel-offset="-2"]{left:12%;}
+ .touch-game-panel .touch-carousel-card[data-carousel-offset="2"]{left:88%;}
+}
 .touch-game-panel .touch-carousel-card strong{bottom:8px;font-size:clamp(16px,1.8vw,32px);background:linear-gradient(0deg,#051225ef,#06172950);padding:14px 4px;}
 .touch-game-panel .touch-carousel-arrow{width:40px;height:70px;font-size:68px;color:#3285c9;text-shadow:none;}
 .touch-catalog-panel .touch-wizard-actions{min-height:44px;padding-top:0;gap:16px;}
@@ -4187,8 +4196,8 @@ fieldset:disabled {
 @media(max-width:760px){
  .touch-catalog-layout{grid-template-columns:minmax(0,26%) minmax(0,1fr);gap:12px;padding:72px 12px 12px;}
  .touch-catalog-panel{padding:12px;}
- .touch-game-panel .touch-game-carousel{gap:4px;padding:4px;grid-template-columns:1fr .7fr;}
- .touch-game-panel .touch-carousel-card.previous{display:none;}
+ .touch-game-panel .touch-game-carousel{padding:0;}
+
  .touch-game-panel .touch-carousel-shell{grid-template-columns:26px minmax(0,1fr) 26px;}
  .touch-game-panel .touch-carousel-arrow{width:26px;font-size:48px;}
  .touch-game-panel .touch-wizard-heading h1{font-size:25px;max-width:none;}

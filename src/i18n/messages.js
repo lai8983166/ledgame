@@ -37,7 +37,7 @@ const baseMessages = {
     circleLights: {enabled:"圆灯倒计时",min:"最小秒数",max:"最大秒数",invalid:"请输入整数：1 ≤ 最小秒数 ≤ 最大秒数 ≤ 99",layoutRequired:"需启用并保存符号灯布局才会生效",light:"{wall}圆灯 {index}",top:"上墙",right:"右墙",bottom:"下墙",left:"左墙"},
     management: {
       reading: "正在读取…", changelog: "版本变更记录", about: "软件介绍", gameName: "游戏名称",
-      appearanceSecurity: "应用外观与安全", appTitle: "应用标题", exitPassword: "Touch 界面退出密码",
+      appearanceSecurity: "应用外观与安全", appTitle: "应用标题", exitPassword: "触屏界面退出密码",
       childModeVisible: "儿童模式下可见", childModeVisibleHint: "关闭后，儿童模式开启时不会显示该游戏",
       passwordPlaceholder: "留空表示不修改", passwordHint: "请输入 4 到 12 位数字；保存后不会在界面中回显。",
       chooseIcon: "选择应用图标", defaultIcon: "默认图标", reorder: "调整展示顺序", noSpiritMatch: "没有匹配的精灵",
@@ -1536,23 +1536,23 @@ for (const [locale, [toolSelect, toolBrush, toolEraser, deleteLevelLabel, switch
 }
 
 const objectEditingLabels = {
-  'zh-CN': ['选择对象', '添加', '删除', '单点编辑', '区域编辑'],
-  'en-US': ['Select object', 'Add', 'Delete', 'Point editing', 'Region editing'],
-  'es-ES': ['Seleccionar objeto', 'Añadir', 'Eliminar', 'Editar punto', 'Editar región'],
-  'pt-PT': ['Selecionar objeto', 'Adicionar', 'Eliminar', 'Editar ponto', 'Editar região'],
-  'fr-FR': ['Sélectionner un objet', 'Ajouter', 'Supprimer', 'Modifier un point', 'Modifier une zone'],
-  'de-DE': ['Objekt auswählen', 'Hinzufügen', 'Löschen', 'Punkt bearbeiten', 'Bereich bearbeiten'],
-  'pl-PL': ['Wybierz obiekt', 'Dodaj', 'Usuń', 'Edycja punktu', 'Edycja obszaru'],
-  'ru-RU': ['Выбрать объект', 'Добавить', 'Удалить', 'Редактирование точки', 'Редактирование области'],
-  'vi-VN': ['Chọn đối tượng', 'Thêm', 'Xóa', 'Sửa điểm', 'Sửa vùng'],
-  'it-IT': ['Seleziona oggetto', 'Aggiungi', 'Elimina', 'Modifica punto', 'Modifica area'],
-  'cs-CZ': ['Vybrat objekt', 'Přidat', 'Odstranit', 'Úprava bodu', 'Úprava oblasti'],
-  'ko-KR': ['객체 선택', '추가', '삭제', '점 편집', '영역 편집'],
-  'ro-RO': ['Selectare obiect', 'Adaugă', 'Șterge', 'Editare punct', 'Editare regiune'],
-  'ar-SA': ['تحديد كائن', 'إضافة', 'حذف', 'تحرير نقطة', 'تحرير منطقة'],
+  'zh-CN': ['选择对象', '添加', '删除', '单点编辑', '区域编辑', '重置视图'],
+  'en-US': ['Select object', 'Add', 'Delete', 'Point editing', 'Region editing', 'Reset view'],
+  'es-ES': ['Seleccionar objeto', 'Añadir', 'Eliminar', 'Editar punto', 'Editar región', 'Restablecer vista'],
+  'pt-PT': ['Selecionar objeto', 'Adicionar', 'Eliminar', 'Editar ponto', 'Editar região', 'Repor vista'],
+  'fr-FR': ['Sélectionner un objet', 'Ajouter', 'Supprimer', 'Modifier un point', 'Modifier une zone', 'Réinitialiser la vue'],
+  'de-DE': ['Objekt auswählen', 'Hinzufügen', 'Löschen', 'Punkt bearbeiten', 'Bereich bearbeiten', 'Ansicht zurücksetzen'],
+  'pl-PL': ['Wybierz obiekt', 'Dodaj', 'Usuń', 'Edycja punktu', 'Edycja obszaru', 'Resetuj widok'],
+  'ru-RU': ['Выбрать объект', 'Добавить', 'Удалить', 'Редактирование точки', 'Редактирование области', 'Сбросить вид'],
+  'vi-VN': ['Chọn đối tượng', 'Thêm', 'Xóa', 'Sửa điểm', 'Sửa vùng', 'Đặt lại chế độ xem'],
+  'it-IT': ['Seleziona oggetto', 'Aggiungi', 'Elimina', 'Modifica punto', 'Modifica area', 'Reimposta vista'],
+  'cs-CZ': ['Vybrat objekt', 'Přidat', 'Odstranit', 'Úprava bodu', 'Úprava oblasti', 'Obnovit zobrazení'],
+  'ko-KR': ['객체 선택', '추가', '삭제', '점 편집', '영역 편집', '보기 초기화'],
+  'ro-RO': ['Selectare obiect', 'Adaugă', 'Șterge', 'Editare punct', 'Editare regiune', 'Resetează vizualizarea'],
+  'ar-SA': ['تحديد كائن', 'إضافة', 'حذف', 'تحرير نقطة', 'تحرير منطقة', 'إعادة ضبط العرض'],
 };
-for (const [locale, [toolSelect, toolAdd, toolDelete, pointEditing, regionEditing]] of Object.entries(objectEditingLabels)) {
-  mergedMessages[locale].simple = { ...mergedMessages[locale].simple, toolSelect, toolAdd, toolDelete, pointEditing, regionEditing };
+for (const [locale, [toolSelect, toolAdd, toolDelete, pointEditing, regionEditing, resetView]] of Object.entries(objectEditingLabels)) {
+  mergedMessages[locale].simple = { ...mergedMessages[locale].simple, toolSelect, toolAdd, toolDelete, pointEditing, regionEditing, resetView };
 }
 
 const feedbackCatalogLabels = {
@@ -1595,6 +1595,50 @@ for (const locale of canonicalLocales) {
   mergedMessages[locale] = mergeCatalog(mergedMessages[locale], { effect: effectImpactCatalog(locale) });
   mergedMessages[locale] = mergeCatalog(mergedMessages[locale], { activation: activationCatalog(locale) });
   mergedMessages[locale] = mergeCatalog(mergedMessages[locale], { gameIntro: gameIntroCatalog(locale) });
+}
+
+const navigationTitleLabels = {
+  'zh-CN': '导航名称', 'en-US': 'Navigation name',
+  'es-ES': 'Nombre de navegación', 'pt-PT': 'Nome de navegação',
+  'fr-FR': 'Nom de navigation', 'de-DE': 'Navigationsname',
+  'pl-PL': 'Nazwa nawigacji', 'ru-RU': 'Название навигации',
+  'vi-VN': 'Tên điều hướng', 'it-IT': 'Nome della navigazione',
+  'cs-CZ': 'Název navigace', 'ko-KR': '탐색 이름',
+  'ro-RO': 'Numele navigării', 'ar-SA': 'اسم التنقل',
+};
+for (const [locale, navigationTitle] of Object.entries(navigationTitleLabels)) {
+  mergedMessages[locale].management = { ...mergedMessages[locale].management, navigationTitle };
+}
+
+const frameSizeMismatchLabels = {
+  'zh-CN': '游戏 RGB 尺寸为 {rgb}，当前布线尺寸为 {wiring}，两者不一致，请检查游戏场地和布线配置。',
+  'en-US': 'Game RGB dimensions are {rgb}, but the current wiring dimensions are {wiring}. Check the game field and wiring settings.',
+  'es-ES': 'Las dimensiones RGB del juego son {rgb}, pero las del cableado actual son {wiring}. Comprueba el campo de juego y el cableado.',
+  'pt-PT': 'As dimensões RGB do jogo são {rgb}, mas as da cablagem atual são {wiring}. Verifique o campo de jogo e a cablagem.',
+  'fr-FR': 'Les dimensions RGB du jeu sont {rgb}, mais celles du câblage actuel sont {wiring}. Vérifiez le terrain et le câblage.',
+  'de-DE': 'Die RGB-Abmessungen des Spiels sind {rgb}, die aktuelle Verkabelung hat jedoch {wiring}. Prüfen Sie Spielfeld und Verkabelung.',
+  'pl-PL': 'Wymiary RGB gry to {rgb}, a bieżącego okablowania {wiring}. Sprawdź ustawienia pola gry i okablowania.',
+  'ru-RU': 'Размер RGB-поля игры — {rgb}, а текущей схемы подключения — {wiring}. Проверьте настройки игрового поля и подключения.',
+  'vi-VN': 'Kích thước RGB của trò chơi là {rgb}, nhưng kích thước sơ đồ đấu dây hiện tại là {wiring}. Hãy kiểm tra sân chơi và cấu hình đấu dây.',
+  'it-IT': 'Le dimensioni RGB del gioco sono {rgb}, ma quelle del cablaggio attuale sono {wiring}. Controlla il campo di gioco e il cablaggio.',
+  'cs-CZ': 'Rozměry RGB hry jsou {rgb}, ale aktuální zapojení má rozměry {wiring}. Zkontrolujte herní plochu a zapojení.',
+  'ko-KR': '게임 RGB 크기는 {rgb}이지만 현재 배선 크기는 {wiring}입니다. 게임 필드와 배선 설정을 확인하세요.',
+  'ro-RO': 'Dimensiunile RGB ale jocului sunt {rgb}, dar cablajul actual are {wiring}. Verificați terenul de joc și cablajul.',
+  'ar-SA': 'أبعاد RGB للعبة هي {rgb}، لكن أبعاد التوصيلات الحالية هي {wiring}. تحقق من إعدادات مساحة اللعبة والتوصيلات.',
+};
+for (const [locale, frameSizeMismatch] of Object.entries(frameSizeMismatchLabels)) {
+  mergedMessages[locale].editorDebug = { ...mergedMessages[locale].editorDebug, frameSizeMismatch };
+}
+
+const levelEditingLabels = {
+  'zh-CN': '关卡编辑', 'en-US': 'Level editor', 'es-ES': 'Editor de niveles',
+  'pt-PT': 'Editor de níveis', 'fr-FR': 'Éditeur de niveaux', 'de-DE': 'Level-Editor',
+  'pl-PL': 'Edytor poziomów', 'ru-RU': 'Редактор уровней', 'vi-VN': 'Chỉnh sửa màn chơi',
+  'it-IT': 'Editor dei livelli', 'cs-CZ': 'Editor úrovní', 'ko-KR': '레벨 편집',
+  'ro-RO': 'Editor de niveluri', 'ar-SA': 'محرر المراحل',
+};
+for (const [locale, levelEditing] of Object.entries(levelEditingLabels)) {
+  mergedMessages[locale].simple = { ...mergedMessages[locale].simple, levelEditing };
 }
 
 export const authoredMessages = Object.fromEntries(

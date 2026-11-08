@@ -13,12 +13,18 @@ const props = defineProps({
   saving: { type: Boolean, default: false },
   error: { type: String, default: "" },
   rank: { type: Boolean, default: false },
+  embedded: { type: Boolean, default: false },
 });
 const emit = defineEmits(["cancel", "save"]);
 const { t } = useI18n();
 
 const dialogRef = ref(null);
 const draft = ref({});
+let savedDraft = "";
+function getDraft() { return JSON.parse(JSON.stringify(draft.value)); }
+function markSaved() { savedDraft = JSON.stringify(draft.value); }
+function hasChanges() { return savedDraft !== JSON.stringify(draft.value); }
+defineExpose({ getDraft, hasChanges, markSaved });
 const saveError = ref('');
 const picker = ref(null); // { path, accept, title } when a media picker is open
 const audioPlayer = ref(null); // { name, url } when the audio player modal is open
@@ -142,6 +148,8 @@ function resetDraft() {
     commonConfig: { ...(source.commonConfig || {}) },
     ...(props.rank ? { minPlayers: source.minPlayers ?? 1, maxPlayers:source.maxPlayers ?? 6, palette:[...(source.palette || [])] } : {}),
   };
+  draft.value = getDraft();
+  markSaved();
 }
 
 function openPicker(field) {
@@ -203,6 +211,7 @@ const lifeError = computed(() => draft.value.globalLifeLimit &&
 const canSave = computed(() => !props.saving);
 
 function handleKeydown(event) {
+  if (props.embedded) return;
   if (picker.value) {
     return;
   }
@@ -241,7 +250,7 @@ watch(() => props.config, resetDraft, { immediate: true });
 
 onMounted(() => {
   window.addEventListener("keydown", handleKeydown);
-  nextTick(() => dialogRef.value?.focus());
+  if (!props.embedded) nextTick(() => dialogRef.value?.focus());
 });
 
 onBeforeUnmount(() => {
@@ -250,12 +259,12 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="global-config-backdrop" @mousedown.self="!saving && !picker && emit('cancel')">
+  <div :class="embedded ? 'global-config-page' : 'global-config-backdrop'" @mousedown.self="!embedded && !saving && !picker && emit('cancel')">
     <section
       ref="dialogRef"
       class="global-config-dialog"
-      role="dialog"
-      aria-modal="true"
+      :role="embedded ? 'region' : 'dialog'"
+      :aria-modal="embedded ? undefined : true"
       aria-labelledby="global-config-title"
       tabindex="-1"
     >
@@ -263,7 +272,7 @@ onBeforeUnmount(() => {
         <div>
           <h2 id="global-config-title">{{ t("globalConfig.title") }}</h2>
         </div>
-        <button class="inline-symbol-button" type="button" :title="t('common.close')" :disabled="saving" @click="emit('cancel')">×</button>
+        <button v-if="!embedded" class="inline-symbol-button" type="button" :title="t('common.close')" :disabled="saving" @click="emit('cancel')">×</button>
       </header>
 
       <div class="global-config-body">
@@ -374,7 +383,7 @@ onBeforeUnmount(() => {
 
       <p v-if="error" class="global-config-error">{{ error }}</p>
 
-      <footer class="global-config-actions">
+      <footer v-if="!embedded" class="global-config-actions">
         <button class="soft-button" type="button" :disabled="saving" @click="emit('cancel')">{{ t("common.cancel") }}</button>
         <button class="action-button primary" type="button" :disabled="!canSave" @click="handleSave">
           {{ t(saving ? "globalConfig.saving" : "common.save") }}
@@ -630,4 +639,6 @@ onBeforeUnmount(() => {
 .audio-player-dialog audio {
   width: 100%;
 }
+.global-config-page { height:100%; min-height:0; min-width:0; }
+.global-config-page > .global-config-dialog { width:100%; height:100%; max-height:none; box-sizing:border-box; grid-template-rows:auto minmax(0,1fr); box-shadow:none; }
 </style>

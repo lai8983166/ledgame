@@ -1,4 +1,5 @@
 <script setup>
+import { DEFAULT_NAVIGATION_TITLE } from "../lib/applicationBranding.js";
 import { computed, onMounted, onUnmounted, reactive, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { SUPPORTED_LOCALES } from "../i18n/index.js";
@@ -26,7 +27,7 @@ const saved = ref({
   secondaryIdlePromptText: "LED FLOOR GAME",
   secondaryIdlePromptFontSize: 72,
   secondaryIdleSubtitleFontSize: 72,
-  applicationTitle: "LED Game",
+  navigationTitle: DEFAULT_NAVIGATION_TITLE,
   applicationIconPath: "",
   secondaryDisplayBackgroundPath: "",
   secondaryIdleMediaPath: "",
@@ -42,7 +43,7 @@ const draft = reactive({
   secondaryIdlePromptText: "LED FLOOR GAME",
   secondaryIdlePromptFontSize: 72,
   secondaryIdleSubtitleFontSize: 72,
-  applicationTitle: "LED Game",
+  navigationTitle: DEFAULT_NAVIGATION_TITLE,
   applicationIconPath: "",
   secondaryDisplayBackgroundPath: "",
   secondaryIdleMediaPath: "",
@@ -72,7 +73,8 @@ const dirty = computed(
     || draft.secondaryIdlePromptText !== saved.value.secondaryIdlePromptText
     || draft.secondaryIdlePromptFontSize !== saved.value.secondaryIdlePromptFontSize
     || draft.secondaryIdleSubtitleFontSize !== saved.value.secondaryIdleSubtitleFontSize
-    || draft.applicationTitle !== saved.value.applicationTitle
+    || draft.navigationTitle !== saved.value.navigationTitle
+    || draft.applicationIconPath !== saved.value.applicationIconPath
     || draft.secondaryDisplayBackgroundPath !== saved.value.secondaryDisplayBackgroundPath
     || draft.secondaryIdleMediaPath !== saved.value.secondaryIdleMediaPath
     || Boolean(draft.touchExitPassword && draft.touchExitPassword !== saved.value.touchExitPassword),
@@ -103,7 +105,7 @@ onMounted(async () => {
     return;
   }
   try {
-    applySettings(await api.get());
+    applySettings(await api.get(), false);
   } catch (error) {
     errorMessage.value = error?.message || t("applicationSettings.loadFailed");
   } finally {
@@ -115,7 +117,7 @@ onUnmounted(() => {
   removeSettingsListener?.();
 });
 
-function applySettings(settings) {
+function applySettings(settings, preserveDraft = true) {
   const source = settings?.touchIdlePromptTexts && typeof settings.touchIdlePromptTexts === "object"
     ? settings.touchIdlePromptTexts
     : typeof settings?.touchIdlePromptText === "string"
@@ -162,8 +164,8 @@ function applySettings(settings) {
       : 72,
     secondaryIdleSubtitleFontSize: Number.isInteger(subtitleFontSize) && subtitleFontSize >= 32 && subtitleFontSize <= 200
       ? subtitleFontSize : Number.isInteger(secondaryPromptFontSize) && secondaryPromptFontSize >= 32 && secondaryPromptFontSize <= 200 ? secondaryPromptFontSize : 72,
-    applicationTitle: typeof settings?.applicationTitle === "string" && settings.applicationTitle.trim()
-      ? settings.applicationTitle.trim() : "LED Game",
+    navigationTitle: typeof settings?.navigationTitle === "string" && settings.navigationTitle.trim()
+      ? settings.navigationTitle.trim() : DEFAULT_NAVIGATION_TITLE,
     applicationIconPath: typeof settings?.applicationIconPath === "string" ? settings.applicationIconPath : "",
     secondaryDisplayBackgroundPath: typeof settings?.secondaryDisplayBackgroundPath === "string"
       ? settings.secondaryDisplayBackgroundPath : "",
@@ -171,23 +173,18 @@ function applySettings(settings) {
       ? settings.secondaryIdleMediaPath : "",
     touchExitPassword: typeof settings?.touchExitPassword === 'string' ? settings.touchExitPassword : saved.value.touchExitPassword || '',
   };
+  // Resource pickers also broadcast saved settings; keep fields edited locally.
+  for (const [key, value] of Object.entries(normalized)) {
+    if (!preserveDraft || JSON.stringify(draft[key]) === JSON.stringify(saved.value[key])) {
+      draft[key] = value;
+    }
+  }
   saved.value = normalized;
-  draft.entryMethod = normalized.entryMethod;
-  draft.coinCount = normalized.coinCount;
-  draft.secondaryIdleSubtitleText = normalized.secondaryIdleSubtitleText;
-  draft.memberPlatformHost = normalized.memberPlatformHost;
-  draft.memberPlatformPort = normalized.memberPlatformPort;
-  draft.touchIdlePromptTexts = normalized.touchIdlePromptTexts;
-  draft.touchIdlePromptFontSize = normalized.touchIdlePromptFontSize;
-  draft.touchPreparationTimeoutSeconds = normalized.touchPreparationTimeoutSeconds;
-  draft.secondaryIdlePromptText = normalized.secondaryIdlePromptText;
-  draft.secondaryIdlePromptFontSize = normalized.secondaryIdlePromptFontSize;
-  draft.secondaryIdleSubtitleFontSize = normalized.secondaryIdleSubtitleFontSize;
-  draft.applicationTitle = normalized.applicationTitle;
-  draft.applicationIconPath = normalized.applicationIconPath;
-  draft.secondaryDisplayBackgroundPath = normalized.secondaryDisplayBackgroundPath;
-  draft.secondaryIdleMediaPath = normalized.secondaryIdleMediaPath;
-  draft.touchExitPassword = normalized.touchExitPassword;
+  for (const key of ['applicationIconPath', 'secondaryDisplayBackgroundPath', 'secondaryIdleMediaPath']) {
+    if (Object.hasOwn(settings?.resourcePreview || {}, key)) {
+      draft[key] = settings.resourcePreview[key] || '';
+    }
+  }
 }
 
 async function chooseApplicationIcon() {
@@ -248,7 +245,7 @@ async function saveSettings() {
   savedMessage.value = "";
   try {
     applySettings(
-      await api.update(createApplicationSettingsPatch(draft)),
+      await api.update(createApplicationSettingsPatch(draft)), false,
     );
     savedMessage.value = t("applicationSettings.saved");
   } catch (error) {
@@ -297,7 +294,7 @@ async function testMemberPlatform() {
 
       <template v-else>
         <section class="application-settings-connection">
-          <label class="application-settings-field"><span>{{ t('management.appTitle') }} <b class="required-mark">*</b></span><input v-model.trim="draft.applicationTitle" type="text" maxlength="64" required :aria-invalid="Boolean(fieldError('applicationTitle'))" /><small v-if="fieldError('applicationTitle')" class="application-settings-error">{{ fieldError('applicationTitle') }}</small></label>
+          <label class="application-settings-field"><span>{{ t('management.navigationTitle') }} <b class="required-mark">*</b></span><input v-model.trim="draft.navigationTitle" type="text" maxlength="64" required :aria-invalid="Boolean(fieldError('navigationTitle'))" /><small v-if="fieldError('navigationTitle')" class="application-settings-error">{{ fieldError('navigationTitle') }}</small></label>
           <label class="application-settings-field"><span>{{ t('management.exitPassword') }}</span><input v-model="draft.touchExitPassword" type="text" inputmode="numeric" maxlength="12" autocomplete="off" :aria-invalid="Boolean(fieldError('touchExitPassword'))" /><small v-if="fieldError('touchExitPassword')" class="application-settings-error">{{ fieldError('touchExitPassword') }}</small></label>
           <div class="application-settings-actions"><button class="application-settings-secondary" type="button" @click="chooseApplicationIcon">{{ t('management.chooseIcon') }}</button><span>{{ applicationIconLabel }}</span></div>
           <div class="application-settings-actions application-settings-background-actions">

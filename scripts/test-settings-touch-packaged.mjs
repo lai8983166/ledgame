@@ -82,7 +82,9 @@ try {
   assert.equal(await page.locator('select').filter({has:page.locator('option[value="debug"]')}).count(),0);
   assert.equal(await page.evaluate(async()=> (await window.appSettings.get()).mode),'game');
   await page.getByRole('button', { name: '保存', exact: true }).click();
-  await page.waitForFunction(async () => (await window.appSettings.get()).applicationTitle === '验收标题');
+  await page.waitForFunction(async () => (await window.appSettings.get()).navigationTitle === '验收标题');
+  assert.equal(await page.locator('.window-titlebar-title').innerText(), 'LED Game');
+  assert.equal(await page.locator('.app-brand-title').innerText(), '验收标题');
   assert.equal(await page.locator('input[maxlength="12"]').inputValue(),'12345678');
   assert.equal(await page.evaluate(async () => (await window.appSettings.get()).memberPlatformPort), memberPort);
   const settings=await page.evaluate(()=>window.appSettings.get());assert.equal(settings.secondaryIdlePromptText,'上标题验收');assert.equal(settings.secondaryIdleSubtitleText,'下标题验收');assert.equal(settings.coinCount,3);
@@ -163,7 +165,8 @@ try {
   await secondary.screenshot({ path: path.join(data, 'secondary-idle.png') });
   await app.close(); app = null;
   await launch();
-  assert.equal(await page.evaluate(async () => (await window.appSettings.get()).applicationTitle), '验收标题');
+  assert.equal(await page.evaluate(async () => (await window.appSettings.get()).navigationTitle), '验收标题');
+  assert.equal(await page.evaluate(async () => (await window.appSettings.get()).applicationTitle), 'LED Game');
   assert.equal(await page.evaluate(async () => (await window.appSettings.get()).memberPlatformPort), memberPort);
   const restartedConnection = await (await fetch(`http://127.0.0.1:${port}/api/member-platform/connection`)).json();
   assert.equal(restartedConnection.port, memberPort);

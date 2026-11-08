@@ -101,6 +101,61 @@ try{
     assert.equal(await current.evaluate(node=>getComputedStyle(node).animationName),'none');
     await page.emulateMedia({reducedMotion:'no-preference'});
   });
+  await check('回转游戏列表左右各三张、中心正面高亮，侧卡/键盘/滑动切换及少量游戏和窄屏边界',async()=>{
+    const original=await page.evaluate(()=>structuredClone(window.fixture.games));
+    await page.evaluate(()=>{
+      window.fixture.games.splice(0,window.fixture.games.length,...Array.from({length:9},(_,i)=>({id:i+1,name:'游戏 '+(i+1),type:'default',firstCatalog:'11',minPlayers:1,maxPlayers:6,participants:6,cover:'carousel-'+i+'.png',levels:[{durationSeconds:90}]})));
+      window.mediaLibrary.getPreviewUrl=async p=>({url:'data:image/svg+xml,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="183" height="308"><defs><linearGradient id="g" x2="1" y2="1"><stop stop-color="hsl('+((Number(p.match(/carousel-(\d+)/)?.[1])||0)*39)+',70%,45%)"/><stop offset="1" stop-color="#071936"/></linearGradient></defs><rect width="183" height="308" fill="url(#g)"/><circle cx="92" cy="135" r="58" fill="none" stroke="#ffffff77" stroke-width="3"/><text x="92" y="157" text-anchor="middle" fill="white" font-size="70">'+((Number(p.match(/carousel-(\d+)/)?.[1])||0)+1)+'</text></svg>')});
+      window.fixture.notifyCatalog();
+    });
+    await page.waitForFunction(()=>window.getComponentSetup().categoryGames.length===9);
+    const carousel=page.getByTestId('game-carousel'),cards=page.locator('.touch-carousel-card');
+    const settle=()=>page.waitForTimeout(400);
+    for(const [width,height] of [[1920,1080],[1366,768],[1024,600],[760,600]]){
+      await page.setViewportSize({width,height});await settle();
+      const geometry=await carousel.evaluate(el=>{
+        const bounds=el.getBoundingClientRect();return {x:bounds.x,width:bounds.width,cards:[...el.querySelectorAll('.touch-carousel-card')].filter(e=>getComputedStyle(e).display!=='none').map(e=>{const r=e.getBoundingClientRect(),m=new DOMMatrix(getComputedStyle(e).transform);return{offset:Number(e.dataset.carouselOffset),x:r.x,width:r.width,rotation:m.m13,z:Number(getComputedStyle(e).zIndex)};})};
+      });
+      assert.equal(geometry.cards.length,width>1100?7:5);
+      const center=geometry.cards.find(c=>c.offset===0);
+      assert.ok(Math.abs(center.x+center.width/2-geometry.x-geometry.width/2)<1);
+      assert.equal(center.rotation,0);
+      for(const card of geometry.cards){
+        assert.ok(card.x>=geometry.x-1&&card.x+card.width<=geometry.x+geometry.width+1,JSON.stringify({width,geometry,card}));
+        if(card.offset){assert.ok(Math.abs(card.rotation)>0.1);assert.ok(card.z<center.z);assert.equal(Math.sign(card.x+card.width/2-center.x-center.width/2),Math.sign(card.offset));}
+      }
+      assert.ok(await page.locator('.touch-shell').evaluate(e=>e.scrollWidth<=e.clientWidth+1));
+      await shot('回转选游戏-'+width);
+      for(const offset of [-3,-2,-1,1,2,3]){
+        const side=page.locator('.touch-carousel-card[data-carousel-offset="'+offset+'"]');
+        if(!await side.isVisible())continue;
+        const selected=(await side.getAttribute('data-testid')).replace('game-carousel-','');
+        const exposed=await side.evaluate(el=>{
+          const b=el.getBoundingClientRect(),y=b.y+b.height/2,points=[];
+          for(let x=Math.ceil(b.x);x<b.right;x+=2)if(el.contains(document.elementFromPoint(x,y)))points.push(x);
+          return {x:points[Math.floor(points.length/2)],y,width:points.length*2};
+        });
+        assert.ok(exposed.width>=20,JSON.stringify({width,offset,exposed}));
+        await page.mouse.click(exposed.x,exposed.y);await settle();assert.equal(await carousel.getAttribute('data-selected-game-id'),selected);
+      }
+    }
+    await page.setViewportSize({width:1366,height:768});await settle();
+    const side=page.locator('.touch-carousel-card[data-carousel-offset="2"]'),id=(await side.getAttribute('data-testid')).replace('game-carousel-','');
+    await side.click();await settle();assert.equal(await carousel.getAttribute('data-selected-game-id'),id);
+    await carousel.press('ArrowRight');await settle();assert.equal(await carousel.getAttribute('data-selected-game-id'),String(Number(id)%9+1));
+    const drag=await carousel.boundingBox();await page.mouse.move(drag.x+drag.width/2,drag.y+drag.height/2);await page.mouse.down();await page.mouse.move(drag.x+drag.width/2-100,drag.y+drag.height/2,{steps:8});await page.mouse.up();await settle();
+    assert.equal(await carousel.getAttribute('data-selected-game-id'),String((Number(id)+1)%9+1));
+    await page.emulateMedia({reducedMotion:'reduce'});assert.equal(await cards.first().evaluate(e=>getComputedStyle(e).transitionDuration),'0s');await page.emulateMedia({reducedMotion:'no-preference'});
+    for(const count of [0,1,2]){
+      await page.evaluate(count=>{window.fixture.games.splice(0,window.fixture.games.length,...Array.from({length:count},(_,i)=>({id:i+1,name:'边界 '+(i+1),type:'default',firstCatalog:'11',minPlayers:1,maxPlayers:6,participants:6})));window.fixture.notifyCatalog();},count);
+      await page.waitForFunction(count=>window.getComponentSetup().categoryGames.length===count,count);await settle();
+      assert.equal(await cards.count(),count);
+      if(count){assert.equal(await page.locator('.touch-carousel-card.current').count(),1);assert.equal(new Set(await cards.evaluateAll(nodes=>nodes.map(e=>e.dataset.testid))).size,count);}
+      await shot('回转边界-'+count);
+    }
+    await page.evaluate(original=>{window.fixture.games.splice(0,window.fixture.games.length,...original);window.fixture.notifyCatalog();},original);
+    await page.waitForFunction(()=>window.getComponentSetup().categorizedGames.length===4);await page.getByTestId('game-category-11').click();
+  });
   await check('无其他游戏分类，未分配和失效分类不展示，分配有效分类后实时出现',async()=>{
     assert.equal(await page.getByTestId('game-category-uncategorized').count(),0);
     assert.deepEqual(await page.evaluate(()=>window.getComponentSetup().categorizedGames.map(game=>game.id)),[1,2,3,4]);

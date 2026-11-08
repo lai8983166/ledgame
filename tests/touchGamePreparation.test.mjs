@@ -233,3 +233,23 @@ test("Preparation step timeout ticks to zero once and can be cancelled", () => {
   assert.equal(cancelledTimeout, false);
   stop();
 });
+
+test('rotary game carousel balances up to three unique neighbors per side with stable game keys', () => {
+  assert.deepEqual(touchCarouselSlots([{ id: 41 }, { id: 72 }], 0).map(slot => slot.key), ['41', '72']);
+  for (let count = 0; count <= 12; count++) {
+    const games = Array.from({ length: count }, (_, id) => ({ id }));
+    for (let active = 0; active < Math.max(1, count); active++) {
+      const slots = touchCarouselSlots(games, active);
+      assert.equal(slots.length, Math.min(count, 7));
+      assert.equal(new Set(slots.map(slot => slot.item.id)).size, slots.length);
+      if (!count) continue;
+      assert.equal(slots.find(slot => slot.offset === 0).item.id, active);
+      assert.ok(slots.filter(slot => slot.offset < 0).length <= 3);
+      assert.ok(slots.filter(slot => slot.offset > 0).length <= 3);
+      for (const slot of slots) {
+        assert.equal(slot.item.id, moveTouchCarousel(active, slot.offset, count));
+        assert.equal(slot.key, String(slot.index));
+      }
+    }
+  }
+});

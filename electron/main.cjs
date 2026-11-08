@@ -32,6 +32,7 @@ const {
   installSecondaryIdleMedia,
   toPublicApplicationSettings,
 } = require('./application-branding.cjs')
+const { createApplicationResourcePreview } = require('./application-resource-preview.cjs')
 const { createSplashLifecycle } = require('./splash-lifecycle.cjs')
 const { createBackendReadiness, createCloseApproval, finishTouchSession } = require('./application-lifecycle.cjs')
 const {
@@ -122,6 +123,8 @@ const applicationSettings = createApplicationSettingsStore({
   fs,
   settingsPath: path.join(app.getPath('userData'), 'settings', 'application.json'),
 })
+
+const applicationResources = createApplicationResourcePreview({ settingsStore: applicationSettings })
 
 appendStartupLog('Electron main loaded')
 
@@ -240,7 +243,7 @@ function broadcastApplicationSettings(settings) {
 }
 
 async function updateApplicationSettings(patch) {
-  const settings = await applicationSettings.update(patch)
+  const settings = await applicationResources.update(patch)
   currentEntryMethod = settings.entryMethod
   if (
     'memberPlatformHost' in (patch || {})
@@ -255,24 +258,35 @@ async function updateApplicationSettings(patch) {
     })
   }
   broadcastApplicationSettings(settings)
-  applyApplicationBrand(settings)
+  applyApplicationBrand(await applicationResources.effective())
   await broadcastSecondaryDisplayStatus()
   return toPublicApplicationSettings(settings)
 }
 
+async function previewApplicationResources(patch) {
+  const settings = await applicationResources.select(patch)
+  broadcastApplicationSettings(settings)
+  applyApplicationBrand(await applicationResources.effective())
+  return settings
+}
+
+function isManagedBrandingPath(filePath, pattern) {
+  if (typeof filePath !== 'string' || !filePath.trim()) return false
+  const resolved = path.resolve(filePath)
+  return path.dirname(resolved) === path.resolve(app.getPath('userData'), 'branding')
+    && pattern.test(path.basename(resolved))
+}
+
 async function readSecondaryDisplayBackground() {
-  const settings = await applicationSettings.get()
-  const expectedPath = path.join(app.getPath('userData'), 'branding', 'secondary-display-background.png')
+  const settings = await applicationResources.effective()
   const configuredPath = settings.secondaryDisplayBackgroundPath
-  if (!configuredPath || path.resolve(configuredPath) !== path.resolve(expectedPath)) {
+  if (!isManagedBrandingPath(configuredPath, /^secondary-display-background(?:-[a-z0-9-]+)?\.png$/i)) {
     return { dataUrl: null }
   }
   try {
-    const stat = await fs.stat(expectedPath)
-    if (!stat.isFile() || stat.size <= 0 || stat.size > MAX_BACKGROUND_BYTES) {
-      return { dataUrl: null }
-    }
-    const bytes = await fs.readFile(expectedPath)
+    const stat = await fs.stat(configuredPath)
+    if (!stat.isFile() || stat.size <= 0 || stat.size > MAX_BACKGROUND_BYTES) return { dataUrl: null }
+    const bytes = await fs.readFile(configuredPath)
     return { dataUrl: `data:image/png;base64,${bytes.toString('base64')}` }
   } catch (_error) {
     return { dataUrl: null }
@@ -280,16 +294,11 @@ async function readSecondaryDisplayBackground() {
 }
 
 function isManagedSecondaryIdleMediaPath(filePath) {
-  if (typeof filePath !== 'string' || !filePath.trim()) return false
-  const brandingDirectory = path.resolve(app.getPath('userData'), 'branding')
-  const resolved = path.resolve(filePath)
-  const relative = path.relative(brandingDirectory, resolved)
-  return Boolean(relative && !relative.startsWith('..') && !path.isAbsolute(relative)
-    && /^secondary-idle-media(?:-\d+)?\.[a-z0-9]+$/i.test(path.basename(resolved)))
+  return isManagedBrandingPath(filePath, /^secondary-idle-media(?:-[a-z0-9-]+)?\.[a-z0-9]+$/i)
 }
 
 async function getSecondaryIdleMediaPreview() {
-  const settings = await applicationSettings.get()
+  const settings = await applicationResources.effective()
   const configuredPath = settings.secondaryIdleMediaPath
   if (!isManagedSecondaryIdleMediaPath(configuredPath)) return { url: null, mediaType: null }
   try {
@@ -300,7 +309,7 @@ async function getSecondaryIdleMediaPreview() {
       ? 'image'
       : videoExtensions.has(extension) ? 'video' : null
     if (!mediaType) return { url: null, mediaType: null }
-    return { url: `${idleMediaProtocol}://current`, mediaType }
+    return { url: `${idleMediaProtocol}://current?resource=${encodeURIComponent(path.basename(configuredPath))}`, mediaType }
   } catch (_error) {
     return { url: null, mediaType: null }
   }
@@ -517,7 +526,7 @@ function createDebugWindow(layoutBounds = null) {
     useContentSize: true,
     center: !layoutBounds,
     resizable: !layoutBounds,
-    title: 'LED Debug Panel',
+    title: 'LED Game',
     backgroundColor: '#0f1115',
     autoHideMenuBar: false,
     webPreferences: {
@@ -623,7 +632,7 @@ function createTouchWindow(mode = 'debug', layoutBounds = null) {
     useContentSize: true,
     center: !layoutBounds,
     resizable: !layoutBounds,
-    title: 'LED Game Touch',
+    title: 'LED Game',
     backgroundColor: '#071018',
     autoHideMenuBar: false,
     show: false,
@@ -774,7 +783,7 @@ function createSecondaryWindow(display) {
     height: bounds.height,
     useContentSize: !display.primary,
     show: false,
-    title: 'LED Game Secondary Display',
+    title: 'LED Game',
     backgroundColor: '#061019',
     autoHideMenuBar: false,
     webPreferences: {
@@ -2192,11 +2201,11 @@ ipcMain.handle('media:upload', async (event, folder) => {
 ipcMain.handle('app-language:get', () => languagePreferences.get())
 ipcMain.handle('app-language:set', (_event, locale) => setApplicationLanguage(locale))
 ipcMain.handle('app-settings:get', async (event) => {
-  const settings = await applicationSettings.get()
+  const settings = await applicationResources.get()
   return mainWindow && event.sender === mainWindow.webContents ? settings : toPublicApplicationSettings(settings)
 })
 ipcMain.handle('app-settings:icon-data', async () => {
-  const settings = await applicationSettings.get()
+  const settings = await applicationResources.effective()
   const configuredPath = settings?.applicationIconPath
   const configuredIcon = configuredPath && nodeFs.existsSync(configuredPath)
     ? nativeImage.createFromPath(configuredPath)
@@ -2213,7 +2222,7 @@ ipcMain.handle('app-settings:icon-data', async () => {
 })
 ipcMain.handle('app-settings:update', async (event, patch) => {
   const result = await updateApplicationSettings(patch)
-  return mainWindow && event.sender === mainWindow.webContents ? applicationSettings.get() : result
+  return mainWindow && event.sender === mainWindow.webContents ? applicationResources.get() : result
 })
 ipcMain.handle('app-settings:choose-icon', async (event) => {
   const result = await showNativeDialogWithFocusRestore({
@@ -2229,7 +2238,7 @@ ipcMain.handle('app-settings:choose-icon', async (event) => {
     source,
     userDataPath: app.getPath('userData'),
   })
-  return { canceled: false, settings: await updateApplicationSettings({ applicationIconPath: target }) }
+  return { canceled: false, settings: await previewApplicationResources({ applicationIconPath: target }) }
 })
 ipcMain.handle('app-settings:choose-secondary-background', async (event) => {
   const result = await showNativeDialogWithFocusRestore({
@@ -2249,7 +2258,7 @@ ipcMain.handle('app-settings:choose-secondary-background', async (event) => {
   })
   return {
     canceled: false,
-    settings: await updateApplicationSettings({ secondaryDisplayBackgroundPath: target }),
+    settings: await previewApplicationResources({ secondaryDisplayBackgroundPath: target }),
   }
 })
 ipcMain.handle('app-settings:choose-secondary-idle-media', async (event) => {
@@ -2265,40 +2274,18 @@ ipcMain.handle('app-settings:choose-secondary-idle-media', async (event) => {
     },
   })
   if (result.canceled || !result.filePaths?.[0]) return { canceled: true }
-  const previous = await applicationSettings.get()
   const target = await installSecondaryIdleMedia({
     fs,
     nativeImage,
     source: result.filePaths[0],
     userDataPath: app.getPath('userData'),
   })
-  const settings = await updateApplicationSettings({ secondaryIdleMediaPath: target })
-  if (previous.secondaryIdleMediaPath && previous.secondaryIdleMediaPath !== target
-    && isManagedSecondaryIdleMediaPath(previous.secondaryIdleMediaPath)) {
-    await fs.rm(previous.secondaryIdleMediaPath, { force: true }).catch(() => {})
-  }
-  return { canceled: false, settings }
+  return { canceled: false, settings: await previewApplicationResources({ secondaryIdleMediaPath: target }) }
 })
-ipcMain.handle('app-settings:clear-secondary-idle-media', async () => {
-  const settings = await applicationSettings.get()
-  const result = await updateApplicationSettings({ secondaryIdleMediaPath: null })
-  if (isManagedSecondaryIdleMediaPath(settings.secondaryIdleMediaPath)) {
-    await fs.rm(settings.secondaryIdleMediaPath, { force: true }).catch(() => {})
-  }
-  return result
-})
-ipcMain.handle('app-settings:clear-secondary-background', async () => {
-  const settings = await applicationSettings.get()
-  const result = await updateApplicationSettings({ secondaryDisplayBackgroundPath: null })
-  const expectedPath = path.join(app.getPath('userData'), 'branding', 'secondary-display-background.png')
-  if (
-    settings.secondaryDisplayBackgroundPath
-    && path.resolve(settings.secondaryDisplayBackgroundPath) === path.resolve(expectedPath)
-  ) {
-    await fs.rm(expectedPath, { force: true }).catch(() => {})
-  }
-  return result
-})
+ipcMain.handle('app-settings:clear-secondary-idle-media', () =>
+  previewApplicationResources({ secondaryIdleMediaPath: null }))
+ipcMain.handle('app-settings:clear-secondary-background', () =>
+  previewApplicationResources({ secondaryDisplayBackgroundPath: null }))
 ipcMain.handle('secondary-display:background', () => readSecondaryDisplayBackground())
 ipcMain.handle('secondary-display:idle-media', () => getSecondaryIdleMediaPreview())
 ipcMain.handle('game:reorder', (_event, gameIds) => backendRequest('/games/display-order', {
@@ -2490,7 +2477,7 @@ if (layoutDiagnosticsEnabled) {
 function registerIdleMediaProtocol() {
   protocol.handle(idleMediaProtocol, async () => {
     try { await requireGameActivation() } catch { return new Response('Software activation required', { status: 403 }) }
-    const settings = await applicationSettings.get()
+    const settings = await applicationResources.effective()
     const configuredPath = settings.secondaryIdleMediaPath
     if (!isManagedSecondaryIdleMediaPath(configuredPath)) {
       return new Response('Secondary idle media is not configured', { status: 404 })
@@ -2528,7 +2515,7 @@ app.whenReady()
       backendReadiness.fail(new Error('游戏服务启动失败，请重新打开应用。'))
       stopEmbeddedBackend()
     })
-    applyApplicationBrand(await applicationSettings.get())
+    applyApplicationBrand(await applicationResources.effective())
 
     screen.on('display-added', () => {
       void broadcastSecondaryDisplayStatus()

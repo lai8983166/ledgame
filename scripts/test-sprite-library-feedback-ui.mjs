@@ -59,7 +59,6 @@ const name = page.locator('.spirit-editor-name input');
 const save = page.locator('.spirit-editor-actions .primary');
 async function check(title, fn) { await fn(); passed.push(title); console.log('PASS ' + title); }
 async function edit(id) {
-  await card(id).locator('.spirit-thumbnail-select').click();
   await card(id).hover();
   await card(id).locator('.spirit-card-actions button').first().click();
   await expect(page.locator('.spirit-editor-dialog')).toBeVisible();
@@ -69,14 +68,21 @@ try {
   await page.waitForFunction(() => window.mountComponent);
   await page.evaluate(() => window.mountComponent('SpiritLibraryView'));
   await expect(page.locator('.spirit-thumbnail-card')).toHaveCount(2);
-  await check('固定修改删除和刷新入口移除，只有选中卡片悬停显示底部操作', async () => {
+  await check('固定修改删除和刷新入口移除，未选中卡片悬停也显示底部操作', async () => {
     await expect(page.locator('.spirit-browser-toolbar button')).toHaveCount(0);
     await expect(page.getByRole('button', { name: '刷新', exact: true })).toHaveCount(0);
     await page.mouse.move(1200, 680);
     await expect(card('wide').locator('.spirit-card-actions')).toBeHidden();
+    await expect(card('wide')).toHaveCSS('box-shadow', 'none');
     await card('tall').hover();
-    await expect(card('tall').locator('.spirit-card-actions')).toHaveCount(0);
+    await expect(card('tall')).not.toHaveClass(/selected/);
+    await expect(card('tall')).not.toHaveCSS('box-shadow', 'none');
+    await page.screenshot({ path: path.join(output, '未选中精灵悬停高亮.png') });
+    await expect(card('tall').locator('.spirit-card-actions')).toBeVisible();
     await card('wide').hover();
+    await expect(card('tall').locator('.spirit-card-actions')).toBeHidden();
+    await expect(card('tall')).toHaveCSS('box-shadow', 'none');
+    await expect(card('wide')).not.toHaveCSS('box-shadow', 'none');
     await expect(card('wide').locator('.spirit-card-actions')).toBeVisible();
     const bounds = await card('wide').evaluate(node => {
       const card = node.getBoundingClientRect(), actions = node.querySelector('.spirit-card-actions').getBoundingClientRect();
@@ -131,6 +137,8 @@ try {
     await expect(page.locator('.status-line')).toContainText('Created');
   });
   await check('取消删除不重读，确认删除自动重读并选择相邻精灵', async () => {
+    await card('wide').locator('.spirit-thumbnail-select').click();
+    await expect(card('created')).not.toHaveClass(/selected/);
     await page.evaluate(() => window.spriteFixture.confirm = false);
     await card('created').hover();
     await card('created').locator('.spirit-delete-button').click();

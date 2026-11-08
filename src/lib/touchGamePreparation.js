@@ -76,17 +76,16 @@ export function moveTouchCarousel(index, offset, itemCount) {
 export function touchCarouselSlots(items, activeIndex) {
   const source = Array.isArray(items) ? items : [];
   if (!source.length) return [];
-  if (source.length === 1) {
-    return [{ item: source[0], index: 0, offset: 0, key: "0:0" }];
-  }
   const center = wrapTouchCarouselIndex(activeIndex, source.length);
-  return [-1, 0, 1].map((offset) => {
+  const left = Math.min(3, Math.floor((source.length - 1) / 2));
+  const right = Math.min(3, Math.ceil((source.length - 1) / 2));
+  return Array.from({ length: left + right + 1 }, (_, position) => position - left).map((offset) => {
     const index = moveTouchCarousel(center, offset, source.length);
     return {
       item: source[index],
       index,
       offset,
-      key: `${index}:${offset}`,
+      key: String(source[index]?.id ?? index),
     };
   });
 }

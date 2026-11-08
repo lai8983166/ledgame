@@ -3,7 +3,7 @@ const length = value => Array.from(typeof value === 'string' ? value.trim() : ''
 
 export function applicationSettingsValidation(settings) {
   const errors = {};
-  if (length(settings.applicationTitle) < 1 || length(settings.applicationTitle) > 64) errors.applicationTitle = ['applicationSettings.validation.text', { min: 1, max: 64 }];
+  if (length(settings.navigationTitle) < 1 || length(settings.navigationTitle) > 64) errors.navigationTitle = ['applicationSettings.validation.text', { min: 1, max: 64 }];
   // An empty password keeps the saved password, matching the existing patch contract.
   if (settings.touchExitPassword && !/^\d{4,12}$/.test(settings.touchExitPassword)) errors.touchExitPassword = ['applicationSettings.validation.password'];
   if (!['touch', 'coin', 'wristband'].includes(settings.entryMethod)) errors.entryMethod = ['applicationSettings.validation.required'];

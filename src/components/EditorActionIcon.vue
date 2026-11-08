@@ -14,7 +14,10 @@ const gifGradientId = `editor-gif-${useId()}`;
     aria-hidden="true"
     focusable="false"
   >
-    <template v-if="name === 'copy'">
+    <template v-if="name === 'reset-view'">
+      <path d="M4.2 7.5A9 9 0 1 1 3 12M4.2 3.5v4h4" />
+    </template>
+    <template v-else-if="name === 'copy'">
       <rect x="8" y="8" width="12" height="13" rx="1.5" />
       <path d="M16 5V3H3v14h2" />
     </template>

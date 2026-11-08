@@ -90,13 +90,28 @@ try{
     const saved=(await page.evaluate(()=>window.componentEvents))[0];assert.equal(saved[0],'save');assert.deepEqual(saved[1],exported);
     await page.screenshot({path:path.join(output,'布线导入导出.png')});
   });
+  await check('调试隐藏启动方式，默认直接启动，结束只显示客户可读文本',async()=>{
+    await page.evaluate(()=>window.fixture.update({engineState:'IDLE',queueSummary:{waiting:[]}}));
+    const game=await page.evaluate(()=>window.fixture.simple);await mount('EditorDebugWorkspace',{game});
+    assert.equal(await page.getByText('启动方式',{exact:true}).count(),0);
+    assert.equal(await page.locator('.debug-workspace-controls select').count(),1);
+    await button('启动游戏').click();
+    assert.equal((await page.evaluate(()=>window.fixture.requests)).filter(r=>r[0]==='prepare').at(-1)[1].launchMethod,'debug');
+    for(const terminationReason of ['NATURAL_SUCCESS','MANUAL_STOP']){
+      await page.evaluate(async reason=>window.fixture.update({...((await window.ledGame.gameState()).data),engineState:'STOPPED',terminationReason:reason}),terminationReason);
+      await page.getByText('本局已结束',{exact:true}).waitFor();
+      assert.equal(await page.getByText(terminationReason,{exact:false}).count(),0);
+    }
+    await page.screenshot({path:path.join(output,'调试结束提示.png')});
+    await button('退出调试，返回编辑').click();
+  });
   await check('待机/准备/开始说明显示16x36动画，交接后恢复游戏尺寸且拒绝迟到待机帧',async()=>{
     await page.evaluate(()=>{window.fixture.update({engineState:'STOPPED',queueSummary:{waiting:[]}});window.fixture.hardwareError='ELC408_RUNTIME_DISABLED';window.fixture.frame({width:16,height:36,rgb:Array(16*36*3).fill(40)});});
     const game=await page.evaluate(()=>window.fixture.rank);await mount('EditorDebugWorkspace',{game});
     await page.waitForFunction(()=>window.getComponentSetup().pixels.length===36&&window.getComponentSetup().pixels[0][0].r===40);
     await page.evaluate(()=>window.fixture.frame({width:16,height:36,rgb:Array(16*36*3).fill(80)}));
     assert.equal(await page.evaluate(()=>window.getComponentSetup().pixels[0][0].r),80);
-    await page.locator('.debug-workspace-controls select').first().selectOption('wristband');await button('启动游戏').click();
+    await page.locator('.editor-debug-workspace').evaluate(node=>{node.__vueParentComponent.setupState.options.launchMethod='wristband';});await button('启动游戏').click();
     await page.evaluate(()=>window.fixture.frame({width:24,height:24,rgb:Array(16*36*3).fill(100)}));
     assert.equal(await page.evaluate(()=>window.getComponentSetup().pixels[0][0].r),100);
     await page.keyboard.type('12345');await page.keyboard.press('Enter');await page.locator('.debug-scan-backdrop').waitFor({state:'hidden'});await button('启动游戏').click();
@@ -154,7 +169,7 @@ try{
     await mount('GameWiringDialog',{width:8,height:8});assert.deepEqual(await page.evaluate(()=>window.fixture.listeners()),[0,0]);
   });
   await check('真实 UID 加回车，多人刷卡数量、重复卡、取消不算成功、普通输入不被扫描捕获',async()=>{
-    const game=await page.evaluate(()=>window.fixture.simple);await mount('EditorDebugWorkspace',{game});await page.locator('select').first().selectOption('wristband');await page.locator('input[type=number]').first().fill('2');
+    const game=await page.evaluate(()=>window.fixture.simple);await mount('EditorDebugWorkspace',{game});await page.locator('.editor-debug-workspace').evaluate(node=>{node.__vueParentComponent.setupState.options.launchMethod='wristband';});await page.locator('input[type=number]').first().fill('2');
     await button('请刷手环').click();await page.keyboard.type('2283055618');await page.keyboard.press('Enter');await page.locator('[role=dialog]').waitFor({state:'hidden'});
     await button('请刷手环').click();await page.keyboard.type('2283055618');await page.keyboard.press('Enter');assert.equal(await page.locator('[role=dialog]').count(),1);await button('取消').click();
     await button('请刷手环').click();await page.keyboard.type('2283055619');await page.keyboard.press('Enter');await page.locator('[role=dialog]').waitFor({state:'hidden'});await button('启动游戏').click();await button('退出调试，返回编辑').click();
@@ -308,7 +323,7 @@ try{
       assert.equal(await page.locator('.app-nav').evaluate(el=>el.inert),false);
       await page.evaluate(()=>window.fixture.failStop=false);await nav('配置').click();await page.locator('.application-settings-panel').waitFor();
       assert.equal((await page.evaluate(()=>window.ledGame.gameState())).data.engineState,'STOPPED');
-      await enter(id);await page.locator('.debug-workspace-controls select').first().selectOption('wristband');await button('请刷手环').click();await button('取消').click();
+      await enter(id);await page.locator('.editor-debug-workspace').evaluate(node=>{node.__vueParentComponent.setupState.options.launchMethod='wristband';});await button('请刷手环').click();await button('取消').click();
       await page.getByTestId('game-menu-button').click();await page.getByRole('menuitem',{name:'首页',exact:true}).click();await page.locator('.game-category-heading').waitFor();
       assert.equal((await page.evaluate(()=>window.ledGame.gameState())).data.engineState,'IDLE');
       await enter(id);await button('启动游戏').click();await page.getByTestId('game-enter-flow').click();
@@ -343,6 +358,10 @@ try{
       await page.locator('.debug-workspace-controls .error-line').waitFor();assert.equal(await page.locator('.debug-hardware-dialog').count(),0);
       assert.match(await page.locator('.debug-workspace-controls .error-line').innerText(),/SDK 未启用|硬件配置错误|无法找到可用的控制器通信网卡|无法打开控制器通信端口/);
     }
+    await page.evaluate(()=>window.fixture.hardwareError='ELC408_FRAME_SIZE_MISMATCH game frame 16x32 does not match wiring 16x36');
+    await mount('EditorDebugWorkspace',{game});
+    await page.locator('.debug-workspace-controls .error-line').waitFor();
+    assert.equal(await page.locator('.debug-workspace-controls .error-line').innerText(),'游戏 RGB 尺寸为 16×32，当前布线尺寸为 16×36，两者不一致，请检查游戏场地和布线配置。');
     await page.evaluate(()=>window.fixture.hardwareError='');
     await mount('EditorDebugWorkspace',{game});await button('启动游戏').click();await button('退出调试，返回编辑').click();
   });

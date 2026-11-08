@@ -2,12 +2,12 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { readFile } from "node:fs/promises";
 
-test("simple editor exposes the shared pixel-light layout entry and save patch", async () => {
+test("simple editor confirms shared pixel-light layout into the unified save draft", async () => {
   const source = await readFile(new URL("../src/views/SimpleGameEditorView.vue", import.meta.url), "utf8");
   assert.match(source, /PixelLightLayoutDialog/);
   assert.match(source, /openPixelLightLayout/);
   assert.match(source, /pixelLightLayoutOpen/);
-  assert.match(source, /commonConfig:\s*\{\s*pixelLightWiring/);
+  assert.match(source, /document\.value\.commonConfig\.pixelLightWiring\s*=\s*normalizePixelLightWiring\(layout\)/);
   assert.match(source, /:grid-width="matrixWidth"/);
   assert.match(source, /:grid-height="matrixHeight"/);
 });

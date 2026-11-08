@@ -25,7 +25,7 @@ await page.addInitScript(()=>{
   window.fixture.simple=simple;window.fixture.rank=rank;
   const save=async(id,document)=>{if(window.fixture.fail)throw Error('模拟保存失败');window.fixture.saves.push(structuredClone(document));return{data:{saved:true,gameId:id}};};
   window.appLanguage={get:async()=>'zh-CN',onChanged:()=>()=>{}};
-  window.appSettings={get:async()=>({applicationTitle:'客户品牌'}),getIconData:async()=>({dataUrl:'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"><rect width="20" height="20" fill="red"/></svg>'}),onChanged:()=>()=>{}};
+  window.appSettings={get:async()=>({applicationTitle:'LED Game',navigationTitle:'客户品牌'}),getIconData:async()=>({dataUrl:'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"><rect width="20" height="20" fill="red"/></svg>'}),onChanged:()=>()=>{}};
   window.ledGame={windowKind:'main',onCloseRequested:cb=>{window.fixture.close=cb;return()=>{};},respondToClose:(id,allowed)=>window.fixture.closeResponses.push({id,allowed}),
     activationStatus:async()=>({data:{activated:true,machineCode:'UI-FIXTURE'}}),
     state:async()=>({data:{engineState:'IDLE'}}),onEngineState:()=>()=>{},getGameEditor:async()=>({data:structuredClone(simple)}),getRankGameEditor:async()=>({data:structuredClone(rank)}),

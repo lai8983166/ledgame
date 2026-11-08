@@ -24,11 +24,11 @@ const selectedSpirit = computed(() => sortedSpirits.value.find(spirit => spirit.
 function spiritName(spirit) { return spirit?.name || spirit?.id || t('spirits.unnamed'); }
 function sizeLabel(spirit) { return `${Number(spirit.width) || 1} × ${Number(spirit.height) || 1}`; }
 function selectSpirit(spirit) { selectedSpiritId.value = spirit.id; }
-function openSpiritEditor() {
-  if (!selectedSpirit.value || deletingSpirit.value || isLoading.value || isSavingSpirit.value) return;
+function openSpiritEditor(spirit) {
+  if (!spirit || deletingSpirit.value || isLoading.value || isSavingSpirit.value) return;
   editErrorMessage.value = '';
   creatingSpirit.value = false;
-  editingSpirit.value = { ...selectedSpirit.value };
+  editingSpirit.value = { ...spirit };
 }
 function openSpiritCreator() {
   if (deletingSpirit.value || isLoading.value || isSavingSpirit.value) return;
@@ -36,8 +36,7 @@ function openSpiritCreator() {
   creatingSpirit.value = true;
   editingSpirit.value = { id:'', name:'', color:0, width:16, height:16, points:'[]', basic:false };
 }
-async function deleteSelectedSpirit() {
-  const selected = selectedSpirit.value;
+async function deleteSpirit(selected) {
   if (!selected || deletingSpirit.value || !spiritApi.value?.delete) return;
   deletingSpirit.value = true; errorMessage.value = '';
   try {
@@ -122,9 +121,9 @@ onMounted(loadSpirits);
             <strong :title="spiritName(spirit)">{{ spiritName(spirit) }}</strong>
             <small>{{ sizeLabel(spirit) }}</small>
           </button>
-          <div v-if="selectedSpirit?.id === spirit.id" class="spirit-card-actions">
-            <button class="soft-button" type="button" :disabled="deletingSpirit || isSavingSpirit" @click="openSpiritEditor">{{ t('spirits.edit') }}</button>
-            <button class="soft-button spirit-delete-button" type="button" :disabled="deletingSpirit || isSavingSpirit" @click="deleteSelectedSpirit">{{ t(deletingSpirit ? 'management.deleting' : 'management.delete') }}</button>
+          <div class="spirit-card-actions">
+            <button class="soft-button" type="button" :disabled="deletingSpirit || isSavingSpirit" @click="openSpiritEditor(spirit)">{{ t('spirits.edit') }}</button>
+            <button class="soft-button spirit-delete-button" type="button" :disabled="deletingSpirit || isSavingSpirit" @click="deleteSpirit(spirit)">{{ t(deletingSpirit ? 'management.deleting' : 'management.delete') }}</button>
           </div>
         </article>
       </div>
@@ -143,9 +142,9 @@ onMounted(loadSpirits);
 .spirit-thumbnail-card { position:relative; min-width:0; color:var(--ui-text); background:var(--ui-elevated); border:1px solid var(--ui-border); border-radius:var(--ui-radius-control); }
 .spirit-thumbnail-select { display:flex; flex-direction:column; align-items:center; gap:8px; width:100%; min-width:0; padding:12px 12px 48px; border:0; border-radius:inherit; color:inherit; background:transparent; cursor:pointer; }
 .spirit-card-actions { position:absolute; right:8px; bottom:8px; left:8px; display:flex; justify-content:center; gap:8px; visibility:hidden; opacity:0; pointer-events:none; }
-.spirit-thumbnail-card.selected:is(:hover, :focus-within) .spirit-card-actions { visibility:visible; opacity:1; pointer-events:auto; }
+.spirit-thumbnail-card:is(:hover, :focus-within) .spirit-card-actions { visibility:visible; opacity:1; pointer-events:auto; }
 .spirit-card-actions .soft-button { min-height:30px; padding:4px 12px; }
-.spirit-thumbnail-card.selected { border-color:var(--ui-accent); box-shadow:var(--ui-selected-shadow); }
+.spirit-thumbnail-card:is(:hover, :focus-within) { border-color:var(--ui-accent); box-shadow:var(--ui-selected-shadow); }
 .spirit-thumbnail-card strong { width:100%; text-align:center; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:14px; }
 .spirit-thumbnail-card small { color:var(--ui-muted); }
 </style>

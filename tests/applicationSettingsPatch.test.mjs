@@ -7,6 +7,20 @@ test('ordinary settings patches cannot restore global debug mode', () => {
   assert.equal(createApplicationSettingsPatch({}).mode,'game');
 });
 
+test('navigation name is saved independently and the fixed application title is not patched', () => {
+  const patch = createApplicationSettingsPatch({ navigationTitle: 'My games', applicationTitle: 'Other app' });
+  assert.equal(patch.navigationTitle, 'My games');
+  assert.equal(Object.hasOwn(patch, 'applicationTitle'), false);
+});
+
+test('resource drafts are included only in the explicit save patch, including clears', () => {
+  const patch = createApplicationSettingsPatch({ applicationIconPath: 'preview.png', secondaryDisplayBackgroundPath: '', secondaryIdleMediaPath: 'idle.mp4', resourcePreview: { applicationIconPath: 'ignored.png' } });
+  assert.equal(patch.applicationIconPath, 'preview.png');
+  assert.equal(patch.secondaryDisplayBackgroundPath, null);
+  assert.equal(patch.secondaryIdleMediaPath, 'idle.mp4');
+  assert.equal(Object.hasOwn(patch, 'resourcePreview'), false);
+});
+
 test("application settings IPC patch detaches nested reactive proxies", () => {
   const promptTexts = new Proxy({
     "zh-CN": "开始游戏",

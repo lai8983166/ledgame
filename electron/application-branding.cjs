@@ -1,4 +1,6 @@
 const path = require('node:path')
+const { randomUUID } = require('node:crypto')
+const resourceFileId = () => `${Date.now()}-${randomUUID()}`
 
 const SUPPORTED_ICON_EXTENSIONS = new Set(['.ico', '.png'])
 const MAX_ICON_BYTES = 5 * 1024 * 1024
@@ -9,6 +11,7 @@ const SUPPORTED_IDLE_MEDIA_EXTENSIONS = new Set([
   '.m4v', '.mov', '.mp4', '.ogg', '.ogv', '.webm',
 ])
 const MAX_IDLE_MEDIA_BYTES = 200 * 1024 * 1024
+const appliedWindowIcons = new WeakMap()
 
 function toPublicApplicationSettings(settings) {
   if (!settings || typeof settings !== 'object') return settings
@@ -17,19 +20,22 @@ function toPublicApplicationSettings(settings) {
 }
 
 function applyApplicationBrand({ app, BrowserWindow, fsSync, settings, splashWindow = null }) {
-  const title = settings?.applicationTitle || 'LED Game'
-  app.setName(title)
+  const title = 'LED Game'
+  if (app.getName?.() !== title) app.setName(title)
   const iconPath = settings?.applicationIconPath
   const iconAvailable = Boolean(iconPath && fsSync.existsSync(iconPath))
   BrowserWindow.getAllWindows().forEach((window) => {
     if (window.isDestroyed() || window === splashWindow) return
-    window.setTitle(title)
-    if (iconAvailable) window.setIcon(iconPath)
+    if (window.getTitle?.() !== title) window.setTitle(title)
+    if (iconAvailable && appliedWindowIcons.get(window) !== iconPath) {
+      window.setIcon(iconPath)
+      appliedWindowIcons.set(window, iconPath)
+    }
   })
   return { title, iconAvailable }
 }
 
-async function installApplicationIcon({ fs, nativeImage, source, userDataPath, now = Date.now }) {
+async function installApplicationIcon({ fs, nativeImage, source, userDataPath, now = resourceFileId }) {
   const extension = path.extname(source || '').toLowerCase()
   if (!SUPPORTED_ICON_EXTENSIONS.has(extension)) {
     throw new Error('应用图标仅支持 PNG 或 ICO 文件')
@@ -55,7 +61,7 @@ async function installApplicationIcon({ fs, nativeImage, source, userDataPath, n
   }
 }
 
-async function installSecondaryDisplayBackground({ fs, nativeImage, source, userDataPath, now = Date.now }) {
+async function installSecondaryDisplayBackground({ fs, nativeImage, source, userDataPath, now = resourceFileId }) {
   const extension = path.extname(source || '').toLowerCase()
   if (!SUPPORTED_BACKGROUND_EXTENSIONS.has(extension)) {
     throw new Error('副屏背景仅支持 PNG、JPG、JPEG、WEBP、BMP、GIF 或 AVIF 图片')
@@ -72,8 +78,8 @@ async function installSecondaryDisplayBackground({ fs, nativeImage, source, user
   }
 
   const directory = path.join(userDataPath, 'branding')
-  const target = path.join(directory, 'secondary-display-background.png')
-  const temporary = `${target}.${now()}.tmp`
+  const target = path.join(directory, `secondary-display-background-${now()}.png`)
+  const temporary = `${target}.tmp`
   await fs.mkdir(directory, { recursive: true })
   try {
     await fs.writeFile(temporary, png)
@@ -85,7 +91,7 @@ async function installSecondaryDisplayBackground({ fs, nativeImage, source, user
   }
 }
 
-async function installSecondaryIdleMedia({ fs, nativeImage, source, userDataPath, now = Date.now }) {
+async function installSecondaryIdleMedia({ fs, nativeImage, source, userDataPath, now = resourceFileId }) {
   const extension = path.extname(source || '').toLowerCase()
   if (!SUPPORTED_IDLE_MEDIA_EXTENSIONS.has(extension)) {
     throw new Error('副屏待机画面仅支持 PNG、JPG、JPEG、WEBP、BMP、GIF、AVIF 或 MP4 等视频文件')

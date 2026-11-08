@@ -17,8 +17,11 @@ export function createApplicationSettingsPatch(settings) {
   if (settings && Object.prototype.hasOwnProperty.call(settings, "secondaryIdlePromptFontSize")) {
     patch.secondaryIdlePromptFontSize = settings.secondaryIdlePromptFontSize;
   }
-  if (settings && Object.prototype.hasOwnProperty.call(settings, "applicationTitle")) {
-    patch.applicationTitle = settings.applicationTitle;
+  if (settings && Object.prototype.hasOwnProperty.call(settings, "navigationTitle")) {
+    patch.navigationTitle = settings.navigationTitle;
+  }
+  if (settings && Object.hasOwn(settings, 'applicationIconPath')) {
+    patch.applicationIconPath = settings.applicationIconPath || null;
   }
   if (settings && Object.prototype.hasOwnProperty.call(settings, "secondaryDisplayBackgroundPath")) {
     patch.secondaryDisplayBackgroundPath = settings.secondaryDisplayBackgroundPath || null;

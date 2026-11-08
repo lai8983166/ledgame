@@ -34,6 +34,7 @@ const BRAND_DEFAULTS = {
   coinCount: 1,
   secondaryIdleSubtitleText: '',
   applicationTitle: "LED Game",
+  navigationTitle: "我的游戏",
   applicationIconPath: null,
   secondaryDisplayBackgroundPath: null,
   secondaryIdleMediaPath: null,
@@ -41,6 +42,26 @@ const BRAND_DEFAULTS = {
   secondaryIdlePromptText: "LED FLOOR GAME",
   secondaryIdlePromptFontSize: 72,
 };
+
+test('fixed application title and independent navigation name normalize legacy settings', async () => {
+  assert.equal(normalizeApplicationSettings({}).navigationTitle, '我的游戏');
+  assert.equal(normalizeApplicationSettings({ applicationTitle: 'LED Game' }).navigationTitle, '我的游戏');
+  assert.equal(normalizeApplicationSettings({ applicationTitle: ' LED Game ' }).navigationTitle, '我的游戏');
+  assert.equal(normalizeApplicationSettings({ applicationTitle: 'Legacy games' }).navigationTitle, 'Legacy games');
+  assert.equal(normalizeApplicationSettings({ applicationTitle: 'Legacy games', navigationTitle: 'New games' }).navigationTitle, 'New games');
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'led-game-navigation-'));
+  try {
+    const settingsPath = path.join(directory, 'application.json');
+    await writeFile(settingsPath, JSON.stringify({ applicationTitle: 'Legacy games' }));
+    const store = createApplicationSettingsStore({ fs, settingsPath });
+    assert.equal((await store.get()).navigationTitle, 'Legacy games');
+    const saved = await store.update({ navigationTitle: '  My floor  ', applicationTitle: 'Cannot rename app' });
+    assert.equal(saved.applicationTitle, 'LED Game');
+    assert.equal(saved.navigationTitle, 'My floor');
+    assert.deepEqual(await createApplicationSettingsStore({ fs, settingsPath }).get(), saved);
+    assert.equal((await store.update({ applicationTitle: 'Another title' })).navigationTitle, 'My floor');
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
 
 test('legacy global debug settings normalize to game without changing connection or entry method', async () => {
   const directory = await mkdtemp(path.join(os.tmpdir(), 'led-game-old-mode-'));
@@ -229,20 +250,20 @@ test('secondary subtitle and placeholder coin count persist independently of Tou
   }finally{await rm(directory,{recursive:true,force:true});}
 });
 
-test("application title, managed icon and touch exit password persist with safe validation", async () => {
+test("navigation title, managed icon and touch exit password persist with safe validation", async () => {
   const directory = await mkdtemp(path.join(os.tmpdir(), "led-game-brand-settings-"));
   const settingsPath = path.join(directory, "application.json");
   try {
     const store = createApplicationSettingsStore({ fs, settingsPath });
     const iconPath = path.join(directory, "brand icon.png");
     const saved = await store.update({
-      applicationTitle: "  Fun Floor  ",
+      navigationTitle: "  Fun Floor  ",
       applicationIconPath: iconPath,
       secondaryDisplayBackgroundPath: path.join(directory, "branding", "secondary-display-background.png"),
       secondaryIdleMediaPath: path.join(directory, "branding", "secondary-idle-media-1.mp4"),
       touchExitPassword: "123456",
     });
-    assert.equal(saved.applicationTitle, "Fun Floor");
+    assert.equal(saved.navigationTitle, "Fun Floor");
     assert.equal(saved.applicationIconPath, path.resolve(iconPath));
     assert.equal(
       saved.secondaryDisplayBackgroundPath,
@@ -255,8 +276,8 @@ test("application title, managed icon and touch exit password persist with safe 
     assert.equal(saved.touchExitPassword, "123456");
     assert.deepEqual(await createApplicationSettingsStore({ fs, settingsPath }).get(), saved);
 
-    await assert.rejects(() => store.update({ applicationTitle: "   " }), /1 to 64/);
-    await assert.rejects(() => store.update({ applicationTitle: "x".repeat(65) }), /1 to 64/);
+    await assert.rejects(() => store.update({ navigationTitle: "   " }), /1 to 64/);
+    await assert.rejects(() => store.update({ navigationTitle: "x".repeat(65) }), /1 to 64/);
     await assert.rejects(() => store.update({ touchExitPassword: "12ab" }), /4 to 12 digits/);
     await assert.rejects(() => store.update({ touchExitPassword: "1".repeat(13) }), /4 to 12 digits/);
     assert.deepEqual(await store.get(), saved);

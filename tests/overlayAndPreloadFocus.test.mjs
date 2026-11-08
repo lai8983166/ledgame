@@ -11,6 +11,6 @@ test("touch preload resynchronizes editable focus when the native window regains
 });
 
 test("parent dialogs ignore every keyboard event while their media picker is on top", () => {
-  assert.match(globalDialog, /function handleKeydown\(event\) \{\s*if \(picker\.value\) \{\s*return;/);
+  assert.match(globalDialog, /function handleKeydown\(event\) \{\s*if \(props\.embedded\) return;\s*if \(picker\.value\) \{\s*return;/);
   assert.match(infoDialog, /function handleKeydown\(event\) \{\s*if \(pickerOpen\.value\) \{\s*return;/);
 });

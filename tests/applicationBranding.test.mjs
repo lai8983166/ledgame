@@ -40,9 +40,22 @@ test("application brand updates every live non-splash window and uses a managed 
     settings: { applicationTitle: "Floor Fun", applicationIconPath: "managed.png" },
     splashWindow: splash,
   });
-  assert.deepEqual(appCalls, ["Floor Fun"]);
-  assert.deepEqual(calls, [["title", "Floor Fun"], ["icon", "managed.png"]]);
-  assert.deepEqual(result, { title: "Floor Fun", iconAvailable: true });
+  assert.deepEqual(appCalls, ["LED Game"]);
+  assert.deepEqual(calls, [["title", "LED Game"], ["icon", "managed.png"]]);
+  assert.deepEqual(result, { title: "LED Game", iconAvailable: true });
+});
+
+test('unrelated settings and repeated previews do not repaint native titles or icons', () => {
+  const calls = [];
+  const app = { getName: () => 'LED Game', setName: value => calls.push(['name', value]) };
+  const win = { isDestroyed: () => false, getTitle: () => 'LED Game',
+    setTitle: value => calls.push(['title', value]), setIcon: value => calls.push(['icon', value]) };
+  const args = { app, BrowserWindow: { getAllWindows: () => [win] }, fsSync: { existsSync: () => true }, settings: { applicationIconPath: 'first.png' } };
+  applyApplicationBrand(args);applyApplicationBrand(args);
+  applyApplicationBrand({ ...args, settings: { ...args.settings, secondaryDisplayBackgroundPath: 'background.png' } });
+  assert.deepEqual(calls, [['icon', 'first.png']]);
+  applyApplicationBrand({ ...args, settings: { applicationIconPath: 'second.png' } });
+  assert.deepEqual(calls, [['icon', 'first.png'], ['icon', 'second.png']]);
 });
 
 test("invalid icon copy leaves the previous persisted icon unchanged and cleans its temp file", async () => {
@@ -93,7 +106,7 @@ test("secondary display backgrounds are converted to a managed PNG", async () =>
       userDataPath: directory,
       now: () => 7,
     });
-    assert.equal(target, path.join(directory, "branding", "secondary-display-background.png"));
+    assert.equal(target, path.join(directory, "branding", "secondary-display-background-7.png"));
     assert.deepEqual(await readFile(target), Buffer.from("managed-png"));
   } finally {
     await rm(directory, { recursive: true, force: true });

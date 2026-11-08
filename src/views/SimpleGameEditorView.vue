@@ -15,7 +15,7 @@ import MediaResourceButton from "../components/MediaResourceButton.vue";
 import PixelLightLayoutDialog from "../components/PixelLightLayoutDialog.vue";
 import GameEffectDialog from "../components/GameEffectDialog.vue";
 import GameWiringDialog from "../components/GameWiringDialog.vue";
-import { saveGameWiring } from "../lib/gameWiring.js";
+import { serializeGameWiring } from "../lib/gameWiring.js";
 import { editorSnapshot } from '../lib/editorDirtyState.js';
 import { gameFieldDimensionsValid, gameFieldDimensionForDisplay } from '../lib/gameFieldDimensions.js';
 import { encodeSimpleGifInWorker } from "../lib/encodeSimpleGif.js";
@@ -28,7 +28,7 @@ import { deleteLevelAt, moveLevelAt } from "../lib/simpleLevelSequence.js";
 import { normalizeLevelOption, validateLevelOption } from "../lib/simpleLevelOptions.js";
 import { createRgbEditHistory } from "../lib/simpleRgbEditHistory.js";
 import { createLatestAsyncTaskGuard } from "../lib/latestAsyncTask.js";
-import { applySimpleGlobalConfigPatch, saveSimpleGlobalConfigDocument } from "../lib/simpleGlobalConfig.js";
+import { applySimpleGlobalConfigPatch } from "../lib/simpleGlobalConfig.js";
 import { normalizePixelLightWiring } from "../lib/pixelLightLayout.js";
 import { normalizeGameCategoryList } from "../lib/gameCategories.js";
 import {
@@ -74,7 +74,40 @@ const api = window.ledGame;
 const busyAction = ref("");
 const errorMessage = ref("");
 const statusMessage = ref("");
-const globalConfigOpen = ref(false);
+const editorPage = ref('levels');
+const globalConfigOpen = computed(() => editorPage.value === 'global');
+const gameWiringOpen = computed(() => editorPage.value === 'wiring');
+const globalPageMounted = ref(false);
+const wiringPageMounted = ref(false);
+const globalPageRef = ref(null);
+const wiringPageRef = ref(null);
+let syncedGlobalDraft = null;
+function syncGlobalPage() {
+  const draft = globalPageRef.value?.getDraft();
+  if (!draft || !document.value) return;
+  const patch = {};
+  for (const [key, value] of Object.entries(draft)) {
+    if (JSON.stringify(value) === JSON.stringify(syncedGlobalDraft?.[key])) continue;
+    if (['audio', 'gif', 'commonConfig'].includes(key)) {
+      patch[key] = Object.fromEntries(Object.entries(value || {}).filter(([field, next]) =>
+        JSON.stringify(next) !== JSON.stringify(syncedGlobalDraft?.[key]?.[field])));
+    } else patch[key] = value;
+  }
+  if (Object.keys(patch).length) applySimpleGlobalConfigPatch(document.value, patch);
+  syncedGlobalDraft = JSON.parse(JSON.stringify(draft));
+}
+async function selectEditorPage(page) {
+  if (busyAction.value || anchorEditMode.value) return;
+  syncGlobalPage();
+  if (page === 'global' && !globalPageMounted.value) initializeGlobalPage();
+  if (page === 'wiring') wiringPageMounted.value = true;
+  editorPage.value = page;
+  await nextTick();
+  if (page === 'levels') {
+    measureMatrixContainer();
+    scheduleEditorFitMeasurement();
+  }
+}
 let initialGlobalConfigOpened = false;
 const levelMediaPicker = ref(null);
 const levelMediaFields = computed(() => [
@@ -86,27 +119,6 @@ function selectLevelMedia(value) {
   const picker = levelMediaPicker.value;
   if (picker && !busyAction.value && document.value?.levels.includes(picker.level)) picker.level.option[picker.field.key] = value;
   levelMediaPicker.value = null;
-}
-const gameWiringOpen = ref(false);
-const gameWiringSaving = ref(false);
-const gameWiringError = ref("");
-async function saveWiring(wiring) {
-  if (gameWiringSaving.value) return;
-  gameWiringSaving.value = true;
-  gameWiringError.value = "";
-  try {
-    if (currentGameId.value) await withEditorSavingCursor(() => saveGameWiring(api, currentGameId.value, false, wiring, document.value));
-    else {
-      document.value.wiringData = JSON.parse(JSON.stringify(wiring));
-      statusMessage.value = t('gameCreation.draftHint');
-    }
-    gameWiringOpen.value = false;
-    if (currentGameId.value && savedEditorDocument) savedEditorDocument.wiringData = JSON.parse(JSON.stringify(wiring));
-    saveFeedback.value = { message: currentGameId.value ? t('simple.saveSuccess') : t('gameCreation.draftHint') };
-  } catch (error) {
-    gameWiringError.value = error.message?.startsWith('gameWiring.') ? t(error.message) : error.message;
-    saveFeedback.value = { failed: true, message: gameWiringError.value };
-  } finally { gameWiringSaving.value = false; }
 }
 const globalConfigDraft = ref({});
 const gameCategories = ref([]);
@@ -128,13 +140,13 @@ const gifExportProgress = ref("");
 const document = ref(null);
 let savedEditorDocument = null;
 function hasUnsavedChanges() {
-  return Boolean(document.value && (!currentGameId.value || editorSnapshot(document.value) !== editorSnapshot(savedEditorDocument)));
+  return Boolean(document.value && (!currentGameId.value || globalPageRef.value?.hasChanges() || wiringPageRef.value?.hasChanges() || editorSnapshot(document.value) !== editorSnapshot(savedEditorDocument)));
 }
 async function saveForLeave() {
-  if (busyAction.value || gameWiringSaving.value) return false;
+  if (busyAction.value) return false;
   return await saveEditor() === true;
 }
-function canLeave() { return !busyAction.value && !gameWiringSaving.value; }
+function canLeave() { return !busyAction.value; }
 defineExpose({ hasUnsavedChanges, saveForLeave, canLeave });
 const activeLevelIndex = ref(0);
 const activeFrameIndex = ref(0);
@@ -577,6 +589,10 @@ async function loadEditor() {
   editorFitCanReveal = false;
   clearRgbEditHistory();
   document.value = null;
+  editorPage.value = 'levels';
+  globalPageMounted.value = false;
+  wiringPageMounted.value = false;
+  syncedGlobalDraft = null;
   effectDialogOpen.value = false;
   await runEditorAction("load", async () => {
     if (!gameId && !props.initialDocument) {
@@ -985,6 +1001,13 @@ async function saveEditor() {
     return;
   }
   return await runEditorAction("save", async () => {
+    syncGlobalPage();
+    await nextTick();
+    if (wiringPageRef.value?.hasChanges()) document.value.wiringData = wiringPageRef.value.getDraft();
+    if (document.value.wiringData?.runtimeEnabled === true) {
+      try { serializeGameWiring(document.value.wiringData); }
+      catch (error) { editorPage.value = 'wiring'; wiringPageMounted.value = true; throw new Error(t(error.message)); }
+    }
     if (!gameFieldDimensionsValid(document.value)) throw new Error(t('editorSave.invalid') + '\n' + t('editorSave.fieldDimensions'));
     const missing = requiredEditorFields(document.value);
     if (missing.length) {
@@ -1015,12 +1038,16 @@ async function saveEditor() {
     document.value.id = saved.gameId;
     payload.id = saved.gameId;
     savedEditorDocument = JSON.parse(editorSnapshot(document.value));
+    globalPageRef.value?.markSaved();
+    wiringPageRef.value?.markSaved();
     statusMessage.value = t("simple.saveSuccess");
     validationErrors.value = [];
   });
 }
 
-function openGlobalConfig() {
+function openGlobalConfig() { return selectEditorPage('global'); }
+
+function initializeGlobalPage() {
   if (!document.value || busyAction.value) {
     return;
   }
@@ -1045,36 +1072,8 @@ function openGlobalConfig() {
     commonConfig: { ...(doc.commonConfig || {}) },
   };
   errorMessage.value = "";
-  globalConfigOpen.value = true;
-}
-
-async function saveGlobalConfig(patch) {
-  if (busyAction.value) return;
-  const gameId = currentGameId.value;
-  if (!gameId) {
-    applySimpleGlobalConfigPatch(document.value, patch);
-    globalConfigOpen.value = false;
-    statusMessage.value = t('gameCreation.draftHint');
-    saveFeedback.value = { message: statusMessage.value };
-    return;
-  }
-  // 仅持久化配置字段：用后端上次已保存的文档作为 base，只应用配置 patch 后落库，
-  // 避免把 RGB 编辑区未保存的帧/矩阵改动一并提交。
-  await runEditorAction("save", async () => {
-    const result = await saveSimpleGlobalConfigDocument({
-      api,
-      gameId,
-      patch,
-      liveDocument: document.value,
-      missingDocumentMessage: t("simple.readSavedFailed"),
-    });
-    if (savedEditorDocument) applySimpleGlobalConfigPatch(savedEditorDocument, patch);
-    statusMessage.value = result?.data?.saved ? t("simple.globalSaved") : t("simple.saveComplete");
-    validationErrors.value = [];
-  });
-  if (!errorMessage.value) {
-    globalConfigOpen.value = false;
-  }
+  syncedGlobalDraft = JSON.parse(JSON.stringify(globalConfigDraft.value));
+  globalPageMounted.value = true;
 }
 
 function openPixelLightLayout() {
@@ -1171,32 +1170,12 @@ function applyEffectResult(result) {
   statusMessage.value = t("effect.applied");
 }
 
-async function savePixelLightLayout(layout) {
-  const gameId = currentGameId.value;
-  if (!gameId) {
-    document.value.commonConfig ||= {};
-    document.value.commonConfig.pixelLightWiring = normalizePixelLightWiring(layout);
-    pixelLightLayoutDraft.value = normalizePixelLightWiring(layout);
-    pixelLightLayoutOpen.value = false;
-    statusMessage.value = t('gameCreation.draftHint');
-    return;
-  }
-  await runEditorAction("save", async () => {
-    const result = await saveSimpleGlobalConfigDocument({
-      api,
-      gameId,
-      patch: { commonConfig: { pixelLightWiring: normalizePixelLightWiring(layout) } },
-      liveDocument: document.value,
-      missingDocumentMessage: t("simple.readSavedFailed"),
-    });
-    if (savedEditorDocument) applySimpleGlobalConfigPatch(savedEditorDocument, { commonConfig: { pixelLightWiring: normalizePixelLightWiring(layout) } });
-    pixelLightLayoutDraft.value = normalizePixelLightWiring(layout);
-    statusMessage.value = result?.data?.saved ? t("pixelLight.saved") : t("simple.saveComplete");
-    validationErrors.value = [];
-  });
-  if (!errorMessage.value) {
-    pixelLightLayoutOpen.value = false;
-  }
+function savePixelLightLayout(layout) {
+  if (!document.value || busyAction.value) return;
+  document.value.commonConfig ||= {};
+  document.value.commonConfig.pixelLightWiring = normalizePixelLightWiring(layout);
+  pixelLightLayoutDraft.value = normalizePixelLightWiring(layout);
+  pixelLightLayoutOpen.value = false;
 }
 
 async function exportCurrentLevelGif() {
@@ -2288,6 +2267,17 @@ function zoomMatrix(event) {
   });
 }
 
+async function resetMatrixView() {
+  if (busyAction.value || !activeLevel.value) return;
+  cancelZoomFrame();
+  matrixZoom.value = 1;
+  await nextTick();
+  if (matrixScrollRef.value) {
+    matrixScrollRef.value.scrollLeft = 0;
+    matrixScrollRef.value.scrollTop = 0;
+  }
+}
+
 function selectObject(id) {
   selectedObjectId.value = id;
   stopSelectionMode();
@@ -3149,7 +3139,7 @@ function canTriggerGlobalShortcut(event) {
 }
 
 function handleGlobalKeydown(event) {
-  if (levelMediaPicker.value) return;
+  if (editorPage.value !== 'levels' || levelMediaPicker.value) return;
   const tagName = event.target?.tagName?.toLowerCase();
   if (["input", "textarea", "select", "audio"].includes(tagName) || event.target?.isContentEditable) {
     return;
@@ -3282,9 +3272,17 @@ function formatRuntimeSummary(value) {
       <button class="soft-button editor-back-button" type="button" @click="$emit('back')">{{ t("simple.backToList") }}</button>
       <div v-if="document && !anchorEditMode" class="editor-heading-actions">
         <button class="soft-button compact-button object-icon-button" type="button" :aria-label="t('simple.save')" :title="t('simple.save')" :disabled="Boolean(busyAction)" @click="saveEditor"><EditorActionIcon name="save" /></button>
-        <button class="soft-button compact-button object-icon-button" type="button" :aria-label="t('simple.globalConfig')" :title="t('simple.globalConfig')" :disabled="Boolean(busyAction)" @click="openGlobalConfig"><EditorActionIcon name="settings" /></button>
-        <button class="soft-button compact-button object-icon-button" type="button" :aria-label="t('gameWiring.title')" :title="t('gameWiring.title')" :disabled="Boolean(busyAction)" @click="gameWiringError = ''; gameWiringOpen = true"><EditorActionIcon name="wiring" /></button>
       </div>
+      </div>
+    </div>
+    <nav v-if="document && !anchorEditMode" class="editor-page-tabs" role="tablist">
+      <button v-for="page in ['global', 'wiring', 'levels']" :key="page" class="soft-button" type="button"
+        role="tab" :data-editor-page="page" :aria-selected="editorPage === page" :class="{ active: editorPage === page }"
+        :disabled="Boolean(busyAction)" @click="selectEditorPage(page)">{{ t(page === 'global' ? 'simple.globalConfig' : page === 'wiring' ? 'gameWiring.title' : 'simple.levelEditing') }}</button>
+    </nav>
+    <div v-show="editorPage === 'levels'" class="editor-level-page" role="tabpanel">
+    <div class="editor-topbar">
+      <div class="editor-heading-row">
       <div v-if="document" class="level-sequence-row">
         <div class="level-structure-actions">
           <button class="icon-add-button" type="button" :aria-label="t('simple.addLevel')" :title="t('simple.addLevel')" @click="addLevel">+</button>
@@ -3426,6 +3424,11 @@ function formatRuntimeSummary(value) {
                 :aria-pressed="editingMode === mode && drawingTool !== 'select' && !selectionMode && !anchorEditMode"
                 @click="selectEditingMode(mode)">
                 <EditorActionIcon :name="mode === 'point' ? 'brush' : 'region'" />
+              </button>
+              <button class="soft-button compact-button object-icon-button" type="button"
+                :aria-label="t('simple.resetView')" :title="t('simple.resetView')"
+                :disabled="Boolean(busyAction) || !activeLevel" @click="resetMatrixView">
+                <EditorActionIcon name="reset-view" />
               </button>
               <template v-if="anchorEditMode">
                 <button
@@ -3957,18 +3960,15 @@ function formatRuntimeSummary(value) {
         </div>
       </aside>
     </div>
+    </div>
+    <GameGlobalConfigDialog v-if="globalPageMounted" v-show="editorPage === 'global'" ref="globalPageRef"
+      embedded :config="globalConfigDraft" :categories="gameCategories" :saving="busyAction === 'save'" :error="errorMessage" />
+    <GameWiringDialog v-if="wiringPageMounted" v-show="editorPage === 'wiring'" ref="wiringPageRef"
+      embedded :wiring="document?.wiringData" :width="matrixWidth" :height="matrixHeight"
+      :saving="busyAction === 'save'" :error="errorMessage" />
       </section>
     </div>
     <EditorSaveDialog v-if="saveFeedback" v-bind="saveFeedback" @close="saveFeedback = null" />
-    <GameGlobalConfigDialog
-      v-if="globalConfigOpen"
-      :config="globalConfigDraft"
-      :categories="gameCategories"
-      :saving="busyAction === 'save'"
-      :error="errorMessage"
-      @cancel="globalConfigOpen = false"
-      @save="saveGlobalConfig"
-    />
     <MediaPickerDialog v-if="levelMediaPicker" :accept="levelMediaPicker.field.accept" :current-value="levelMediaPicker.level.option[levelMediaPicker.field.key] || ''" :title="levelMediaPicker.field.label" @cancel="levelMediaPicker = null" @select="selectLevelMedia" />
     <PixelLightLayoutDialog
       v-if="pixelLightLayoutOpen"
@@ -3981,8 +3981,6 @@ function formatRuntimeSummary(value) {
       @cancel="pixelLightLayoutOpen = false"
       @save="savePixelLightLayout"
     />
-    <GameWiringDialog v-if="gameWiringOpen" :wiring="document?.wiringData" :width="matrixWidth" :height="matrixHeight"
-      :saving="gameWiringSaving" :error="gameWiringError" @cancel="gameWiringOpen = false" @save="saveWiring" />
     <GameEffectDialog
       v-if="effectDialogOpen"
       :effect="effectDialogDraft"
@@ -4007,6 +4005,10 @@ function formatRuntimeSummary(value) {
 </template>
 
 <style scoped>
+.editor-page-tabs { display:flex; gap:8px; padding:4px 0; }
+.editor-page-tabs .active { border-color:var(--ui-accent); background:var(--ui-elevated); }
+.editor-level-page { display:grid; grid-template-rows:auto auto minmax(0,1fr); min-height:0; height:100%; gap:6px; }
+
 .sequence-pill[draggable="true"] { cursor: grab; }
 .level-tab { position: relative; display: flex; flex-shrink: 0; }
 .level-tab .sequence-pill { padding-right: 28px; }

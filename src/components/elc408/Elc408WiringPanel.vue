@@ -22,13 +22,20 @@ import {
 import Elc408WiringCanvas from "./Elc408WiringCanvas.vue";
 import { parseWiringFile, serializeGameWiring } from "../../lib/gameWiring.js";
 
-const props = defineProps({ initialDocument: {type:Object, default:null}, gameScoped:Boolean, saving:Boolean });
+const props = defineProps({ initialDocument: {type:Object, default:null}, gameScoped:Boolean, saving:Boolean, embedded:Boolean });
 const emit = defineEmits(["save", "save-error", "import"]);
 
 const { t } = useI18n({ useScope: "global" });
 const api = window.elc408Tools;
 
 const document = reactive(props.initialDocument ? JSON.parse(JSON.stringify(props.initialDocument)) : createWiringDocument());
+const snapshot = () => JSON.stringify({ width:document.width, height:document.height, mode:document.mode, maxPointsPerChannel:document.maxPointsPerChannel, lines:document.lines });
+let savedDraft = snapshot();
+function getDraft() { return serializeGameWiring(document); }
+function hasChanges() { return savedDraft !== snapshot(); }
+function markSaved() { savedDraft = snapshot(); }
+function setDimensions(width, height) { document.width = width; document.height = height; }
+defineExpose({ getDraft, hasChanges, markSaved, setDimensions });
 const errorMessage = ref("");
 const successMessage = ref("");
 const infoMessage = ref(t("elc408.wiring.clickHint"));
@@ -253,7 +260,7 @@ async function download() {
           </li>
         </ul>
       </fieldset>
-      <div class="elc408-actions">
+      <div v-if="!embedded" class="elc408-actions">
         <button
           type="button"
           class="primary"

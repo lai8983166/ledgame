@@ -12,6 +12,8 @@ const hardwareNotice=ref(false),hardwareDialog=ref(null),entryHardwareWarning=re
 let hardwareNoticeTimer,hardwareReturnFocus;
 function hardwareMessage(value){
   const message=String(value?.message || value || '');
+  const sizeMismatch=/ELC408_FRAME_SIZE_MISMATCH\b[\s\S]*?game frame (\d+)x(\d+) does not match wiring (\d+)x(\d+)/.exec(message);
+  if(sizeMismatch)return t('editorDebug.frameSizeMismatch',{rgb:`${sizeMismatch[1]}×${sizeMismatch[2]}`,wiring:`${sizeMismatch[3]}×${sizeMismatch[4]}`});
   if(/ELC408_NO_CONTROLLERS|SEARCH_NO_CONTROLLERS/.test(message))return t('editorDebug.deviceNotConnected');
   if(/ELC408_RUNTIME_DISABLED|SDK_NOT_ENABLED/.test(message))return t('editorDebug.sdkDisabled');
   if(/ELC408_NETWORK_INTERFACE_UNAVAILABLE/.test(message))return t('editorDebug.networkUnavailable');
@@ -137,7 +139,7 @@ onBeforeUnmount(()=>{alive=false;clearTimeout(hardwareNoticeTimer);clearInterval
     <header><button class="soft-button" :disabled="busy" @click="exit">{{exitLabel || t('editorDebug.exit')}}</button><h1>{{game.displayName || game.name}}</h1><span>{{t('editorDebug.title')}}</span></header>
     <div class="debug-workspace-columns">
       <aside class="debug-workspace-controls">
-        <label><span>{{t('editorDebug.method')}}</span><select v-model="options.launchMethod" :disabled="busy || active || !!preparation"><option value="debug">{{t('editorDebug.direct')}}</option><option value="wristband">{{t('editorDebug.wristband')}}</option></select></label>
+        <!-- <label><span>{{t('editorDebug.method')}}</span><select v-model="options.launchMethod" :disabled="busy || active || !!preparation"><option value="debug">{{t('editorDebug.direct')}}</option><option value="wristband">{{t('editorDebug.wristband')}}</option></select></label> -->
         <label><span>{{t('editorDebug.players')}}</span><input v-model.number="options.userCount" type="number" :min="game.minPlayers || 1" :max="game.maxPlayers || game.participants || 1" :disabled="busy || active || !!preparation" /></label>
         <section class="debug-level-section" :aria-label="t('editorDebug.levelList')">
           <h2>{{t('editorDebug.levelList')}}</h2>
@@ -155,7 +157,7 @@ onBeforeUnmount(()=>{alive=false;clearTimeout(hardwareNoticeTimer);clearInterval
         <p v-if="error" class="error-line" role="alert">{{error}}</p><p v-if="hardwareWarning" class="error-line">{{hardwareWarning}}</p>
         <dl><dt>{{t('editorDebug.score')}}</dt><dd>{{gameplay.score ?? '—'}}</dd><dt>{{t('editorDebug.life')}}</dt><dd>{{game.type==='rank'?'—':gameplay.life ?? '—'}}</dd><dt>{{t('editorDebug.points')}}</dt><dd>{{gameplay.memberPoints ?? '—'}}</dd><dt>{{t('editorDebug.time')}}</dt><dd>{{countdown}}</dd></dl>
         <article v-for="player in gameplay.players || []" :key="player.playerNumber" class="debug-player"><i :style="{background:player.color || '#888'}"></i><span>{{player.playerNumber}} · {{player.totalScore ?? player.score}} / {{t('editorDebug.points')}} {{player.memberPoints ?? 0}}</span></article>
-        <p v-if="state.terminationReason">{{t('editorDebug.finished')}} · {{state.terminationReason}}</p>
+        <p v-if="state.terminationReason">{{t('editorDebug.finished')}}</p>
       </aside>
       <div class="debug-workspace-rgb"><DebugLightBoard :pixels="pixels" :layout="game.commonConfig?.pixelLightWiring" :runtime="state.sessionId===sessionId ? state.peripheralLights : undefined" :hover-cell="hover" :disabled="busy || state.engineState!=='RUNNING'" @hover-cell="hoverCell" @clear-hover="hover=null" @cell-click="clickCell" @circle-click="clickCircle" /></div>
     </div>

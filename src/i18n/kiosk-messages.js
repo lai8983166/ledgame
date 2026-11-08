@@ -31,7 +31,7 @@ export const kioskMessages = {
       apiUnavailable: "当前运行环境未提供配置接口",
       loadFailed: "读取配置失败",
       saveFailed: "保存配置失败",
-      idlePromptText: "Touch 待机文字",
+      idlePromptText: "触屏待机文字",
       idlePromptTextHint: "IDLE 页面中央显示的一行文字，最多 48 个字符。",
       idlePromptFontSize: "待机文字大小",
       idlePromptFontSizeRange: "32-200 px",

@@ -28,6 +28,7 @@ const SECONDARY_IDLE_PROMPT_FONT_SIZE_DEFAULT = 72
 const SECONDARY_IDLE_PROMPT_FONT_SIZE_MIN = 32
 const SECONDARY_IDLE_PROMPT_FONT_SIZE_MAX = 200
 const APPLICATION_TITLE_DEFAULT = 'LED Game'
+const NAVIGATION_TITLE_DEFAULT = '我的游戏'
 const TOUCH_EXIT_PASSWORD_DEFAULT = '888888'
 const SECONDARY_DISPLAY_BACKGROUND_DEFAULT = null
 const SECONDARY_IDLE_MEDIA_DEFAULT = null
@@ -46,15 +47,16 @@ const DEFAULT_APPLICATION_SETTINGS = Object.freeze({
   secondaryIdlePromptFontSize: SECONDARY_IDLE_PROMPT_FONT_SIZE_DEFAULT,
   secondaryIdleSubtitleFontSize: SECONDARY_IDLE_PROMPT_FONT_SIZE_DEFAULT,
   applicationTitle: APPLICATION_TITLE_DEFAULT,
+  navigationTitle: NAVIGATION_TITLE_DEFAULT,
   applicationIconPath: null,
   secondaryDisplayBackgroundPath: SECONDARY_DISPLAY_BACKGROUND_DEFAULT,
   secondaryIdleMediaPath: SECONDARY_IDLE_MEDIA_DEFAULT,
   touchExitPassword: TOUCH_EXIT_PASSWORD_DEFAULT,
 })
 
-function normalizeApplicationTitle(value) {
+function normalizeNavigationTitle(value) {
   const title = typeof value === 'string' ? value.trim() : ''
-  return title && Array.from(title).length <= 64 ? title : APPLICATION_TITLE_DEFAULT
+  return title && Array.from(title).length <= 64 ? title : NAVIGATION_TITLE_DEFAULT
 }
 
 function normalizeTouchExitPassword(value) {
@@ -163,7 +165,8 @@ function normalizeApplicationSettings(value) {
     secondaryIdleSubtitleText: typeof source.secondaryIdleSubtitleText === 'string' && Array.from(source.secondaryIdleSubtitleText.trim()).length <= SECONDARY_IDLE_PROMPT_MAX_LENGTH ? source.secondaryIdleSubtitleText.trim() : '',
     secondaryIdlePromptFontSize: normalizeSecondaryIdlePromptFontSize(source.secondaryIdlePromptFontSize),
     secondaryIdleSubtitleFontSize: normalizeSecondaryIdlePromptFontSize(source.secondaryIdleSubtitleFontSize ?? source.secondaryIdlePromptFontSize),
-    applicationTitle: normalizeApplicationTitle(source.applicationTitle),
+    applicationTitle: APPLICATION_TITLE_DEFAULT,
+    navigationTitle: normalizeNavigationTitle(source.navigationTitle ?? (source.applicationTitle?.trim?.() !== APPLICATION_TITLE_DEFAULT ? source.applicationTitle : null)),
     applicationIconPath: typeof source.applicationIconPath === 'string' && source.applicationIconPath.trim()
       ? path.resolve(source.applicationIconPath) : null,
     secondaryDisplayBackgroundPath: typeof source.secondaryDisplayBackgroundPath === 'string'
@@ -195,9 +198,9 @@ function validateSettingsPatch(value) {
   if ('mode' in patch && !APPLICATION_MODES.includes(patch.mode)) {
     throw new Error(`Unsupported application mode: ${patch.mode}`)
   }
-  if ('applicationTitle' in patch && (typeof patch.applicationTitle !== 'string'
-    || !patch.applicationTitle.trim() || Array.from(patch.applicationTitle.trim()).length > 64)) {
-    throw new Error('Application title must contain 1 to 64 characters')
+  if ('navigationTitle' in patch && (typeof patch.navigationTitle !== 'string'
+    || !patch.navigationTitle.trim() || Array.from(patch.navigationTitle.trim()).length > 64)) {
+    throw new Error('Navigation title must contain 1 to 64 characters')
   }
   if ('touchExitPassword' in patch && (typeof patch.touchExitPassword !== 'string'
     || !/^\d{4,12}$/.test(patch.touchExitPassword))) {
@@ -295,7 +298,7 @@ function createApplicationSettingsStore({ fs, settingsPath }) {
 
   async function update(value) {
     const patch = validateSettingsPatch(value)
-    writeQueue = writeQueue.then(async () => {
+    writeQueue = writeQueue.catch(() => {}).then(async () => {
       const current = await get()
       const next = normalizeApplicationSettings({
         ...current,
@@ -320,6 +323,7 @@ function createApplicationSettingsStore({ fs, settingsPath }) {
 module.exports = {
   APPLICATION_MODES,
   APPLICATION_TITLE_DEFAULT,
+  NAVIGATION_TITLE_DEFAULT,
   DEFAULT_APPLICATION_SETTINGS,
   ENTRY_METHODS,
   TOUCH_IDLE_PROMPT_DEFAULTS,

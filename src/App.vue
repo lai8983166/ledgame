@@ -1,4 +1,5 @@
 <script setup>
+import { DEFAULT_NAVIGATION_TITLE } from "./lib/applicationBranding.js";
 import { computed, nextTick, onMounted, onUnmounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import DemoView from "./views/DemoView.vue";
@@ -81,7 +82,8 @@ const secondaryDisplayState = ref({
   windowOpen: false,
 });
 const secondaryErrorMessage = ref("");
-const applicationTitle = ref("LED Game");
+const applicationTitle = "LED Game";
+const navigationTitle = ref(DEFAULT_NAVIGATION_TITLE);
 const applicationIconData = ref("");
 let removeHelpMenuListeners = null;
 let removeLedFrameListener = null;
@@ -200,8 +202,8 @@ onUnmounted(() => {
 });
 
 function applyApplicationSettings(settings) {
-  const title = typeof settings?.applicationTitle === "string" ? settings.applicationTitle.trim() : "";
-  applicationTitle.value = title || "LED Game";
+  const title = typeof settings?.navigationTitle === "string" ? settings.navigationTitle.trim() : "";
+  navigationTitle.value = title || DEFAULT_NAVIGATION_TITLE;
 }
 
 async function loadApplicationIcon() {
@@ -784,7 +786,7 @@ function formatRuntimeValue(value, fallback = "-") {
       <div class="app-brand">
         <img v-if="applicationIconData" :src="applicationIconData" alt="" />
         <span v-else class="brand-mark" aria-hidden="true"></span>
-        <span class="app-brand-title">{{ applicationTitle }}</span>
+        <span class="app-brand-title">{{ navigationTitle }}</span>
       </div>
       <nav class="nav-tabs">
         <div class="nav-help-wrapper">

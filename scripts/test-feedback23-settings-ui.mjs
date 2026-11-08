@@ -18,6 +18,7 @@ const server = http.createServer(vite.middlewares);
 await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
 const browser = await chromium.launch({ executablePath: path.join(cache, chrome, 'chrome-win64/chrome.exe') });
 const page = await browser.newPage({ viewport: { width: 1366, height: 768 } });
+page.setDefaultTimeout(15000);
 const passed = [], errors = [];
 page.on('pageerror', error => errors.push(error.message));
 await page.addInitScript(() => {
@@ -25,12 +26,35 @@ await page.addInitScript(() => {
     secondaryIdlePromptText: 'UPPER', secondaryIdleSubtitleText: 'LOWER', secondaryIdlePromptFontSize: 96,
     memberPlatformHost: '127.0.0.1', memberPlatformPort: 8090, touchIdlePromptTexts: { 'zh-CN': '开始游戏' }, touchIdlePromptFontSize: 72 };
   const listeners = new Set();
-  window.fixture = { writes: [], set: value => { settings = { ...settings, ...value }; for (const listener of listeners) listener(structuredClone(settings)); } };
+  let resourcePreview = {};
+  const snapshot = () => structuredClone({ ...settings, resourcePreview });
+  const broadcast = () => { for (const listener of listeners) listener(snapshot()); };
+  const preview = patch => { Object.assign(resourcePreview, patch); broadcast(); return snapshot(); };
+  window.fixture = { writes: [], set: value => { settings = { ...settings, ...value }; broadcast(); },
+    preview, restart: () => { resourcePreview = {}; }, persisted: () => structuredClone(settings) };
   window.appLanguage = { get: async () => 'zh-CN', onChanged: () => () => {} };
-  window.appSettings = { get: async () => structuredClone(settings), onChanged: listener => { listeners.add(listener); return () => listeners.delete(listener); },
-    update: async patch => { window.fixture.writes.push(structuredClone(patch)); settings = { ...settings, ...patch }; return structuredClone(settings); },
+  window.appSettings = { get: async () => snapshot(), onChanged: listener => { listeners.add(listener); return () => listeners.delete(listener); },
+    chooseIcon: async () => {
+      if (window.fixture.iconMode === 'cancel') return { canceled: true };
+      if (window.fixture.iconMode === 'fail') throw new Error('模拟图标失败');
+      return { canceled: false, settings: preview({ applicationIconPath: window.fixture.iconPath || 'isolated-icon.png' }) };
+    },
+    chooseSecondaryBackground: async () => ({ canceled: false, settings: preview({ secondaryDisplayBackgroundPath: 'preview-background.png' }) }),
+    chooseSecondaryIdleMedia: async () => ({ canceled: false, settings: preview({ secondaryIdleMediaPath: 'preview-idle.mp4' }) }),
+    update: async patch => {
+      if (window.fixture.failSave) throw new Error('模拟保存失败');
+      window.fixture.writes.push(structuredClone(patch));
+      for (const key of Object.keys(patch)) delete resourcePreview[key];
+      window.fixture.set(patch); return snapshot();
+    },
     getSecondaryBackground: async () => ({ dataUrl: '' }), getSecondaryIdleMedia: async () => ({ url: '', mediaType: '' }) };
-  window.ledGame = { touchGameState: async () => ({ data: { engineState: 'IDLE' } }), onEngineState: () => () => {} };
+  window.ledGame = {
+    customTitleBarEnabled: true,
+    activationStatus: async () => ({ data: { activated: true } }),
+    state: async () => ({ data: { engineState: 'STOPPED' } }),
+    listManageableGames: async () => ({ data: [] }), listGameCategories: async () => ({ data: [] }),
+    touchGameState: async () => ({ data: { engineState: 'IDLE' } }), onEngineState: () => () => {},
+  };
   window.mediaLibrary = { getPreviewUrl: async () => ({ url: '' }) };
 });
 async function mount(component, props = {}) { await page.evaluate(([component, props]) => window.mountComponent(component, props), [component, props]); }
@@ -39,7 +63,7 @@ async function check(name, fn) { await fn(); passed.push(name); console.log('PAS
 const save = () => page.locator('.application-settings-save');
 const font = index => page.locator('input[min="32"]').nth(index);
 try {
-  await page.goto(`http://127.0.0.1:${server.address().port}/tests/ui/catalog-library-harness.html`);
+  await page.goto(`http://127.0.0.1:${server.address().port}/tests/ui/catalog-library-harness.html`, { timeout: 60000 });
   await page.waitForFunction(() => window.mountComponent);
   await check('保存密码初始回显、保存后保留、重新进入仍回显，空密码继续保留原密码', async () => {
     await mount('ApplicationSettingsView');
@@ -122,6 +146,90 @@ try {
       assert.equal(config.siteSizeWidth, 96);
     }
     await page.screenshot({ path: path.join(output, 'field-dimensions.png') });
+  });
+  await check('导航名称独立保存和广播，顶部固定LED Game；默认我的游戏且配置没有应用标题输入', async () => {
+    await page.evaluate(() => window.fixture.set({ navigationTitle: undefined }));
+    await mount('App');
+    await page.locator('.app-brand-title').waitFor();
+    assert.equal(await page.locator('.app-brand-title').innerText(), '我的游戏');
+    assert.equal(await page.locator('#app .window-titlebar-title').innerText(), 'LED Game');
+    await page.evaluate(() => window.fixture.set({ navigationTitle: '测试游戏馆', applicationTitle: '旧标题不能改应用' }));
+    await page.waitForFunction(() => document.querySelector('.app-brand-title')?.textContent === '测试游戏馆');
+    assert.equal(await page.locator('#app .window-titlebar-title').innerText(), 'LED Game');
+    await mount('ApplicationSettingsView');
+    const name = page.getByRole('textbox', { name: '导航名称', exact: false });
+    await name.waitFor();
+    assert.equal(await name.inputValue(), '测试游戏馆');
+    assert.equal(await page.getByRole('textbox', { name: '应用标题', exact: false }).count(), 0);
+    await name.fill('我的新游戏'); await save().click();
+    await page.waitForFunction(() => window.fixture.writes.at(-1)?.navigationTitle === '我的新游戏');
+    assert.equal(await page.evaluate(() => Object.hasOwn(window.fixture.writes.at(-1), 'applicationTitle')), false);
+    await mount('App'); await page.locator('.app-brand-title').waitFor();
+    assert.equal(await page.locator('.app-brand-title').innerText(), '我的新游戏');
+    assert.equal(await page.locator('#app .window-titlebar-title').innerText(), 'LED Game');
+    await page.screenshot({ path: path.join(output, 'navigation-independent-title.png') });
+  });
+  await check('更换图标的广播及返回均保留未保存导航和其他输入，取消失败不丢失，保存才提交草稿', async () => {
+    await mount('ApplicationSettingsView');
+    const name = page.getByRole('textbox', { name: '导航名称' });
+    const password = page.locator('input[maxlength="12"]');
+    const icon = page.getByRole('button', { name: '选择应用图标', exact: true });
+    await name.fill('图标更换前的草稿');await password.fill('345678');
+    const count = await page.evaluate(() => window.fixture.writes.length);
+    await icon.click();
+    await page.getByText('isolated-icon.png', { exact: true }).waitFor();
+    assert.equal(await name.inputValue(), '图标更换前的草稿');
+    assert.equal(await password.inputValue(), '345678');
+    assert.equal(await save().isDisabled(), false);
+    assert.equal(await page.evaluate(() => window.fixture.writes.length), count);
+    assert.equal(await page.evaluate(async () => (await window.appSettings.get()).navigationTitle), '我的新游戏');
+    for (const mode of ['cancel', 'fail']) {
+      await page.evaluate(mode => { window.fixture.iconMode = mode; }, mode);await icon.click();
+      assert.equal(await name.inputValue(), '图标更换前的草稿');
+      assert.equal(await password.inputValue(), '345678');
+    }
+    await page.evaluate(() => window.fixture.set({ secondaryDisplayBackgroundPath: 'new-background.png', touchPreparationTimeoutSeconds: 77 }));
+    assert.equal(await name.inputValue(), '图标更换前的草稿');
+    assert.equal(await page.locator('input[max="3600"]').inputValue(), '77');
+    await save().click();
+    await page.waitForFunction(() => window.fixture.writes.at(-1)?.navigationTitle === '图标更换前的草稿');
+    assert.equal(await save().isDisabled(), true);
+    await mount('ApplicationSettingsView');
+    assert.equal(await name.inputValue(), '图标更换前的草稿');
+    assert.equal(await password.inputValue(), '345678');
+  });
+  await check('仅修改资源也可保存，预览与清除未保存重启回退，失败保留草稿，保存后重新进入保持', async () => {
+    await mount('ApplicationSettingsView');
+    const original = await page.evaluate(() => window.fixture.persisted());
+    await page.evaluate(() => { window.fixture.iconMode = ''; window.fixture.iconPath = 'second-icon.png'; });
+    await page.getByRole('button', { name: '选择应用图标', exact: true }).click();
+    assert.equal(await save().isDisabled(), false);
+    await page.getByRole('button', { name: '选择副屏背景', exact: true }).click();
+    await page.getByRole('button', { name: '选择待机画面', exact: true }).click();
+    assert.deepEqual(await page.evaluate(() => window.fixture.persisted()), original);
+    await mount('ApplicationSettingsView');
+    await page.getByText('second-icon.png', { exact: true }).waitFor();
+    await page.getByText('preview-background.png', { exact: true }).waitFor();
+    assert.equal(await save().isDisabled(), false);
+    await page.evaluate(() => window.fixture.restart());await mount('ApplicationSettingsView');
+    await page.getByText('isolated-icon.png', { exact: true }).waitFor();
+    assert.equal(await save().isDisabled(), true);
+    await page.getByRole('button', { name: '选择应用图标', exact: true }).click();
+    await page.evaluate(() => { window.fixture.failSave = true; });await save().click();
+    await page.getByText('模拟保存失败', { exact: true }).waitFor();
+    assert.deepEqual(await page.evaluate(() => window.fixture.persisted()), original);
+    await page.getByText('second-icon.png', { exact: true }).waitFor();
+    await page.evaluate(() => { window.fixture.failSave = false; });await save().click();
+    await page.waitForFunction(() => window.fixture.persisted().applicationIconPath === 'second-icon.png');
+    await page.evaluate(() => window.fixture.preview({ secondaryDisplayBackgroundPath: null }));
+    assert.equal(await save().isDisabled(), false);
+    assert.equal(await page.evaluate(() => window.fixture.persisted().secondaryDisplayBackgroundPath), original.secondaryDisplayBackgroundPath);
+    await page.evaluate(() => window.fixture.restart());await mount('ApplicationSettingsView');
+    await page.getByText('new-background.png', { exact: true }).waitFor();
+    await page.evaluate(() => window.fixture.preview({ secondaryDisplayBackgroundPath: null }));await save().click();
+    await page.waitForFunction(() => window.fixture.persisted().secondaryDisplayBackgroundPath === null);
+    await page.evaluate(() => window.fixture.restart());await mount('ApplicationSettingsView');
+    assert.equal(await save().isDisabled(), true);
   });
   assert.deepEqual(errors, []);
 } catch (error) { await page.screenshot({ path: path.join(output, 'failure.png'), fullPage: true }); throw error; }

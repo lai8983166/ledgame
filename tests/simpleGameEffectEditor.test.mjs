@@ -29,10 +29,10 @@ test("effect frames use the existing game save payload and leave global wiring i
   assert.match(source, /function createEditorPayload\(\)/);
   assert.match(source, /api\.saveGameEditor\(currentGameId\.value, payload\)/);
   assert.match(source, /pixelLightWiring/);
-  assert.match(source, /saveSimpleGlobalConfigDocument/);
+  assert.match(source, /async function saveEditor\(\)/);
 });
 
-test("effect button sits beside existing global and pixel-light configuration", () => {
+test("effect and pixel-light tools stay in the level page while global configuration is a peer page", () => {
   const start = source.indexOf('<div v-if="document" class="editor-toolbar">');
   const end = source.indexOf('<div class="editor-feedback"', start);
   assert.ok(start >= 0 && end > start);
@@ -47,5 +47,7 @@ test("effect button sits beside existing global and pixel-light configuration", 
     assert.ok(button.includes(`<EditorActionIcon name="${icon}" />`));
   }
   const header=source.slice(source.indexOf('<div class="editor-heading-row">'),start);
-  assert.match(header,/simple\.globalConfig[\s\S]*EditorActionIcon name="settings"/);
+  assert.match(header, /class="editor-page-tabs"[\s\S]*simple\.globalConfig/);
+  assert.match(header, /:data-editor-page="page"/);
+  assert.doesNotMatch(header, /EditorActionIcon name="settings"/);
 });
