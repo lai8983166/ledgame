@@ -904,9 +904,11 @@ function formatRuntimeValue(value, fallback = "-") {
             class="nav-help-menu"
             role="menu"
           >
+            <!-- 暂时隐藏软件激活入口，保留功能代码。
             <button class="nav-help-item" type="button" role="menuitem" @click="openActivationDialog">
               {{ t('activation.title') }} · {{ activationStatus?.activated ? t('activation.activated') : t('activation.inactive') }}
             </button>
+            -->
             <button
               class="nav-help-item"
               type="button"
@@ -916,6 +918,7 @@ function formatRuntimeValue(value, fallback = "-") {
             >
               {{ t("nav.debugAssistant") }}
             </button>
+            <!-- 暂时隐藏数据更新入口，保留功能代码。
             <button
               class="nav-help-item"
               type="button"
@@ -925,6 +928,7 @@ function formatRuntimeValue(value, fallback = "-") {
             >
               {{ t("nav.dataUpdate") }}
             </button>
+            -->
             <button class="nav-help-item" type="button" role="menuitem" @click="openHelpDocument('changelog', t('management.changelog'))">{{ t('management.changelog') }}</button>
             <button class="nav-help-item" type="button" role="menuitem" @click="openHelpDocument('about', t('management.about'))">{{ t('management.about') }}</button>
           </div>

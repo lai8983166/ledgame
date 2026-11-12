@@ -6,6 +6,10 @@ export const TIME_LIMIT_MODES = Object.freeze([
 
 export const LIFE_LIMIT_MODES = Object.freeze(["UNLIMITED", "LIMITED"]);
 
+export function levelTimeLimitMax(mode) {
+  return mode === "CYCLE_COUNT" ? 10 : 5000;
+}
+
 function positiveInteger(value, fallback = 0) {
   const number = Number(value);
   return Number.isInteger(number) && number > 0 ? number : fallback;
@@ -53,8 +57,9 @@ export function validateLevelOption(option, globalLifeLimit = false) {
       errors.push({field:'countdownMax',messageKey:'circleLights.invalid'});
     }
   }
-  if (normalized.timeLimitMode !== "UNLIMITED" && normalized.timeLimitValue <= 0) {
-    errors.push({ field: "timeLimitValue", messageKey: "simple.levelLimitPositive" });
+  if (normalized.timeLimitMode !== "UNLIMITED" &&
+      (normalized.timeLimitValue <= 0 || normalized.timeLimitValue > levelTimeLimitMax(normalized.timeLimitMode))) {
+    errors.push({ field: "timeLimitValue", messageKey: "simple.levelTimeRangeInvalid", params: { max: levelTimeLimitMax(normalized.timeLimitMode) } });
   }
   if (!globalLifeLimit && normalized.lifeLimitMode === "LIMITED" && normalized.lifeLimitValue <= 0) {
     errors.push({ field: "lifeLimitValue", messageKey: "simple.levelLimitPositive" });

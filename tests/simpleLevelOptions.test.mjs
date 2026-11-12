@@ -5,6 +5,20 @@ import {
   validateLevelOption,
 } from "../src/lib/simpleLevelOptions.js";
 
+test('level cycle and seconds limits accept endpoints and reject values outside their own range', () => {
+  for (const [mode, max] of [['CYCLE_COUNT', 10], ['CYCLE_SECONDS', 5000]]) {
+    for (const value of [1, max]) assert.deepEqual(validateLevelOption({timeLimitMode:mode,timeLimitValue:value}), []);
+    for (const value of [0, -1, 1.5, max + 1, '', null]) {
+      const errors = validateLevelOption({timeLimitMode:mode,timeLimitValue:value});
+      assert.equal(errors[0].field, 'timeLimitValue');
+      assert.equal(errors[0].params.max, max);
+    }
+  }
+  assert.deepEqual(validateLevelOption({timeLimit:true,timeLimitValue:5000}), []);
+  assert.equal(validateLevelOption({timeLimit:true,timeLimitValue:5001})[0].field, 'timeLimitValue');
+  assert.deepEqual(validateLevelOption({timeLimitMode:'UNLIMITED',timeLimitValue:99999}), []);
+});
+
 test('legacy level instructions and media survive normalization and JSON round trip without becoming required', () => {
   const source={playIntroVideo:'videos/tutorial.mp4',voiceDesc:'audio/instructions.mp3',desc:'Level instructions',bgVoice:'audio/background.mp3'};
   const normalized=normalizeLevelOption(JSON.parse(JSON.stringify(source)));

@@ -2,13 +2,13 @@
 import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { extractErrorMessage } from '../lib/gameFlowState.js';
-import { RANK_BOMB_TYPES, RANK_RANGE_FIELDS, createRankEditorPayload, createRankLevel, normalizeRankEditorDocument, applyRankGlobalConfig, parseRankEditorRange, rankRangeText, setRankRangeDraft } from '../lib/rankGameEditor.js';
+import { RANK_BOMB_TYPES, RANK_RANGE_FIELDS, createRankEditorPayload, createRankLevel, duplicateRankLevel, normalizeRankEditorDocument, applyRankGlobalConfig, parseRankEditorRange, rankRangeText, setRankRangeDraft } from '../lib/rankGameEditor.js';
 import { confirmWithRendererFocus } from '../lib/rendererFocus.js';
 import { normalizeGameCategoryList } from '../lib/gameCategories.js';
 import { buildMediaPreviewUrl } from '../lib/mediaPreview.js';
 import { requiredEditorFields } from '../lib/editorRequiredFields.js';
 import { withEditorSavingCursor } from '../lib/editorSavingCursor.js';
-import { saveGameWiring } from '../lib/gameWiring.js';
+import { serializeGameWiring } from '../lib/gameWiring.js';
 import { editorSnapshot } from '../lib/editorDirtyState.js';
 import { gameFieldDimensionsValid } from '../lib/gameFieldDimensions.js';
 import { deleteLevelAt, moveLevelAt } from '../lib/simpleLevelSequence.js';
@@ -25,15 +25,38 @@ const document=ref(null), loading=ref(true), busy=ref(null), dirty=ref(false), e
 const activeLevelIndex=ref(0), draggingLevelIndex=ref(null), levelDropIndex=ref(null), gameCategories=ref([]);
 const levels=computed(()=>document.value?.levels || []), type1Config=computed(()=>levels.value[activeLevelIndex.value]);
 const currentGameId=computed(()=>{const id=Number(document.value?.id ?? props.gameId);return Number.isInteger(id)&&id>0?id:null;});
-const globalConfigOpen=ref(false), globalConfigDraft=ref({}), globalSaving=ref(false), globalError=ref('');
-const gameWiringOpen=ref(false), gameWiringSaving=ref(false), gameWiringError=ref(''), mediaPicker=ref(null);
-const canSave=computed(()=>!!document.value&&!busy.value&&!globalSaving.value&&!gameWiringSaving.value);
+const editorPage=ref(props.openGlobalConfigOnEntry||!(props.gameId||props.initialDocument?.id)?'global':'levels'), globalConfigDraft=ref({}), mediaPicker=ref(null);
+const globalPageMounted=ref(false), wiringPageMounted=ref(false);
+const globalPageRef=ref(null), wiringPageRef=ref(null);
+const canSave=computed(()=>!!document.value&&!busy.value);
+let syncedGlobalDraft=null;
+function syncGlobalPage(){
+  const draft=globalPageRef.value?.getDraft();
+  if(!draft||!document.value)return;
+  const patch=Object.fromEntries(Object.entries(draft).filter(([key,value])=>
+    JSON.stringify(value)!==JSON.stringify(syncedGlobalDraft?.[key])));
+  if(Object.keys(patch).length)applyRankGlobalConfig(document.value,patch);
+  syncedGlobalDraft=JSON.parse(JSON.stringify(draft));
+}
+async function selectEditorPage(page){
+  if(!canSave.value)return;
+  syncGlobalPage();
+  if(page==='global'&&!globalPageMounted.value){
+    globalConfigDraft.value=JSON.parse(JSON.stringify(document.value));
+    globalPageMounted.value=true;
+  }
+  if(page==='wiring')wiringPageMounted.value=true;
+  editorPage.value=page;
+  await nextTick();
+  if(page==='global'&&syncedGlobalDraft===null)syncedGlobalDraft=globalPageRef.value?.getDraft()||null;
+}
+function selectLevel(index){activeLevelIndex.value=index;selectEditorPage('levels');}
 const rangeDrafts=reactive(new Map());
 const levelKeys=new WeakMap();let nextLevelKey=0;
 function levelKey(level){if(!levelKeys.has(level))levelKeys.set(level,++nextLevelKey);return levelKeys.get(level);}
 let hydrating=false;
 let savedEditorDocument=null;
-function hasUnsavedChanges(){return Boolean(document.value&&(!currentGameId.value||editorSnapshot(document.value)!==editorSnapshot(savedEditorDocument)||[...rangeDrafts].some(([level,drafts])=>Object.entries(drafts).some(([kind,text])=>!parseRankEditorRange(kind,text,document.value)))));}
+function hasUnsavedChanges(){return Boolean(document.value&&(!currentGameId.value||globalPageRef.value?.hasChanges()||wiringPageRef.value?.hasChanges()||editorSnapshot(document.value)!==editorSnapshot(savedEditorDocument)||[...rangeDrafts].some(([level,drafts])=>Object.entries(drafts).some(([kind,text])=>!parseRankEditorRange(kind,text,document.value)))));}
 async function saveForLeave(){return await save()===true;}
 function canLeave(){return canSave.value;}
 defineExpose({hasUnsavedChanges,saveForLeave,canLeave});
@@ -44,16 +67,30 @@ onMounted(async()=>{
     if(!result?.data||result.data.type!=='rank')throw Error(t('rank.loadFailed'));
     hydrating=true; document.value=normalizeRankEditorDocument(result.data); await nextTick(); dirty.value=!props.gameId;
     savedEditorDocument=JSON.parse(editorSnapshot(document.value));
+    if(!currentGameId.value||props.openGlobalConfigOnEntry)await selectEditorPage('global');
   }catch(error){errorMessage.value=extractErrorMessage(error,t('rank.loadFailed'));}
   finally{hydrating=false;loading.value=false;}
   if(api?.listGameCategories)try{gameCategories.value=normalizeGameCategoryList(await api.listGameCategories());}catch{gameCategories.value=[];}
-  if(document.value&&props.openGlobalConfigOnEntry)openGlobalConfig();
 });
 
 function addLevel(){
   if(!canSave.value)return;
+  syncGlobalPage();
   document.value.levels.push(createRankLevel(document.value.siteSizeWidth,document.value.siteSizeHeight,levels.value.length));
   activeLevelIndex.value=levels.value.length-1;
+  selectEditorPage('levels');
+}
+function duplicateLevel(){
+  const source=type1Config.value;
+  if(!canSave.value||draggingLevelIndex.value!==null||!source)return;
+  syncGlobalPage();
+  const copy=duplicateRankLevel(source,levels.value.length);
+  const drafts=rangeDrafts.get(source);
+  if(drafts)rangeDrafts.set(copy,{...drafts});
+  const index=activeLevelIndex.value+1;
+  document.value.levels.splice(index,0,copy);
+  activeLevelIndex.value=index;
+  selectEditorPage('levels');
 }
 function deleteLevel(index){
   const target=levels.value[index];
@@ -83,57 +120,40 @@ async function validatePayload(payload){
   if(missing.length)throw Error(t('editorSave.required')+'\n'+missing.map(field=>t(field.label)).join('\n'));
   for(const [index,level] of levels.value.entries()){
     const invalid=!RANK_BOMB_TYPES.includes(level?.type)||Object.keys(RANK_RANGE_FIELDS).some(kind=>!parseRankEditorRange(kind,rankRangeText(level,kind,rangeDrafts),document.value));
-    if(invalid){activeLevelIndex.value=index;throw Error(`${level?.label||index+1}: ${t(!RANK_BOMB_TYPES.includes(level?.type)?'rank.selectType':'rank.rangeInvalid')}`);}
+    if(invalid){activeLevelIndex.value=index;editorPage.value='levels';throw Error(`${level?.label||index+1}: ${t(!RANK_BOMB_TYPES.includes(level?.type)?'rank.selectType':'rank.rangeInvalid')}`);}
   }
   const result=await api.validateRankGameEditor(payload), validation=result?.data??result;
   if(!validation?.valid){
     const first=validation?.errors?.[0], match=/^levels\[(\d+)\]/.exec(first?.path||'');
-    if(match)activeLevelIndex.value=Number(match[1]);
+    if(match){activeLevelIndex.value=Number(match[1]);editorPage.value='levels';}
     throw Error(first?`${first.path}: ${first.message}`:t('rank.validationFailed'));
   }
 }
 async function save(){
   if(!canSave.value)return false;busy.value='save';errorMessage.value='';
   try{await withEditorSavingCursor(async()=>{
+    syncGlobalPage();
+    await nextTick();
+    try{
+      if(wiringPageRef.value?.hasChanges())document.value.wiringData=wiringPageRef.value.getDraft();
+      if(document.value.wiringData?.runtimeEnabled===true)serializeGameWiring(document.value.wiringData);
+    }catch(error){
+      wiringPageMounted.value=true;editorPage.value='wiring';
+      throw Error(error.message?.startsWith('gameWiring.')?t(error.message):error.message);
+    }
     const payload=createRankEditorPayload(document.value,currentGameId.value); await validatePayload(payload);
     const result=currentGameId.value?await api.saveRankGameEditor(currentGameId.value,payload):await api.createRankGameEditor(payload);
     const saved=result?.data??result;
     if(saved?.saved!==true||!Number.isInteger(saved.gameId)||saved.gameId<1)throw Error(result?.message||t('rank.saveFailed'));
     document.value.id=saved.gameId;document.value.displayName=document.value.name;await nextTick();dirty.value=false;
     savedEditorDocument=JSON.parse(editorSnapshot(document.value));rangeDrafts.clear();
+    globalPageRef.value?.markSaved();wiringPageRef.value?.markSaved();
     saveFeedback.value={message:t('rank.saved')};
   });return true;}catch(error){errorMessage.value=extractErrorMessage(error,t('rank.saveFailed'));saveFeedback.value={failed:true,message:errorMessage.value};return false;}
   finally{busy.value=null;}
 }
 function openGlobalConfig(){
-  globalError.value='';globalConfigDraft.value=JSON.parse(JSON.stringify(document.value));
-  globalConfigOpen.value=true;
-}
-async function saveGlobalConfig(patch){
-  if(globalSaving.value)return;globalSaving.value=true;globalError.value='';
-  try{await withEditorSavingCursor(async()=>{
-    if(currentGameId.value){
-      const persisted=(await api.getRankGameEditor(currentGameId.value))?.data;
-      if(!persisted)throw Error(t('rank.loadFailed'));
-      applyRankGlobalConfig(persisted,patch);
-      const result=await api.saveRankGameEditor(currentGameId.value,persisted);
-      if(result?.data?.saved!==true)throw Error(result?.message||t('rank.saveFailed'));
-    }
-    applyRankGlobalConfig(document.value,patch);globalConfigOpen.value=false;
-    if(currentGameId.value&&savedEditorDocument)applyRankGlobalConfig(savedEditorDocument,patch);
-    saveFeedback.value={message:t(currentGameId.value?'rank.saved':'gameCreation.draftHint')};
-  });}catch(error){globalError.value=extractErrorMessage(error,t('rank.saveFailed'));saveFeedback.value={failed:true,message:globalError.value};}
-  finally{globalSaving.value=false;}
-}
-async function saveWiring(wiring){
-  if(gameWiringSaving.value)return;gameWiringSaving.value=true;gameWiringError.value='';
-  try{
-    if(currentGameId.value)await withEditorSavingCursor(()=>saveGameWiring(api,currentGameId.value,true,wiring,document.value));
-    else document.value.wiringData=JSON.parse(JSON.stringify(wiring));
-    if(currentGameId.value&&savedEditorDocument)savedEditorDocument.wiringData=JSON.parse(JSON.stringify(wiring));
-    gameWiringOpen.value=false;saveFeedback.value={message:t(currentGameId.value?'simple.saveSuccess':'gameCreation.draftHint')};
-  }catch(error){gameWiringError.value=error.message?.startsWith('gameWiring.')?t(error.message):error.message;saveFeedback.value={failed:true,message:gameWiringError.value};}
-  finally{gameWiringSaving.value=false;}
+  selectEditorPage('global');
 }
 function goBack(){emit('back');}
 </script>
@@ -144,17 +164,18 @@ function goBack(){emit('back');}
       <button class="soft-button editor-back-button" type="button" @click="goBack">{{t('simple.backToList')}}</button>
       <div class="rank-actions editor-heading-actions">
         <button class="soft-button object-icon-button primary" type="button" :aria-label="t('simple.save')" :title="t('simple.save')" :disabled="!canSave" @click="save"><EditorActionIcon name="save" /></button>
-        <button class="soft-button object-icon-button" type="button" :aria-label="t('simple.globalConfig')" :title="t('simple.globalConfig')" :disabled="!canSave" @click="openGlobalConfig"><EditorActionIcon name="settings" /></button>
-        <button class="soft-button object-icon-button" type="button" :aria-label="t('gameWiring.title')" :title="t('gameWiring.title')" :disabled="!canSave" @click="gameWiringError='';gameWiringOpen=true"><EditorActionIcon name="wiring" /></button>
+        <button class="soft-button object-icon-button" data-editor-page="global" :class="{active:editorPage==='global'}" type="button" :aria-label="t('simple.globalConfig')" :title="t('simple.globalConfig')" :disabled="!canSave" @click="openGlobalConfig"><EditorActionIcon name="settings" /></button>
+        <button class="soft-button object-icon-button" data-editor-page="wiring" :class="{active:editorPage==='wiring'}" type="button" :aria-label="t('gameWiring.title')" :title="t('gameWiring.title')" :disabled="!canSave" @click="selectEditorPage('wiring')"><EditorActionIcon name="wiring" /></button>
       </div>
       <div v-if="document" class="level-sequence-row">
         <div class="level-structure-actions">
           <button class="icon-add-button" type="button" :aria-label="t('simple.addLevel')" :title="t('simple.addLevel')" :disabled="!canSave" @click="addLevel">+</button>
+          <button class="icon-add-button rank-duplicate-level" type="button" :aria-label="t('rank.duplicateLevel')" :data-tip="t('rank.duplicateLevel')" :disabled="!canSave||!type1Config||draggingLevelIndex!==null" @click="duplicateLevel"><EditorActionIcon name="copy" /></button>
         </div>
         <div class="sequence-list">
           <div v-for="(level,index) in levels" :key="levelKey(level)" class="rank-level-tab">
-            <button class="sequence-pill" type="button" :class="{active:activeLevelIndex===index,'level-drop-target':levelDropIndex===index}"
-              :disabled="!canSave" :draggable="canSave" @dragstart="draggingLevelIndex=index" @dragover.prevent="draggingLevelIndex!==null&&(levelDropIndex=index)" @drop.prevent="dropLevel(index)" @dragend="endDrag" @click="activeLevelIndex=index">{{level?.label||`Level ${index+1}`}}</button>
+            <button class="sequence-pill" type="button" :class="{active:editorPage==='levels'&&activeLevelIndex===index,'level-drop-target':levelDropIndex===index}"
+              :disabled="!canSave" :draggable="canSave" @dragstart="draggingLevelIndex=index" @dragover.prevent="draggingLevelIndex!==null&&(levelDropIndex=index)" @drop.prevent="dropLevel(index)" @dragend="endDrag" @click="selectLevel(index)">{{level?.label||`Level ${index+1}`}}</button>
             <button class="rank-level-delete" type="button" :aria-label="t('rank.deleteLevel',{name:level?.label||`Level ${index+1}`})" :title="t('rank.deleteLevel',{name:level?.label||`Level ${index+1}`})"
               :disabled="!canSave||levels.length<2||draggingLevelIndex!==null" draggable="false" @pointerdown.stop @dragstart.prevent.stop @click.stop="deleteLevel(index)">×</button>
           </div>
@@ -163,7 +184,7 @@ function goBack(){emit('back');}
     </header>
     <p v-if="errorMessage" class="error-line" role="alert">{{errorMessage}}</p>
     <p v-if="loading">{{t('common.loading')}}</p>
-    <main v-else-if="type1Config" class="rank-config-editor" data-rank-field="levels">
+    <main v-else-if="type1Config" v-show="editorPage==='levels'" class="rank-config-editor" data-rank-field="levels">
       <label><span>{{t('rank.levelName')}}</span><input v-model="type1Config.label" data-rank-field="level.label" /></label>
       <label class="rank-level-media"><span>{{t('rank.gameplayIntro')}}</span><div>
         <div class="rank-media-control"><input :value="mediaValue('startGif')" :placeholder="t('globalConfig.notSelected')" readonly /><button class="soft-button compact-button" type="button" @click="chooseMedia('startGif','image',t('rank.gameplayIntro'))">{{t('globalConfig.choose')}}</button></div>
@@ -197,8 +218,8 @@ function goBack(){emit('back');}
       </template>
     </main>
     <EditorSaveDialog v-if="saveFeedback" v-bind="saveFeedback" @close="saveFeedback=null" />
-    <GameGlobalConfigDialog v-if="globalConfigOpen" rank :config="globalConfigDraft" :categories="gameCategories" :saving="globalSaving" :error="globalError" @cancel="globalConfigOpen=false" @save="saveGlobalConfig" />
-    <GameWiringDialog v-if="gameWiringOpen" :wiring="document?.wiringData" :width="document.siteSizeWidth" :height="document.siteSizeHeight" :saving="gameWiringSaving" :error="gameWiringError" @cancel="gameWiringOpen=false" @save="saveWiring" />
+    <GameGlobalConfigDialog v-if="globalPageMounted" v-show="editorPage==='global'" ref="globalPageRef" embedded rank class="rank-global-config-page" :config="globalConfigDraft" :categories="gameCategories" :saving="busy==='save'" />
+    <GameWiringDialog v-if="wiringPageMounted" v-show="editorPage==='wiring'" ref="wiringPageRef" embedded class="rank-wiring-page" :wiring="document?.wiringData" :width="document.siteSizeWidth" :height="document.siteSizeHeight" :saving="busy==='save'" />
     <MediaPickerDialog v-if="mediaPicker" :accept="mediaPicker.accept" :current-value="mediaPicker.level?.[mediaPicker.field]||''" :title="mediaPicker.label" @cancel="mediaPicker=null" @select="applyMedia" />
   </section>
 </template>
@@ -206,6 +227,14 @@ function goBack(){emit('back');}
 <style scoped>
 .rank-editor{display:flex;flex-direction:column;gap:12px;height:100%;min-height:0;padding-bottom:12px}
 .rank-toolbar{flex-shrink:0}
+.rank-duplicate-level{position:relative}
+.rank-duplicate-level:hover,.rank-duplicate-level:focus-visible{z-index:60}
+.rank-editor .level-structure-actions .rank-duplicate-level[data-tip]::after{position:absolute;top:calc(100% + 8px);right:auto;left:50%;z-index:60;width:max-content;max-width:220px;padding:6px 8px;border-radius:8px;color:var(--ui-text);background:var(--ui-surface);box-shadow:var(--ui-shadow);content:attr(data-tip);font-size:12px;line-height:1.3;opacity:0;pointer-events:none;white-space:normal;transform:translateX(-50%);transition:opacity 80ms ease}
+.rank-editor .level-structure-actions .rank-duplicate-level[data-tip]:hover::after,.rank-editor .level-structure-actions .rank-duplicate-level[data-tip]:focus-visible::after{opacity:1}
+.rank-global-config-page{width:min(1100px,100%);align-self:center;flex:1;min-height:0}
+.rank-wiring-page{flex:1;min-height:0}
+.rank-config-editor{flex:1}
+.rank-actions .active{border-color:var(--ui-accent);background:var(--ui-elevated)}
 .rank-config-editor{display:grid;align-content:start;gap:12px;min-height:0;overflow:auto;padding:18px 24px;border:1px solid var(--ui-border);border-radius:8px;background:var(--ui-surface)}
 .rank-config-editor>label{display:grid;grid-template-columns:160px minmax(0,660px);align-items:start;gap:12px;color:var(--ui-text);font-size:13px}
 .rank-config-editor>label>span{padding-top:9px}

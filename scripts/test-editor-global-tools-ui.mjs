@@ -27,7 +27,7 @@ await page.addInitScript(()=>{
 });
 const mount=async name=>{await page.evaluate(name=>window.mountComponent(name,{gameId:7}),name);await page.waitForFunction(()=>Boolean(window.getComponentSetup()?.document));};
 const button=name=>page.getByRole('button',{name,exact:true});
-const tab=name=>page.locator('[data-editor-page='+name+']');
+const tab=name=>name==='levels'?page.locator('.level-sequence-row .sequence-pill').first():page.locator('[data-editor-page='+name+']');
 const close=async()=>{await page.locator('.editor-save-dialog button').click();await page.locator('.editor-save-dialog').waitFor({state:'hidden'});};
 const field=label=>page.locator('.global-config-field').filter({has:page.locator('.global-config-label').filter({hasText:new RegExp('^'+label+'$')})}).locator('input');
 async function check(name,fn){await fn();passed.push(name);console.log('通过：'+name);}
@@ -36,7 +36,7 @@ async function assertHeadingIcons(){
     const b=button.getBoundingClientRect(),i=button.querySelector('svg').getBoundingClientRect();
     return{name:button.getAttribute('aria-label'),ratio:i.width/b.width,square:Math.abs(b.width-b.height),dx:Math.abs(i.x+i.width/2-b.x-b.width/2),dy:Math.abs(i.y+i.height/2-b.y-b.height/2)};
   }));
-  assert.equal(icons.length,await page.locator('[data-editor-page]').count() ? 1 : 3);
+  assert.equal(icons.length,3);
   for(const icon of icons){assert.ok(icon.ratio>=0.7,`图标占比不足：${JSON.stringify(icon)}`);assert.ok(icon.square<0.5,`按钮应为正方形：${JSON.stringify(icon)}`);assert.ok(icon.dx<0.5&&icon.dy<0.5,`图标未居中：${JSON.stringify(icon)}`);}
 }
 try {
@@ -46,9 +46,9 @@ try {
     const row=page.locator('.editor-heading-row').first();
     assert.equal(await row.getByRole('button',{name:'保存',exact:true}).count(),1);
     assert.equal(await row.getByRole('button',{name:'返回列表',exact:true}).count(),1);
-    assert.equal(await row.locator('button').count(),2);
-    assert.deepEqual(await page.locator('[data-editor-page]').allTextContents(),['全局配置','地砖布线','关卡编辑']);
-    assert.equal(await page.locator('.editor-level-page .level-sequence-row').count(),1);
+    assert.equal(await row.locator('.editor-heading-actions button').count(),3);
+    assert.equal(await page.locator('[data-editor-page]').count(),2);
+    assert.equal(await row.locator('.level-sequence-row').count(),1);
     assert.equal(await page.locator('.editor-center .level-sequence-row').count(),0);
     await assertHeadingIcons();await page.screenshot({path:path.join(output,'Simple首行.png')});
   });
@@ -174,13 +174,18 @@ try {
       await page.mouse.move(0,0);
     }
     await page.locator('.editor-toolbar').screenshot({path:path.join(output,'颜色复制图标.png')});
+    const resting=await controls.evaluateAll(nodes=>nodes.map(n=>{const s=getComputedStyle(n);return [s.color,s.backgroundColor,s.borderColor,s.opacity,s.boxShadow];}));
     await page.evaluate(()=>window.getComponentSetup().activeFrame.matrix=[]);
     await waitForColors();
     for(let index=0;index<4;index++){
       const control=controls.nth(index);
       assert.equal(await control.isDisabled(),true);
       assert.equal(await control.locator('svg rect').first().evaluate(node=>getComputedStyle(node).fill),expected[index]);
-      assert.ok(await control.evaluate(node=>Number(getComputedStyle(node).opacity)<1));
+      await page.waitForTimeout(250);
+      const appearance=()=>control.evaluate(n=>{const s=getComputedStyle(n);return [s.color,s.backgroundColor,s.borderColor,s.opacity,s.boxShadow];});
+      assert.deepEqual(await appearance(),resting[index]);
+      await control.hover();await page.waitForTimeout(250);assert.deepEqual(await appearance(),resting[index]);
+      assert.equal(await control.evaluate(n=>getComputedStyle(n).cursor),'not-allowed');await page.mouse.move(0,0);
     }
   });
   await check('全部帧号单行、进度条首尾及中间刻度对齐，点击拖动对应同一帧',async()=>{
@@ -229,12 +234,13 @@ try {
     await page.evaluate(()=>window.getComponentSetup().draft.endX=3);await page.waitForFunction(before=>window.getComponentSetup().previewFrames.length!==before,before);
     await page.locator('.game-effect-actions .primary').click();assert.equal(await page.evaluate(()=>window.componentEvents.at(-1)[1].config.mode),'after');
   });
-  await check('Rank布线保存成功/失败弹窗与重试',async()=>{
-    await page.evaluate(()=>{window.fixture.doc.type='rank';window.fixture.doc.levels=[{type:1,durationSeconds:60,bounds:{minX:0,maxX:17,minY:0,maxY:39}}];});await mount('RankGameEditorView');await button('地砖布线').click();
-    await page.evaluate(()=>window.fixture.fail=true);await button('保存此游戏布线').click();await page.locator('.editor-save-dialog').getByText('模拟保存失败').waitFor();await close();
-    await page.evaluate(()=>window.fixture.fail=false);await button('保存此游戏布线').click();await page.locator('.editor-save-dialog h2').getByText('保存成功').waitFor();await close();
+  await check('Rank布线页共用顶部保存成功/失败弹窗与重试',async()=>{
+    await page.evaluate(()=>{window.fixture.doc.type='rank';window.fixture.doc.levels=[{type:1,durationSeconds:60,bounds:{minX:0,maxX:17,minY:0,maxY:39},targetsPerPlayerMin:3,targetsPerPlayerMax:4,bombMin:0,bombMax:1}];});await mount('RankGameEditorView');await button('地砖布线').click();
+    assert.equal(await button('保存此游戏布线').count(),0);
+    await page.evaluate(()=>window.fixture.fail=true);await button('保存').click();await page.locator('.editor-save-dialog').getByText('模拟保存失败').waitFor();await close();
+    await page.evaluate(()=>window.fixture.fail=false);await button('保存').click();await page.locator('.editor-save-dialog h2').getByText('保存成功').waitFor();await close();
   });
-  await check('Rank全局配置复用、名称合并和局部保存不提交关卡草稿',async()=>{
+  await check('Rank全局配置复用、名称合并和统一保存三页草稿',async()=>{
     await page.evaluate(()=>{Object.assign(window.fixture.doc,{name:'internal',displayName:'展示名称',type:'rank',minPlayers:1,maxPlayers:2,palette:['#00D9FF','#FF3CAC']});window.fixture.doc.levels=[{label:'Type 1',type:1,rewardPoints:0,durationSeconds:60,bounds:{minX:0,minY:0,maxX:17,maxY:39},targetsPerPlayerMin:3,targetsPerPlayerMax:4,bombMin:0,bombMax:1,bombWarningDelaySeconds:3,bombWarningDurationSeconds:1,refreshSeconds:6,earlyRefresh:true,startGif:'old.gif',gameplayIntro:'old-voice.mp3',backgroundVoice:'old-bg.mp3'}];});
     await mount('RankGameEditorView');assert.equal(await page.locator('.sequence-pill.active').innerText(),'Ranking');
     await assertHeadingIcons();
@@ -242,9 +248,11 @@ try {
     assert.equal(await page.locator('.rank-actions button').count(),3);for(const name of ['导入 JSON','导出 JSON','内部名称','显示名称'])assert.equal(await page.getByText(name,{exact:true}).count(),0);
     await page.locator('[data-rank-field="level.rewardPoints"]').fill('55');
     await button('全局配置').click();assert.equal(await field('名称').inputValue(),'展示名称');await field('名称').fill('统一名称');
-    assert.equal(await page.locator('.global-config-dialog').getByText('游戏模式',{exact:true}).count(),0);
-    await page.locator('.global-config-actions .primary').click();await page.locator('.editor-save-dialog').waitFor();await close();
-    const persisted=await page.evaluate(()=>window.fixture.doc);assert.equal(persisted.name,'统一名称');assert.equal(persisted.displayName,'统一名称');assert.equal(persisted.levels[0].rewardPoints,0);
+    assert.equal(await page.locator('.rank-global-config-page').getByText('游戏模式',{exact:true}).count(),0);
+    assert.equal(await page.locator('.global-config-actions').count(),0);
+    assert.equal(await page.evaluate(()=>window.fixture.doc.levels[0].rewardPoints),0,'全局页编辑不提交关卡草稿');
+    await button('保存').click();await page.locator('.editor-save-dialog').waitFor();await close();
+    const persisted=await page.evaluate(()=>window.fixture.doc);assert.equal(persisted.name,'统一名称');assert.equal(persisted.displayName,'统一名称');assert.equal(persisted.levels[0].rewardPoints,55);
     assert.equal(await page.locator('[data-rank-field="level.rewardPoints"]').inputValue(),'55');
   });
   await check('Rank新增类型必选、min,max校验、图片和音频独立绑定与多关卡保存回读',async()=>{
@@ -275,7 +283,7 @@ try {
     page.once('dialog',dialog=>dialog.accept());await page.locator('.rank-level-delete').first().click();assert.equal(await pills.count(),1);
     assert.equal(await pills.first().innerText(),'Ranking');assert.equal(await page.locator('.rank-level-delete').first().isDisabled(),true);
   });
-  await check('Rank类型专属音效选择试听、取消与切关独立，全局保存不覆盖且主保存可回读',async()=>{
+  await check('Rank类型专属音效选择试听、取消与切关独立，全局草稿不提交且统一保存可回读',async()=>{
     await page.evaluate(()=>{
       const one=window.fixture.doc.levels[0];
       Object.assign(one,{label:'第一关',type:1,bombWarningAudio:'危险来袭.mp3',bombExplosionAudio:'Ranking/bomb.mp3'});
@@ -290,11 +298,14 @@ try {
     assert.equal(await warning.locator('audio').getAttribute('src'),'led-media://preview/voice.mp3');
     await page.locator('.sequence-pill').nth(1).click();assert.equal(await warning.locator('input').inputValue(),'second-warning.mp3');
     await explosion.getByRole('button',{name:'清除',exact:true}).click();
-    await button('全局配置').click();for(const name of ['炸弹预警音效','炸弹爆炸音效'])assert.equal(await page.locator('.global-config-dialog').getByText(name,{exact:true}).count(),0);
-    await field('名称').fill('音效独立');await page.locator('.global-config-actions .primary').click();await page.locator('.editor-save-dialog').waitFor();await close();
-    assert.deepEqual(await page.evaluate(()=>window.fixture.doc.levels.map(level=>level.bombWarningAudio)),['危险来袭.mp3','second-warning.mp3'],'局部保存不提交音效草稿');
+    await button('全局配置').click();for(const name of ['炸弹预警音效','炸弹爆炸音效'])assert.equal(await page.locator('.rank-global-config-page').getByText(name,{exact:true}).count(),0);
+    const beforeName=await page.evaluate(()=>window.fixture.doc.name);
+    await field('名称').fill('音效独立');await page.locator('.sequence-pill').nth(1).click();
+    assert.equal(await page.evaluate(()=>window.fixture.doc.name),beforeName,'全局页面仅编辑草稿');
+    assert.deepEqual(await page.evaluate(()=>window.fixture.doc.levels.map(level=>level.bombWarningAudio)),['危险来袭.mp3','second-warning.mp3'],'切页不提交音效草稿');
     assert.equal(await explosion.locator('input').inputValue(),'');
     await button('保存').click();await page.locator('.editor-save-dialog').getByText('Rank 游戏已保存',{exact:true}).waitFor();await close();
+    assert.equal(await page.evaluate(()=>window.fixture.doc.name),'音效独立');
     await mount('RankGameEditorView');assert.equal(await warning.locator('input').inputValue(),'voice.mp3');assert.equal(await explosion.locator('input').inputValue(),'Ranking/bomb.mp3');
     await page.locator('.sequence-pill').nth(1).click();assert.equal(await warning.locator('input').inputValue(),'second-warning.mp3');assert.equal(await explosion.locator('input').inputValue(),'');
     await button('添加关卡').click();assert.equal(await warning.count(),0);assert.equal(await explosion.count(),0);

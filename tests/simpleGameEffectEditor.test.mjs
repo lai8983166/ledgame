@@ -47,7 +47,7 @@ test("effect and pixel-light tools stay in the level page while global configura
     assert.ok(button.includes(`<EditorActionIcon name="${icon}" />`));
   }
   const header=source.slice(source.indexOf('<div class="editor-heading-row">'),start);
-  assert.match(header, /class="editor-page-tabs"[\s\S]*simple\.globalConfig/);
+  assert.match(header, /simple\.globalConfig/);
   assert.match(header, /:data-editor-page="page"/);
-  assert.doesNotMatch(header, /EditorActionIcon name="settings"/);
+  assert.match(header, /settings/);
 });

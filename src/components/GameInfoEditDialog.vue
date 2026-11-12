@@ -269,7 +269,7 @@ onBeforeUnmount(() => {
   display: grid;
   place-items: center;
   width: min(100%, 183px);
-  aspect-ratio: 183 / 308;
+  aspect-ratio: 1 / 2.2;
   overflow: hidden;
   border: 1px solid var(--ui-border);
   border-radius: 6px;

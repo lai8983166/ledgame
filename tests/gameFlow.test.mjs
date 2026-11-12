@@ -18,6 +18,16 @@ import {
 
 const require = createRequire(import.meta.url);
 
+test('preparation broadcasts preserve detached per-session player colors', () => {
+  const colors = ['#00FF00', '#FF0000'];
+  const raw = {engineState:'PREPARING',preparation:{sessionId:'colors-session',options:{userCount:2,playerColors:colors}}};
+  const normalized = normalizeRuntimeState(raw);
+  assert.deepEqual(normalized.preparation.options.playerColors, colors);
+  normalized.preparation.options.playerColors[0] = '#0000FF';
+  assert.equal(colors[0], '#00FF00');
+  assert.equal(normalizeRuntimeState({engineState:'PREPARING',preparation:{sessionId:'old',options:{}}}).preparation.options.playerColors, undefined);
+});
+
 test('intro video follows active runtime state and cannot leak into idle or stopped screens', () => {
   const introVideo = { id: 'stage-1', assetReference: 'intro/one.mp4', positionMillis: 1250, paused: true };
   for (const engineState of ['STARTING', 'RUNNING', 'SETTLING', 'PAUSED']) {

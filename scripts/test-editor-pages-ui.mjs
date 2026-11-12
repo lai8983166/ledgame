@@ -30,14 +30,36 @@ const button=name=>page.getByRole('button',{name,exact:true});
 const close=async()=>{await page.locator('.editor-save-dialog button').click();await page.locator('.editor-save-dialog').waitFor({state:'hidden'});};
 const field=label=>page.locator('.global-config-field').filter({has:page.locator('.global-config-label').filter({hasText:new RegExp('^'+label+'$')})}).locator('input');
 async function check(name,fn){await fn();passed.push(name);console.log('通过：'+name);}
-const tab = pageName => page.locator(`[data-editor-page="${pageName}"]`);
+const tab = pageName => pageName === 'levels' ? page.locator('.level-sequence-row .sequence-pill').first() : page.locator(`[data-editor-page="${pageName}"]`);
 const dirty = () => page.evaluate(() => window.getComponentSetup().hasUnsavedChanges());
 try {
   await page.goto(`http://127.0.0.1:${server.httpServer.address().port}/tests/ui/catalog-library-harness.html`,{timeout:60000,waitUntil:'domcontentloaded'});
   await page.waitForFunction(()=>window.mountComponent);await mount('SimpleGameEditorView');
   await page.waitForFunction(()=>window.getComponentSetup().editorFitReady);
+  await check('关卡循环次数1-10及运行秒数1-5000，超限禁止提交',async()=>{
+    const input=page.locator('.level-time-limit-input input');
+    const mode=page.locator('select').filter({has:page.locator('option[value="CYCLE_COUNT"]')});
+    for(const [value,max] of [['CYCLE_COUNT',10],['CYCLE_SECONDS',5000]]){
+      await mode.selectOption(value);
+      assert.equal(await input.getAttribute('min'),'1');assert.equal(await input.getAttribute('max'),String(max));
+      assert.equal(await page.locator('.level-time-limit-input > span').count(),value==='CYCLE_COUNT'?1:0);
+      if(value==='CYCLE_COUNT')assert.equal(await page.locator('.level-time-limit-input > span').innerText(),'1-10');
+      for(const n of [0,max+1]){
+        await input.fill(String(n));await input.blur();await button('保存').click();
+        await page.locator('.editor-save-dialog').waitFor();
+        assert.equal(await page.evaluate(()=>window.fixture.calls),0);
+        assert.ok((await page.locator('.editor-save-dialog').innerText()).includes(`1-${max}`));
+        await close();
+      }
+      for(const n of [1,max]){await input.fill(String(n));await input.blur();assert.equal(await input.evaluate(el=>el.classList.contains('invalid')),false);}
+      await page.screenshot({path:path.join(output,`关卡范围-${value}.png`)});
+    }
+    await mode.selectOption('UNLIMITED');
+  });
   await check('同级页面无模态及内部保存，切换不写入且草稿保留',async()=>{
-    assert.equal(await page.getByRole('tab').count(),3);
+    assert.equal(await button('关卡编辑').count(),0);
+    const row=page.locator('.editor-heading-row').first();
+    for(const label of ['返回列表','保存','全局配置','地砖布线','添加关卡'])assert.equal(await row.getByRole('button',{name:label,exact:true}).count(),1);
     await tab('global').click();
     assert.equal(await page.locator('[role=dialog]').count(),0);
     assert.equal(await button('保存').count(),1);
@@ -91,11 +113,11 @@ try {
     await page.evaluate(()=>{const s=window.getComponentSetup();s.selectDrawingTool('add');s.handleCellClick(0,0);});
     assert.equal(await dirty(),true);
   });
-  await check('新建默认配置页，原Rank全局配置仍为弹窗',async()=>{
+  await check('新建默认配置页，Rank全局配置同级嵌入',async()=>{
     await page.evaluate(()=>{const initialDocument=structuredClone(window.fixture.doc);delete initialDocument.id;window.mountComponent('SimpleGameEditorView',{initialDocument,openGlobalConfigOnEntry:true});});
     await page.waitForFunction(()=>window.getComponentSetup()?.editorPage==='global');
-    await page.evaluate(()=>{window.fixture.doc.type='rank';window.fixture.doc.levels=[{type:1,durationSeconds:60,bounds:{minX:0,maxX:15,minY:0,maxY:35}}];});await mount('RankGameEditorView');await button('全局配置').click();await page.locator('.global-config-backdrop[role=dialog],.global-config-dialog[role=dialog]').waitFor();
-    assert.equal(await page.locator('.global-config-dialog [type=button]').count()>0,true);
+    await page.evaluate(()=>{window.fixture.doc.type='rank';window.fixture.doc.levels=[{type:1,durationSeconds:60,bounds:{minX:0,maxX:15,minY:0,maxY:35}}];});await mount('RankGameEditorView');await button('全局配置').click();await page.locator('.rank-global-config-page').waitFor();
+    assert.equal(await page.locator('[role=dialog]').count(),0);assert.equal(await button('保存').count(),1);
   });
   assert.deepEqual(errors,[]);
 } catch(error){await page.screenshot({path:path.join(output,'失败.png')});throw error;}

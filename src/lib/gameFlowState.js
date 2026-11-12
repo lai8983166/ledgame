@@ -116,6 +116,7 @@ export function normalizePreparation(value) {
       tokenList: Array.isArray(options.tokenList) ? [...options.tokenList] : [],
       isAdmin: Boolean(options.isAdmin),
       runtimeMode: normalizeRuntimeMode(options.runtimeMode),
+      ...(Array.isArray(options.playerColors) ? { playerColors: [...options.playerColors] } : {}),
     },
   };
 }

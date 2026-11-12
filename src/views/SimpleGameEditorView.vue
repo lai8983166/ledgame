@@ -981,7 +981,7 @@ async function validateEditor() {
   const localErrors = document.value.levels.flatMap((level, index) =>
     validateLevelOption(level.option, document.value.globalLifeLimit).map((error) => ({
       path: "levels[" + index + "].option." + error.field,
-      message: t(error.messageKey),
+      message: t(error.messageKey, error.params || {}),
     })),
   );
   if (localErrors.length) {
@@ -1016,7 +1016,7 @@ async function saveEditor() {
     const localErrors = document.value.levels.flatMap((level, index) =>
       validateLevelOption(level.option, document.value.globalLifeLimit).map((error) => ({
         path: "levels[" + index + "].option." + error.field,
-        message: t(error.messageKey),
+        message: t(error.messageKey, error.params || {}),
       })),
     );
     for (const field of ['siteSizeWidth', 'siteSizeHeight', ...(document.value.globalTimeLimit ? ['globalTimeLimitValue'] : []), ...(document.value.globalLifeLimit ? ['globalLifeLimitValue'] : [])]) {
@@ -1775,6 +1775,7 @@ function clampIndex(value, length) {
 }
 
 function selectLevel(index) {
+  selectEditorPage('levels');
   activeLevelIndex.value = index;
   activeFrameIndex.value = 0;
   ensureActiveFrame();
@@ -1831,6 +1832,7 @@ function stopFrameDrag(event) {
 }
 
 function addLevel() {
+  selectEditorPage('levels');
   document.value = ensureEditableShape(document.value);
   const nextIndex = levels.value.length;
   document.value.levels.push({
@@ -2840,7 +2842,7 @@ function normalizeImportedLevel(level) {
       (level.label != null && typeof level.label !== "string") ||
       (level.option != null && !isRecord(level.option))) invalid();
   const optionErrors = validateLevelOption(level.option, document.value?.globalLifeLimit);
-  if (optionErrors.length) throw new Error(t(optionErrors[0].messageKey));
+  if (optionErrors.length) throw new Error(t(optionErrors[0].messageKey, optionErrors[0].params || {}));
   level.label ||= activeLevel.value.label;
   level.option = normalizeLevelOption(level.option);
   level.frameList.forEach((frame, frameIndex) => {
@@ -3272,17 +3274,13 @@ function formatRuntimeSummary(value) {
       <button class="soft-button editor-back-button" type="button" @click="$emit('back')">{{ t("simple.backToList") }}</button>
       <div v-if="document && !anchorEditMode" class="editor-heading-actions">
         <button class="soft-button compact-button object-icon-button" type="button" :aria-label="t('simple.save')" :title="t('simple.save')" :disabled="Boolean(busyAction)" @click="saveEditor"><EditorActionIcon name="save" /></button>
+
+        <button v-for="page in ['global', 'wiring']" :key="page" class="soft-button compact-button object-icon-button"
+          type="button" :data-editor-page="page" :class="{ active: editorPage === page }"
+          :aria-label="t(page === 'global' ? 'simple.globalConfig' : 'gameWiring.title')"
+          :title="t(page === 'global' ? 'simple.globalConfig' : 'gameWiring.title')"
+          :disabled="Boolean(busyAction)" @click="selectEditorPage(page)"><EditorActionIcon :name="page === 'global' ? 'settings' : 'wiring'" /></button>
       </div>
-      </div>
-    </div>
-    <nav v-if="document && !anchorEditMode" class="editor-page-tabs" role="tablist">
-      <button v-for="page in ['global', 'wiring', 'levels']" :key="page" class="soft-button" type="button"
-        role="tab" :data-editor-page="page" :aria-selected="editorPage === page" :class="{ active: editorPage === page }"
-        :disabled="Boolean(busyAction)" @click="selectEditorPage(page)">{{ t(page === 'global' ? 'simple.globalConfig' : page === 'wiring' ? 'gameWiring.title' : 'simple.levelEditing') }}</button>
-    </nav>
-    <div v-show="editorPage === 'levels'" class="editor-level-page" role="tabpanel">
-    <div class="editor-topbar">
-      <div class="editor-heading-row">
       <div v-if="document" class="level-sequence-row">
         <div class="level-structure-actions">
           <button class="icon-add-button" type="button" :aria-label="t('simple.addLevel')" :title="t('simple.addLevel')" @click="addLevel">+</button>
@@ -3290,7 +3288,7 @@ function formatRuntimeSummary(value) {
         <div class="sequence-list">
           <div v-for="(level,index) in levels" :key="`level-${index}`" class="level-tab" :class="{'level-drop-target':levelDropIndex===index}"
             @dragover.prevent="draggingLevelIndex!==null&&(levelDropIndex=index)" @drop.prevent="dropLevel(index)">
-            <button class="sequence-pill" :class="{active:activeLevelIndex===index}" type="button" :draggable="!busyAction && !anchorEditMode"
+            <button class="sequence-pill" :class="{active:editorPage==='levels' && activeLevelIndex===index}" type="button" :draggable="!busyAction && !anchorEditMode"
               @dragstart="startLevelDrag($event, index)" @dragend="endLevelDrag" @click="selectLevel(index)">{{level.label||`Level ${index+1}`}}</button>
             <button class="level-tab-delete" type="button" :aria-label="t('simple.deleteLevelLabel', {name:level.label||`Level ${index+1}`})"
               :title="t('simple.deleteLevelLabel', {name:level.label||`Level ${index+1}`})" :disabled="Boolean(busyAction) || !canDeleteActiveLevel || anchorEditMode || draggingLevelIndex !== null"
@@ -3299,6 +3297,9 @@ function formatRuntimeSummary(value) {
         </div>
       </div>
       </div>
+    </div>
+    <div v-show="editorPage === 'levels'" class="editor-level-page" role="tabpanel">
+    <div class="editor-topbar">
       <div v-if="document" class="sequence-block frame-sequence-header">
         <div class="sequence-head">
           <h2>{{ t("simple.frames") }}</h2>
@@ -3648,15 +3649,19 @@ function formatRuntimeSummary(value) {
           </label>
           <label v-if="activeLevel.option.timeLimitMode !== 'UNLIMITED'">
             <span class="editor-required-label">{{ t(activeLevel.option.timeLimitMode === 'CYCLE_COUNT' ? 'simple.levelCycleCountValue' : 'simple.levelTimeSecondsValue') }}</span>
+            <div class="level-time-limit-input">
             <input
               v-model.number="activeLevel.option.timeLimitValue"
               min="1"
+              :max="activeLevel.option.timeLimitMode === 'CYCLE_COUNT' ? 10 : 5000"
               step="1"
               type="number"
               :class="{ invalid: activeLevelOptionErrors.has('timeLimitValue') }"
             />
+            <span v-if="activeLevel.option.timeLimitMode === 'CYCLE_COUNT'">1-10</span>
+            </div>
             <small v-if="activeLevelOptionErrors.has('timeLimitValue')" class="field-error">
-              {{ t("simple.levelLimitPositive") }}
+              {{ t("simple.levelTimeRangeInvalid", { max: activeLevel.option.timeLimitMode === 'CYCLE_COUNT' ? 10 : 5000 }) }}
             </small>
           </label>
           <label v-if="!document.globalLifeLimit">
@@ -4005,8 +4010,9 @@ function formatRuntimeSummary(value) {
 </template>
 
 <style scoped>
-.editor-page-tabs { display:flex; gap:8px; padding:4px 0; }
-.editor-page-tabs .active { border-color:var(--ui-accent); background:var(--ui-elevated); }
+.simple-editor-fit-content.simple-editor-workspace { grid-template-rows:auto minmax(0,1fr); }
+.editor-heading-actions .active { border-color:var(--ui-accent); background:var(--ui-elevated); }
+.global-config-page { width:min(1100px,100%); justify-self:center; }
 .editor-level-page { display:grid; grid-template-rows:auto auto minmax(0,1fr); min-height:0; height:100%; gap:6px; }
 
 .sequence-pill[draggable="true"] { cursor: grab; }

@@ -34,6 +34,12 @@ export function createRankLevel(width = 16, height = 36, index = 0) {
     bombWarningDelaySeconds: 3, bombWarningDurationSeconds: 1, refreshSeconds: 6, earlyRefresh: true };
 }
 
+export function duplicateRankLevel(source, index) {
+  const level = JSON.parse(JSON.stringify(source));
+  level.label = index === 0 ? 'Ranking' : `Level ${index + 1}`;
+  return level;
+}
+
 export function parseRankRange(value, minimum = 0, maximum = Infinity) {
   const match = /^\s*(\d+)\s*[,，]\s*(\d+)\s*$/.exec(String(value));
   if (!match) return null;

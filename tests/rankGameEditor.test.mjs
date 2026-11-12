@@ -4,10 +4,21 @@ import test from "node:test";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { createRankEditorPayload, createRankLevel, normalizeRankEditorDocument, parseRankRange, applyRankGlobalConfig } from "../src/lib/rankGameEditor.js";
+import { createRankEditorPayload, createRankLevel, duplicateRankLevel, normalizeRankEditorDocument, parseRankRange, applyRankGlobalConfig } from "../src/lib/rankGameEditor.js";
 import { RANK_BOMB_TYPES } from "../src/lib/rankGameEditor.js";
 import { parseRankEditorRange, rankRangeText, setRankRangeDraft } from '../src/lib/rankGameEditor.js';
 import { moveLevelAt } from '../src/lib/simpleLevelSequence.js';
+
+test('duplicating a Rank level preserves all configuration and detaches nested values',()=>{
+  const source={...createRankLevel(21,35),label:'Original',type:3,rewardPoints:57,
+    startGif:'intro.gif',gameplayIntro:'voice.mp3',description:'instructions',backgroundVoice:'bg.mp3',
+    bombWarningAudio:'warning.mp3',bombExplosionAudio:'explosion.mp3',custom:{value:[1,2]}};
+  const copy=duplicateRankLevel(source,4);
+  assert.equal(copy.label,'Level 5');
+  assert.deepEqual({...copy,label:source.label},source);
+  copy.bounds.minX=7;copy.custom.value.push(3);
+  assert.equal(source.bounds.minX,1);assert.deepEqual(source.custom.value,[1,2]);
+});
 
 test('Rank coordinate ranges enforce displayed bounds and preserve drafts by level through reorder and deletion',()=>{
   const one=createRankLevel(16,36),two=createRankLevel(16,36,1);

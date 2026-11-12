@@ -72,6 +72,10 @@ try{
       await page.waitForTimeout(1100);assert.ok(Number(await clock.innerText())<20);
       await shell.dispatchEvent(name,detail);assert.equal(await clock.innerText(),'20',name);
     }
+    for (const [selector,ratio] of [['.touch-category-card',2.2],['.touch-carousel-card.current',1/2.2]]) {
+      const actual=await page.locator(selector).first().evaluate(e=>e.offsetWidth/e.offsetHeight);
+      assert.ok(Math.abs(actual-ratio)<0.03,selector+': '+actual);
+    }
     const images=page.locator('.touch-category-card img,.touch-carousel-card img');
     await page.waitForFunction(()=>[...document.querySelectorAll('.touch-category-card img,.touch-carousel-card img')].every(node=>node.naturalWidth>0));
     const measure=()=>images.evaluateAll(nodes=>nodes.map(image=>{const style=getComputedStyle(image.parentElement);return{width:parseFloat(style.width),height:parseFloat(style.height),fit:getComputedStyle(image).objectFit,natural:image.naturalWidth/image.naturalHeight};}));
@@ -185,14 +189,25 @@ try{
     await page.getByTestId('game-player-count-2').click();await step('wristband');
     await page.evaluate(()=>window.fixture.scan('201'));await page.locator('[data-player-progress="1/2"]').waitFor();
     await page.evaluate(()=>window.fixture.scan('202'));await step('game');
-    await page.getByTestId('game-category-12').click();await page.locator('.touch-carousel-card.current').click();await step('level');
+    await page.getByTestId('game-category-12').click();await page.getByTestId('game-game-next').click();await step('colors');
     const row=page.getByTestId('rank-player-colors');await row.waitFor();
-    assert.deepEqual(await row.locator('rect').evaluateAll(nodes=>nodes.map(node=>node.getAttribute('fill'))),['#128944','#FFAA11']);
+    assert.match(await row.innerText(),/1P 201（玩家201）/);assert.match(await row.innerText(),/2P 202（玩家202）/);
+    assert.deepEqual(await row.locator('.touch-rank-color-preview').evaluateAll(nodes=>nodes.map(node=>getComputedStyle(node).backgroundColor)),['rgb(18, 137, 68)','rgb(255, 170, 17)']);
+    const color=(player,hex)=>page.getByTestId(`rank-color-player-${player}`).getByRole('button',{name:`${player}P ${hex}`,exact:true});
+    assert.equal(await color(1,'#FFAA11').isDisabled(),true);
+    await color(1,'#6932AA').click();assert.equal(await color(2,'#6932AA').isDisabled(),true);
+    await color(2,'#128944').click();assert.equal(await color(1,'#128944').isDisabled(),true);
+    // A selected swatch can be released before choosing colors for another player.
+    await color(1,'#6932AA').click();assert.equal(await page.getByTestId('rank-colors-next').isDisabled(),true);
+    await color(1,'#6932AA').click();
     for(const [width,height] of [[1366,768],[1280,600],[1920,1080]]){
-      await page.setViewportSize({width,height});const box=await row.boundingBox(),picker=await page.locator('.touch-level-picker').boundingBox();
-      assert.ok(box.y+box.height<=picker.y+1);const start=await page.getByTestId('game-start').boundingBox();assert.ok(start.y+start.height<=height);
+      await page.setViewportSize({width,height});const box=await row.boundingBox(),next=await page.getByTestId('rank-colors-next').boundingBox();
+      assert.ok(box.y+box.height<=next.y+1);assert.ok(next.y+next.height<=height);
     }
     await page.setViewportSize({width:1366,height:768});await shot('Rank玩家配色');
+    await page.getByTestId('rank-colors-next').click();await step('level');assert.equal(await row.isVisible(),false);
+    await page.locator('.touch-level-step .touch-wizard-back').click();await step('colors');
+    assert.equal(await color(1,'#6932AA').getAttribute('aria-pressed'),'true');await page.getByTestId('rank-colors-next').click();await step('level');
     await page.getByTestId('game-level-2').click();await page.evaluate(()=>window.fixture.failConfirm='503: ELC408_NO_CONTROLLERS: SEARCH_NO_CONTROLLERS: no controller discovered');
     await page.getByTestId('game-start').click();await page.getByTestId('touch-hardware-notice').waitFor({timeout:10000});await step('level');
     assert.match(await page.getByTestId('touch-hardware-notice').innerText(),/未连接设备/);await shot('手环无设备弹窗');
@@ -205,6 +220,33 @@ try{
     assert.equal(await page.getByTestId('touch-hardware-notice').count(),0);
     await page.evaluate(()=>window.fixture.failConfirm=null);await page.getByTestId('game-start').click();await page.locator('.touch-shell[data-state="RUNNING"]').waitFor({timeout:10000});
     assert.equal(await page.evaluate(()=>window.fixture.confirmed.at(-1).options.startLevelIndex),2);
+    assert.deepEqual(await page.evaluate(()=>window.fixture.confirmed.at(-1).options.playerColors),['#6932AA','#128944']);
+  });
+  await check('触屏Rank六人默认色、释放换色、返回保留、换游戏清空及选色超时',async()=>{
+    await page.evaluate(()=>{window.fixture.entryMethod='touch';window.fixture.reset();});await mount();
+    await page.getByTestId('game-player-count-6').click();await step('game');
+    await page.getByTestId('game-category-12').click();await page.getByTestId('game-game-next').click();await step('colors');
+    assert.equal(await page.locator('.touch-rank-color-player').count(),6);
+    assert.equal((await page.getByTestId('rank-color-player-1').locator('strong').innerText()).trim(),'1P');
+    const first=page.getByTestId('rank-color-player-1'),second=page.getByTestId('rank-color-player-2');
+    await first.getByRole('button',{name:'1P #128944',exact:true}).click();
+    await second.getByRole('button',{name:'2P #128944',exact:true}).click();
+    await first.getByRole('button',{name:'1P #FFAA11',exact:true}).click();
+    assert.equal(await page.getByTestId('rank-colors-next').isDisabled(),false);
+    for(const [width,height] of [[1366,768],[1280,600],[600,480]]){
+      await page.setViewportSize({width,height});const next=await page.getByTestId('rank-colors-next').boundingBox();assert.ok(next.y+next.height<=height+1);assert.ok(next.x+next.width<=width+1);
+      await shot(`Rank六人选色-${width}`);
+    }
+    await page.setViewportSize({width:1366,height:768});
+    await page.locator('.touch-rank-color-step .touch-wizard-back').click();await step('game');
+    await page.getByTestId('game-game-next').click();await step('colors');
+    assert.equal(await first.getByRole('button',{name:'1P #FFAA11',exact:true}).getAttribute('aria-pressed'),'true');
+    await page.locator('.touch-rank-color-step .touch-wizard-back').click();await step('game');
+    await page.getByTestId('game-category-11').click();await page.getByTestId('game-game-next').click();await step('level');
+    assert.deepEqual(await page.evaluate(()=>window.getComponentSetup().rankPlayerColors),[]);
+    await page.evaluate(()=>{window.fixture.reset();window.fixture.changeSettings(2);});await mount();
+    await page.getByTestId('game-player-count-1').click();await step('game');await page.getByTestId('game-category-12').click();await page.getByTestId('game-game-next').click();await step('colors');
+    await page.locator('.touch-shell[data-state="IDLE"]').waitFor({timeout:5000});await page.evaluate(()=>window.fixture.changeSettings(20));
   });
   await check('触屏跳过刷卡；没有有效分类不展示游戏；分类读取失败重试',async()=>{
     await page.evaluate(()=>{window.fixture.entryMethod='touch';window.fixture.noCategories=true;window.fixture.reset();});await mount();

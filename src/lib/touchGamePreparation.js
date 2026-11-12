@@ -14,6 +14,7 @@ export const TOUCH_PREPARATION_TIMED_STEPS = Object.freeze([
   "players",
   "wristband",
   "game",
+  "colors",
   "level",
 ]);
 

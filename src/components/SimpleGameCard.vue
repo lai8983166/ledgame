@@ -60,7 +60,6 @@ watch(
       </div>
       <div class="game-card-copy">
         <h2>{{ game.displayName || game.name }}</h2>
-        <small class="game-card-badge">{{ t(game.type === 'rank' ? 'gameCreation.ranked' : 'gameCreation.entertainment') }}</small>
         <small v-if="game.name === 'simple-demo'" class="game-card-badge">
           {{ t("games.testOnly") }}
         </small>

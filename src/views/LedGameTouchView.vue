@@ -120,6 +120,8 @@ const preparationStepSecondsRemaining = ref(
 const preparationStepTimeoutPending = ref(false);
 const gameCarouselIndex = ref(0);
 const gameDocument = ref(null);
+const rankPlayerColors = ref([]);
+let rankColorGameId = null;
 const countdownValue = ref(TOUCH_GAME_COUNTDOWN_SECONDS);
 const draft = reactive({
   userCount: 1,
@@ -258,8 +260,22 @@ const gameLevels = computed(() => gameDocument.value?.levels || []);
 const selectedWizardLevel = computed(
   () => gameLevels.value[draft.startLevelIndex] || gameLevels.value[0] || null,
 );
-const rankPreparationColors = computed(() => selectedGame.value?.type === 'rank'
-  ? (gameDocument.value?.palette || []).slice(0, requiredPlayerCount.value) : []);
+const isRankPreparation = computed(() => selectedGame.value?.type === 'rank');
+const rankColorOptions = computed(() => [...new Set((gameDocument.value?.palette || [])
+  .map(color => String(color).toUpperCase()).filter(color => /^#[0-9A-F]{6}$/.test(color)))]);
+const rankColorsValid = computed(() => rankPlayerColors.value.length === normalizeTouchPlayerCount(draft.userCount)
+  && new Set(rankPlayerColors.value).size === rankPlayerColors.value.length
+  && rankPlayerColors.value.every(color => rankColorOptions.value.includes(color)));
+function rankColorUnavailable(index, color) {
+  return rankPlayerColors.value.some((selected, player) => player !== index && selected === color);
+}
+function selectRankPlayerColor(index, color) {
+  if (busyAction.value || rankColorUnavailable(index, color)) return;
+  rankPlayerColors.value[index] = rankPlayerColors.value[index] === color ? '' : color;
+}
+function confirmRankPlayerColors() {
+  if (rankColorsValid.value && !busyAction.value) gamePreparationStep.value = 'level';
+}
 
 function closeHardwareNotice() {
   clearTimeout(hardwareNoticeTimer);
@@ -945,6 +961,8 @@ function resetGamePreparationWizard(sessionId) {
   gameWizardSessionId = sessionId;
   gamePreparationStep.value = "players";
   gameDocument.value = null;
+  rankPlayerColors.value = [];
+  rankColorGameId = null;
   countdownValue.value = TOUCH_GAME_COUNTDOWN_SECONDS;
   draft.userCount = normalizeTouchPlayerCount(
     preparation.value?.options?.userCount,
@@ -1076,7 +1094,18 @@ async function showLevelSelection() {
           Math.max(0, Math.floor(Number(draft.startLevelIndex) || 0)),
           normalized.levels.length - 1,
         );
-    gamePreparationStep.value = "level";
+    if (game.type === 'rank') {
+      if (rankColorGameId !== game.id || rankPlayerColors.value.length !== selectedPlayers) {
+        const pool = [...new Set((normalized.palette || []).map(color => String(color).toUpperCase()))];
+        rankPlayerColors.value = Array.from({length:selectedPlayers}, (_, index) => pool[index] || '');
+        rankColorGameId = game.id;
+      }
+      gamePreparationStep.value = 'colors';
+    } else {
+      rankPlayerColors.value = [];
+      rankColorGameId = null;
+      gamePreparationStep.value = 'level';
+    }
   } catch (error) {
     errorMessage.value = extractErrorMessage(
       error,
@@ -1121,6 +1150,8 @@ function returnToPreviousGameStep() {
   if (gamePreparationStep.value === "countdown") {
     gamePreparationStep.value = "level";
   } else if (gamePreparationStep.value === "level") {
+    gamePreparationStep.value = isRankPreparation.value ? 'colors' : 'game';
+  } else if (gamePreparationStep.value === 'colors') {
     gamePreparationStep.value = "game";
   } else if (gamePreparationStep.value === "game") {
     if (isWristbandEntry.value && playerAccesses.value.length) {
@@ -1149,6 +1180,10 @@ function startGameCountdown() {
     !canConfirm.value ||
     busyAction.value
   ) {
+    return;
+  }
+  if (isRankPreparation.value && !rankColorsValid.value) {
+    gamePreparationStep.value = 'colors';
     return;
   }
   stopGameCountdown();
@@ -1218,6 +1253,7 @@ function preparationPatch() {
       draft.stageFailurePolicy === "RETRY" ? "RETRY" : "END_GAME",
     launchMethod: preparation.value?.options.launchMethod || "touch",
     runtimeMode: runtimeState.value.runtimeMode,
+    ...(isRankPreparation.value && rankPlayerColors.value.length ? { playerColors: [...rankPlayerColors.value] } : {}),
   };
 }
 
@@ -1635,12 +1671,31 @@ async function confirmReturnToIdle() {
         </div>
       </div>
 
+      <div v-else-if="gamePreparationStep === 'colors'" class="touch-wizard-screen touch-rank-color-step" data-testid="rank-color-step">
+        <header class="touch-wizard-heading"><h1>{{ t('rank.playerColors') }}</h1></header>
+        <div class="touch-rank-color-players" data-testid="rank-player-colors">
+          <div v-for="(color,index) in rankPlayerColors" :key="index" class="touch-rank-color-player" :data-testid="`rank-color-player-${index+1}`">
+            <strong>{{ index + 1 }}P <template v-if="isWristbandEntry">{{ playerAccesses[index]?.member.id }}（{{ playerAccesses[index]?.member.name }}）</template></strong>
+            <span class="touch-rank-color-preview" :style="{backgroundColor:color || 'transparent'}" :aria-label="`${index+1}P ${color}`"></span>
+            <div class="touch-rank-color-options">
+              <button v-for="choice in rankColorOptions" :key="choice" type="button" :style="{backgroundColor:choice}"
+                :aria-label="`${index+1}P ${choice}`" :aria-pressed="color===choice" :title="choice"
+                :disabled="Boolean(busyAction) || rankColorUnavailable(index,choice)" @click="selectRankPlayerColor(index,choice)"></button>
+            </div>
+          </div>
+        </div>
+        <div class="touch-wizard-actions">
+          <button class="touch-wizard-back" type="button" :disabled="Boolean(busyAction)" @click="returnToPreviousGameStep">{{ t('touch.previousStep') }}</button>
+          <button class="touch-wizard-next" data-testid="rank-colors-next" type="button" :disabled="!rankColorsValid || Boolean(busyAction)" @click="confirmRankPlayerColors">{{ t('touch.nextStep') }}</button>
+        </div>
+      </div>
+
       <div
         v-else-if="gamePreparationStep === 'level'"
         class="touch-wizard-screen touch-level-step touch-catalog-layout"
       >
         <TouchCategoryRail :categories="touchCategories" :cover-urls="categoryCoverUrls" :selected-id="selectedCategoryId" :disabled="Boolean(busyAction)" @select="selectTouchCategory" />
-        <div class="touch-catalog-panel touch-level-panel" :class="{'touch-level-panel--rank': rankPreparationColors.length}">
+        <div class="touch-catalog-panel touch-level-panel">
         <div class="touch-game-description">
           <strong>{{ t("touch.gameDescription") }} <span>{{ gameDocument?.name || selectedGame?.displayName || selectedGame?.name }}</span></strong>
           <p>{{ gameDocument?.description || t("touch.noGameDescription") }}</p>
@@ -1657,13 +1712,6 @@ async function confirmReturnToIdle() {
           <div>
             <span>{{ t("touch.lifeValue") }}</span>
             <strong>{{ levelLifeText(selectedWizardLevel) }}</strong>
-          </div>
-        </div>
-
-        <div v-if="rankPreparationColors.length" class="touch-rank-preparation-colors" data-testid="rank-player-colors" :aria-label="t('rank.playerColors')">
-          <div v-for="(color,index) in rankPreparationColors" :key="index">
-            <span>{{ index + 1 }}P</span>
-            <svg width="64" height="28" viewBox="0 0 64 28" role="img" :aria-label="`${index + 1}P ${color}`"><rect width="64" height="28" :fill="color" /></svg>
           </div>
         </div>
 
@@ -2992,8 +3040,8 @@ async function confirmReturnToIdle() {
 .touch-carousel-card {
   position: relative;
   justify-self: center;
-  width: min(100%, 250px, calc((183 / 308) * clamp(160px, 40vh, 360px)));
-  aspect-ratio: 183 / 308;
+  width: min(100%, 250px, calc((1 / 2.2) * clamp(160px, 40vh, 360px)));
+  aspect-ratio: 1 / 2.2;
   padding: 7px;
   overflow: hidden;
   border: 2px solid rgba(81, 234, 255, 0.72);
@@ -4123,6 +4171,19 @@ fieldset:disabled {
   outline-offset: 3px;
 }
 </style>
+<style scoped>
+.touch-rank-color-step{display:flex;flex-direction:column;gap:20px;min-height:0;padding:40px clamp(24px,6vw,100px)}
+.touch-rank-color-players{display:grid;gap:12px;min-height:0;overflow:auto;width:min(100%,1100px);margin:auto}
+.touch-rank-color-player{display:grid;grid-template-columns:minmax(140px,1fr) 80px minmax(260px,2fr);align-items:center;gap:20px;padding:12px 18px;border:1px solid var(--ui-border);border-radius:8px}
+.touch-rank-color-player strong{overflow-wrap:anywhere;font-size:clamp(16px,1.5vw,24px)}
+.touch-rank-color-preview{display:block;width:80px;height:36px;border:1px solid #fff;border-radius:4px}
+.touch-rank-color-options{display:flex;flex-wrap:wrap;gap:10px}
+.touch-rank-color-options button{width:48px;height:40px;border:2px solid transparent;border-radius:5px;cursor:pointer}
+.touch-rank-color-options button[aria-pressed=true]{outline:2px solid #fff;outline-offset:3px}
+.touch-rank-color-options button:disabled{opacity:.25;cursor:not-allowed}
+.touch-rank-color-step .touch-wizard-actions{flex-shrink:0}
+@media(max-width:800px){.touch-rank-color-step{padding:24px 16px}.touch-rank-color-player{grid-template-columns:minmax(100px,1fr) 60px;gap:12px}.touch-rank-color-preview{width:60px}.touch-rank-color-options{grid-column:1/-1}}
+</style>
 
 <style scoped>
 /* Customer preparation screens share a full-height, framed layout. */
@@ -4137,7 +4198,7 @@ fieldset:disabled {
 .touch-game-panel .touch-wizard-heading h1{font-size:clamp(28px,3.2vw,62px);margin:0;line-height:1.1;color:#e1ffff;}
 .touch-game-panel .touch-carousel-shell{width:100%;min-height:0;height:100%;grid-template-columns:40px minmax(0,1fr) 40px;}
 .touch-game-panel .touch-game-carousel{position:relative;display:block;height:100%;min-height:0;padding:0;perspective:1100px;overflow:hidden;}
-.touch-game-panel .touch-carousel-card{position:absolute;left:50%;top:50%;max-width:none;width:min(35%,calc((183 / 308) * min(49vh,400px)));height:auto;aspect-ratio:183 / 308;border-radius:6px;clip-path:none;border-color:#844fbc;padding:7px;opacity:1;filter:brightness(.68);z-index:1;transform:translate(-50%,-50%) rotateY(var(--card-angle,0deg)) scale(var(--card-scale,1));transition:left 360ms ease,transform 360ms ease,opacity 360ms ease,filter 360ms ease;}
+.touch-game-panel .touch-carousel-card{position:absolute;left:50%;top:50%;max-width:none;width:min(35%,calc((1 / 2.2) * min(49vh,400px)));height:auto;aspect-ratio:1 / 2.2;border-radius:6px;clip-path:none;border-color:#844fbc;padding:7px;opacity:1;filter:brightness(.68);z-index:1;transform:translate(-50%,-50%) rotateY(var(--card-angle,0deg)) scale(var(--card-scale,1));transition:left 360ms ease,transform 360ms ease,opacity 360ms ease,filter 360ms ease;}
 .touch-game-panel .touch-carousel-card[data-carousel-offset="-1"]{left:28%;--card-angle:42deg;--card-scale:.86;z-index:3;filter:brightness(.88);}
 .touch-game-panel .touch-carousel-card[data-carousel-offset="1"]{left:72%;--card-angle:-42deg;--card-scale:.86;z-index:3;filter:brightness(.88);}
 .touch-game-panel .touch-carousel-card[data-carousel-offset="-2"]{left:16%;--card-angle:52deg;--card-scale:.72;z-index:2;filter:brightness(.76);}

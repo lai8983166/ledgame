@@ -60,7 +60,15 @@ const button = name => page.getByRole('button', { name, exact: true });
 const dialog = () => page.getByRole('dialog', { name: '软件激活', exact: true });
 const check = async (name, fn) => { await fn(); passed.push(name); console.log('PASS ' + name); };
 const help = () => page.locator('.nav-help-button').filter({ hasText: '帮助' });
-const open = async () => { await help().click(); await page.getByRole('menuitem', { name: /^软件激活/ }).click(); await dialog().waitFor(); };
+const open = async () => {
+  await help().click();
+  await expect(page.getByRole('menuitem', { name: /^软件激活/ })).toHaveCount(0);
+  await expect(page.getByRole('menuitem', { name: '数据更新', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('menuitem')).toHaveCount(3);
+  // Exercise the retained dialog without restoring its hidden menu entry.
+  await page.evaluate(() => window.getComponentSetup().openActivationDialog());
+  await dialog().waitFor();
+};
 const mount = () => page.evaluate(() => window.mountComponent('App'));
 const noWorkspace = async () => {
   await expect(page.getByTestId('activation-gate')).toBeVisible();

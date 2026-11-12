@@ -14,6 +14,11 @@ import {
   TOUCH_PREPARATION_STEP_TIMEOUT_SECONDS,
 } from "../src/lib/touchGamePreparation.js";
 
+test('Rank color selection uses the existing mandatory preparation timeout', () => {
+  assert.equal(isTouchPreparationStepTimeoutActive({presentationMode:'game',runtimeView:'PREPARING',sessionId:'rank',step:'colors'}), true);
+  assert.equal(isTouchPreparationStepTimeoutActive({presentationMode:'game',runtimeView:'RUNNING',sessionId:'rank',step:'colors'}), false);
+});
+
 test("Preparation timeout accepts 1–3600 seconds and invalid values retain the mandatory 20-second timer", () => {
   for (const value of [1, 20, 3600, '75']) assert.equal(normalizeTouchPreparationTimeoutSeconds(value), Number(value));
   for (const value of [0, -1, 3601, 1.5, '', null, undefined, 'off', Infinity]) {

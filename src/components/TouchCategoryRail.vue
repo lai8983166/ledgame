@@ -17,7 +17,7 @@ defineEmits(['select']);
 
 <style scoped>
 .touch-category-rail{display:flex;flex-direction:column;gap:clamp(16px,4vh,48px);min-height:0;overflow:auto;padding:8px 10px 10px 4px;scrollbar-width:thin;scrollbar-color:#29cce366 transparent;}
-.touch-category-card{position:relative;flex:none;width:100%;aspect-ratio:2.55;border:2px solid #2e66c6;padding:5px;background:#06132e;color:#fff;cursor:pointer;clip-path:polygon(3% 0,98% 0,100% 7%,100% 96%,97% 100%,0 100%,0 5%);box-shadow:inset 0 0 0 2px #63b9ef66;}
+.touch-category-card{position:relative;flex:none;width:100%;aspect-ratio:2.2;border:2px solid #2e66c6;padding:5px;background:#06132e;color:#fff;cursor:pointer;clip-path:polygon(3% 0,98% 0,100% 7%,100% 96%,97% 100%,0 100%,0 5%);box-shadow:inset 0 0 0 2px #63b9ef66;}
 .touch-category-card:before{content:'';position:absolute;inset:10px;border:1px solid #75dded70;pointer-events:none;z-index:1;}
 .touch-category-card.selected{border-color:#9beaf4;box-shadow:0 0 22px #5bfbff70,inset 0 0 0 2px #5bfbff;filter:brightness(1.15);}
 .touch-category-card img,.touch-category-placeholder{width:100%;height:100%;object-fit:fill;}
