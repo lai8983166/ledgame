@@ -8,6 +8,7 @@ const { gameId: normalizeGameRecordId, exportGameRecord, importGameRecord } = re
 const { createLibraryFolder, importMediaFiles, resolveLibraryFolder } = require('./media-library-import.cjs')
 const { pathToFileURL } = require('node:url')
 const { app, BrowserWindow, clipboard, dialog, ipcMain: nativeIpcMain, Menu, nativeImage, protocol, shell, net: electronNet, screen } = require('electron')
+const { resolveLaunchOptions, createBackendEnvironment, backendArguments, verifyBackendIntegrity } = require('./backend-protection.cjs')
 const { registerActivationIpc, createActivationIpcGate } = require('./game-activation.cjs')
 const ipcMain = createActivationIpcGate({ ipcMain: nativeIpcMain, requireActivated: requireGameActivation })
 const {
@@ -72,8 +73,9 @@ const {
   showNativeDialogWithFocusRestore,
 } = require('./window-focus.cjs')
 
-const isDev = Boolean(process.env.VITE_DEV_SERVER_URL)
-const shouldUseEmbeddedBackend = !isDev && !process.env.LED_BACKEND_URL
+const launchOptions = resolveLaunchOptions(app.isPackaged)
+const isDev = Boolean(launchOptions.devServerUrl)
+const shouldUseEmbeddedBackend = !isDev && !launchOptions.backendUrl
 const preferredBackendPort = Number(process.env.LED_PORTABLE_BACKEND_PORT || 37680)
 let framePort = Number(process.env.LED_DEBUG_TCP_PORT || 3002)
 const runtimeStateThrottleMs = Number(process.env.LED_RUNTIME_STATE_THROTTLE_MS || 100)
@@ -138,8 +140,8 @@ let secondaryWindowDisplayId = null
 let touchPresentationMode = 'debug'
 let touchKeyboardEditableFocused = false
 let currentEntryMethod = 'touch'
-let backendBaseUrl = process.env.LED_BACKEND_URL || 'http://127.0.0.1:8080'
-let runtimeStateStreamUrl = process.env.LED_RUNTIME_STATE_URL || defaultRuntimeStateStreamUrl(backendBaseUrl)
+let backendBaseUrl = launchOptions.backendUrl || 'http://127.0.0.1:8080'
+let runtimeStateStreamUrl = launchOptions.runtimeStateUrl || defaultRuntimeStateStreamUrl(backendBaseUrl)
 let latestFrame = null
 let latestEngineState = null
 const debugFrameServer = createDebugFrameServer({
@@ -361,7 +363,7 @@ function defaultRuntimeStateStreamUrl(baseUrl) {
 
 function setBackendBaseUrl(baseUrl) {
   backendBaseUrl = baseUrl
-  if (!process.env.LED_RUNTIME_STATE_URL) {
+  if (!launchOptions.runtimeStateUrl) {
     runtimeStateStreamUrl = defaultRuntimeStateStreamUrl(baseUrl)
   }
 }
@@ -495,7 +497,7 @@ function createWindow() {
   })
 
   if (isDev) {
-    mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL)
+    mainWindow.loadURL(launchOptions.devServerUrl)
     if (process.env.LED_DISABLE_DEVTOOLS !== '1') {
       mainWindow.webContents.openDevTools({ mode: 'detach' })
     }
@@ -549,7 +551,7 @@ function createDebugWindow(layoutBounds = null) {
   })
 
   if (isDev) {
-    debugWindow.loadURL(`${process.env.VITE_DEV_SERVER_URL}?window=debug`)
+    debugWindow.loadURL(`${launchOptions.devServerUrl}?window=debug`)
   } else {
     debugWindow.loadFile(path.join(__dirname, '../dist/index.html'), {
       query: { window: 'debug' },
@@ -701,7 +703,7 @@ function createTouchWindow(mode = 'debug', layoutBounds = null) {
 
   if (isDev) {
     touchWindow.loadURL(
-      `${process.env.VITE_DEV_SERVER_URL}?window=touch&presentation=${encodeURIComponent(presentationMode)}`,
+      `${launchOptions.devServerUrl}?window=touch&presentation=${encodeURIComponent(presentationMode)}`,
     )
   } else {
     touchWindow.loadFile(path.join(__dirname, '../dist/index.html'), {
@@ -819,7 +821,7 @@ function createSecondaryWindow(display) {
   })
 
   if (isDev) {
-    createdWindow.loadURL(`${process.env.VITE_DEV_SERVER_URL}?window=secondary`)
+    createdWindow.loadURL(`${launchOptions.devServerUrl}?window=secondary`)
   } else {
     createdWindow.loadFile(path.join(__dirname, '../dist/index.html'), {
       query: { window: 'secondary' },
@@ -1237,6 +1239,14 @@ async function startEmbeddedBackend() {
   const backendJarPath = getEmbeddedBackendJarPath()
   const javaPath = getEmbeddedJavaPath()
   appendStartupLog(`Starting embedded backend with jar=${backendJarPath} java=${javaPath}`)
+  if (app.isPackaged) {
+    try {
+      await verifyBackendIntegrity(backendJarPath, () => require('./backend-integrity.generated.cjs'))
+    } catch (error) {
+      appendStartupLog(`Backend integrity verification failed: ${error.cause?.message || error.message}`)
+      throw error
+    }
+  }
   if (!nodeFs.existsSync(backendJarPath)) {
     throw new Error(`Embedded backend jar not found: ${backendJarPath}`)
   }
@@ -1271,13 +1281,12 @@ async function startEmbeddedBackend() {
   })
 
   startupAbortController.signal.throwIfAborted()
-  embeddedBackendProcess = childProcess.spawn(javaPath, ['-jar', backendJarPath], {
+  embeddedBackendProcess = childProcess.spawn(javaPath, backendArguments(backendJarPath), {
     // Spring resolves ${user.dir}/elc408 against the portable app directory.
     cwd: getEmbeddedBackendWorkingDirectory(),
     windowsHide: true,
     stdio: ['ignore', 'pipe', 'pipe'],
-    env: {
-      ...process.env,
+    env: createBackendEnvironment({ values: {
       SERVER_PORT: String(backendPort),
       LED_DEBUG_TCP_PORT: String(framePort),
       // Allow the packaged app to start before the first conf/wiring files are generated.
@@ -1289,7 +1298,7 @@ async function startEmbeddedBackend() {
       LED_BRIDGE_ENABLED: process.env.LED_BRIDGE_ENABLED || 'false',
       MEMBER_PLATFORM_BASE_URL: `http://${savedApplicationSettings.memberPlatformHost}:${savedApplicationSettings.memberPlatformPort}`,
       LED_ROOM_CONNECTION_ENABLED: process.env.LED_ROOM_CONNECTION_ENABLED ?? 'true',
-    },
+    } }),
   })
   const spawnedBackend = embeddedBackendProcess
   spawnedBackend.once('error', (error) => {
@@ -1395,6 +1404,8 @@ function handleStartupFailure(error) {
   splashLifecycle.close('startup-failure')
   splashWindow = null
   dialog.showErrorBox('LED Game 启动失败', message)
+  // A fatal startup error must not wait for a renderer close confirmation.
+  mainCloseApproved = true
   app.quit()
 }
 
@@ -2466,8 +2477,10 @@ app.whenReady()
     }).catch((error) => {
       if (quitCleanupStarted) return
       appendStartupLog(`Backend startup failed: ${error.message || String(error)}`)
-      backendReadiness.fail(new Error('游戏服务启动失败，请重新打开应用。'))
+      backendReadiness.fail(error.code === 'BACKEND_INTEGRITY_FAILED'
+        ? error : new Error('游戏服务启动失败，请重新打开应用。'))
       stopEmbeddedBackend()
+      if (error.code === 'BACKEND_INTEGRITY_FAILED') handleStartupFailure(error)
     })
     applyApplicationBrand(await applicationResources.effective())
 

@@ -41,6 +41,7 @@ function harness({ displays = [primary], selection = null, dev = false } = {}) {
   }
   const context = vm.createContext({
     ...helpers, BrowserWindow: Window, path, __dirname: 'electron', isDev: dev,
+    launchOptions: { devServerUrl: dev ? 'http://localhost:5173' : undefined },
     process: { env: { VITE_DEV_SERVER_URL: 'http://localhost:5173' } },
     screen: { getAllDisplays: () => displays, getPrimaryDisplay: () => primary, on: (name, fn) => { displayEvents[name] = fn; } },
     applicationSettings: { get: async () => settings },

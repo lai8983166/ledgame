@@ -2,6 +2,14 @@
   "appId": "com.ledgame.app",
   "productName": "LED Game",
   "asar": true,
+  "beforePack": "scripts/prepare-backend-integrity.cjs",
+  "electronFuses": {
+    "runAsNode": false,
+    "enableNodeOptionsEnvironmentVariable": false,
+    "enableNodeCliInspectArguments": false,
+    "enableEmbeddedAsarIntegrityValidation": true,
+    "onlyLoadAppFromAsar": true
+  },
   "directories": {
     "output": "release"
   },
