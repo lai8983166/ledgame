@@ -118,6 +118,8 @@ try{
     assert.equal(await page.locator('.debug-workspace-controls select').count(),2);
     await button('启动游戏').click();
     assert.equal((await page.evaluate(()=>window.fixture.requests)).filter(r=>r[0]==='prepare').at(-1)[1].launchMethod,'debug');
+    assert.equal(await button('启动游戏').isDisabled(),true);
+    assert.equal(await button('启动游戏').evaluate(node=>getComputedStyle(node).cursor),'not-allowed');
     for(const terminationReason of ['NATURAL_SUCCESS','MANUAL_STOP']){
       await page.evaluate(async reason=>window.fixture.update({...((await window.ledGame.gameState()).data),engineState:'STOPPED',terminationReason:reason}),terminationReason);
       await page.getByText('本局已结束',{exact:true}).waitFor();

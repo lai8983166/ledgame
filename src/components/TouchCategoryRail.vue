@@ -25,7 +25,7 @@ defineEmits(['select']);
 .touch-category-placeholder span{font-size:clamp(32px,6vw,100px);color:#53e4f7;opacity:.65;}
 .touch-category-card strong{position:absolute;left:12px;right:12px;bottom:10px;padding:8px 12px;background:linear-gradient(90deg,#061527c9,#05172c22);font-size:clamp(16px,1.8vw,34px);font-style:italic;line-height:1.1;text-align:left;overflow-wrap:anywhere;text-shadow:0 2px 3px #000;}
 .touch-category-card:focus-visible{outline:3px solid #f5e7a6;outline-offset:-4px;}
-.touch-category-card:disabled{cursor:wait;}
+.touch-category-card:disabled{cursor:not-allowed;}
 .touch-category-card{display:block;min-height:0;line-height:0;clip-path:none;}
 .touch-category-card img{position:absolute;inset:0;display:block;width:100%;height:100%;min-height:0;}
 </style>

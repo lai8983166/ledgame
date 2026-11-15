@@ -36,7 +36,9 @@ const deletionBusy = ref(false);
 const deletionError = ref('');
 const exportBusy = ref(false);
 let removeCatalogListener;
-onMounted(() => { removeCatalogListener = api?.onCatalogChanged?.(() => void Promise.all([loadGames(), loadCategories()])); });
+onMounted(() => { removeCatalogListener = api?.onCatalogChanged?.(() => {
+  if (!gamePickerSaving.value) void Promise.all([loadGames(), loadCategories()]);
+}); });
 onActivated(() => void Promise.all([loadGames(), loadCategories()]));
 onBeforeUnmount(() => removeCatalogListener?.());
 function beginDelete(kind, value) {
@@ -101,8 +103,14 @@ onMounted(() => {
   void Promise.all([loadGames(), loadCategories()]);
 });
 
-async function loadGames() {
-  if (loading.value) return;
+let gamesLoadPromise = null;
+function loadGames() {
+  if (gamesLoadPromise) return gamesLoadPromise;
+  gamesLoadPromise = readGames().finally(() => { gamesLoadPromise = null; });
+  return gamesLoadPromise;
+}
+
+async function readGames() {
   loading.value = true;
   errorMessage.value = "";
   warningMessage.value = "";
@@ -189,6 +197,9 @@ async function addGamesToCategory(gameIds) {
   gamePickerSaving.value = true;
   gamePickerError.value = '';
   try {
+    // Finish any older catalog snapshot before applying this batch. Per-game
+    // broadcasts are deferred until the complete selection has been saved.
+    await gamesLoadPromise;
     for (const gameId of gameIds.filter((id) => candidates.has(id))) {
       const response = await api.updateGameMetadata(gameId, { firstCatalog });
       if (response?.code && response.code !== 200) throw new Error(response.message);
@@ -198,6 +209,7 @@ async function addGamesToCategory(gameIds) {
   } catch (error) {
     gamePickerError.value = extractErrorMessage(error, t('catalogMaintenance.failed'));
   } finally {
+    await loadGames();
     gamePickerSaving.value = false;
   }
 }
@@ -351,13 +363,13 @@ async function dropCard(id, kind) {
     <template v-else>
       <div v-if="selectedCategory" class="game-category-breadcrumb">
         <button class="soft-button" type="button" @click="selectedCategory = null">{{ t("gameCategories.backHome") }}</button>
+        <button class="icon-add-button category-add-games" type="button" :disabled="loading || gamePickerSaving"
+          :title="t('gameCategories.addGames')" :aria-label="t('gameCategories.addGames')" @click="openGamePicker">+</button>
       </div>
       <div v-if="loading" class="editor-loading">{{ t("games.loading") }}</div>
       <div v-else-if="!displayGames.length && !errorMessage" class="editor-loading">
         <p>{{ selectedCategory ? t("gameCategories.noGames") : t("games.noSupportedGames") }}</p>
-        <button v-if="selectedCategory" class="icon-add-button category-add-games" type="button"
-          :title="t('gameCategories.addGames')" :aria-label="t('gameCategories.addGames')" @click="openGamePicker">+</button>
-        <button v-else class="soft-button" type="button" @click="loadGames">{{ t("games.reload") }}</button>
+        <button v-if="!selectedCategory" class="soft-button" type="button" @click="loadGames">{{ t("games.reload") }}</button>
       </div>
       <div v-else class="game-card-grid">
           <SimpleGameCard

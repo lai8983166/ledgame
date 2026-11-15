@@ -51,7 +51,7 @@ const mount=async()=>{
   await page.locator('.simple-editor-fit-viewport').waitFor();
   await page.waitForFunction(()=>window.getComponentSetup()?.editorFitReady);
 };
-async function check(name,fn){await fn();passed.push(name);console.log('通过：'+name);}
+async function check(name,fn){if(process.env.TEST_CASE && !name.includes(process.env.TEST_CASE))return;await fn();passed.push(name);console.log('通过：'+name);}
 try {
   await page.goto(`http://127.0.0.1:${server.httpServer.address().port}/tests/ui/catalog-library-harness.html`);
   await page.waitForFunction(()=>window.mountComponent);
@@ -336,11 +336,13 @@ try {
     await page.evaluate(()=>{window.fixture.importContent='{';return window.getComponentSetup().importCurrentLevel();});
     assert.notEqual((await read()).error,'');
   });
-  await check('完整关卡 JSON：覆盖提醒、取消/失败无副作用、只替换当前关卡并保存重开',async()=>{
+  await check('完整关卡 JSON：取消和失败无副作用，末尾新增且原关卡不变，保存重开',async()=>{
+    await page.evaluate(()=>Object.assign(window.fixture.game,{firstCatalog:'1',description:'说明',remark:'备注',cover:'cover.png',audio:{scoreSound:'score.mp3',injurySound:'injury.mp3',purpleSound:'double.mp3'},gif:{standby:'idle.gif',gameFailure:'fail.gif',gameOver:'over.gif'},commonConfig:{gameStartAudio:'start.mp3',gameEndSuccessAudio:'success.mp3',gameEndFailAudio:'fail.mp3',levelPassAudio:'pass.mp3',levelRestartAudio:'restart.mp3'}}));
+    await mount();
     const backup=await page.evaluate(()=>structuredClone(window.fixture.game));
     const snapshot=()=>page.evaluate(()=>{const s=window.getComponentSetup();return {document:JSON.parse(JSON.stringify(s.document)),frame:s.activeFrameIndex,selected:s.selectedObjectId,undo:s.rgbEditHistory.undoCount};});
     await page.evaluate(()=>{
-      const s=window.getComponentSetup();s.document.levels.push({label:'第二关',option:{bgVoice:'other.mp3'},frameList:[{repeatTimes:7,matrix:[]}]});
+      const s=window.getComponentSetup();s.document.levels.push({label:'第二关',option:{bgVoice:'other.mp3',rewardPoints:0,timeLimitMode:'UNLIMITED',lifeLimitMode:'UNLIMITED'},frameList:[{repeatTimes:7,matrix:[]}]});
       s.activeLevel.option={...s.activeLevel.option,rewardPoints:10,bgVoice:'pass.mp3'};
       s.activeFrame.__matrixVersion=123;s.selectFrame(1);
       s.runRgbEdit([{levelIndex:0,frameIndex:1}],'import-test',()=>{s.activeFrame.matrix.push({id:'second',x:3,y:3,color:1,points:[[0,0]]});s.selectedObjectId='second';});
@@ -353,10 +355,9 @@ try {
     assert.deepEqual(exported.frameList,(await read()).frames.map(({__matrixVersion,...frame})=>frame));
     const before=await snapshot();assert.ok(before.undo>0);assert.equal(before.selected,'second');
     await page.evaluate(()=>{window.fixture.importContent=window.fixture.exportContent;window.fixture.cancelImport=true;});
-    await button('导入替换当前关卡').click();assert.deepEqual(await snapshot(),before);
+    await button('导入关卡').click();assert.deepEqual(await snapshot(),before);
     await page.evaluate(()=>{window.fixture.cancelImport=false;window.fixture.confirmResult=false;window.fixture.confirms=[];});
-    await button('导入替换当前关卡').click();assert.deepEqual(await snapshot(),before);
-    assert.match(await page.evaluate(()=>window.fixture.confirms.at(-1)),/覆盖.*第一关.*全部配置和.*帧/);
+    assert.equal(await page.evaluate(()=>window.fixture.confirms.length),0);
     for(const invalid of [
       {repeatTimes:1,matrix:[]},
       {levels:[],frameList:[{repeatTimes:1,matrix:[]}]},
@@ -368,23 +369,27 @@ try {
       {frameList:[{repeatTimes:1,matrix:[{x:1.5,y:0,color:1}]}]},
     ]){
       await page.evaluate(value=>{window.fixture.importContent=JSON.stringify(value);window.fixture.confirmResult=true;},invalid);
-      await button('导入替换当前关卡').click();assert.deepEqual(await snapshot(),before);assert.notEqual((await read()).error,'');
+      await button('导入关卡').click();assert.deepEqual(await snapshot(),before);assert.notEqual((await read()).error,'');
     }
     await page.evaluate(()=>{window.fixture.importContent=window.fixture.exportContent;window.fixture.deferImport=true;});
-    await button('导入替换当前关卡').click();await page.waitForFunction(()=>window.fixture.finishImport);
+    await button('导入关卡').click();await page.waitForFunction(()=>window.fixture.finishImport);
     assert.equal(await button('导出当前关卡').isDisabled(),true);
-    await page.evaluate(()=>{window.getComponentSetup().selectLevel(1);window.fixture.finishImport();window.fixture.deferImport=false;});
+    await page.evaluate(()=>{const s=window.getComponentSetup();s.document=JSON.parse(JSON.stringify(s.document));window.fixture.finishImport();window.fixture.deferImport=false;});
     await page.waitForFunction(()=>window.getComponentSetup().busyAction==='');
-    assert.deepEqual((await snapshot()).document,before.document);assert.notEqual((await read()).error,'');
-    await page.evaluate(()=>{const s=window.getComponentSetup();s.selectLevel(0);s.activeLevel.label='替换目标';s.activeFrame.matrix=[];window.fixture.confirmResult=true;});
-    await button('导入替换当前关卡').click();
-    const imported=await snapshot();assert.equal(imported.document.levels[0].label,'第一关');
-    assert.deepEqual(imported.document.levels[0].option,exported.option);assert.deepEqual(imported.document.levels[0].frameList.map(({__matrixVersion,...f})=>f),exported.frameList);
+    assert.notEqual((await read()).error,'');
+    await page.evaluate(()=>{const s=window.getComponentSetup();s.selectLevel(0);s.activeLevel.label='保留目标';s.activeFrame.matrix=[];window.fixture.confirmResult=true;});
+    const preserved=await snapshot();
+    await button('导入关卡').click();
+    const imported=await snapshot();const last=imported.document.levels.length-1;
+    assert.equal(imported.document.levels.length,preserved.document.levels.length+1);
+    assert.deepEqual(imported.document.levels.slice(0,last),preserved.document.levels);
+    assert.equal(imported.document.levels[last].label,'第一关');
+    assert.deepEqual(imported.document.levels[last].option,exported.option);assert.deepEqual(imported.document.levels[last].frameList.map(({__matrixVersion,...f})=>f),exported.frameList);
     assert.deepEqual(imported.document.levels[1],before.document.levels[1]);assert.deepEqual(imported.document.commonConfig,before.document.commonConfig);
     assert.equal(imported.frame,0);assert.equal(imported.selected,'');assert.equal(imported.undo,0);assert.match((await read()).status,/请保存/);
     assert.notEqual(await page.evaluate(()=>window.fixture.game.levels[0].option?.rewardPoints),10,'import must not auto-save');
-    await button('保存').click();await mount();
-    assert.deepEqual(await page.evaluate(()=>JSON.parse(JSON.stringify(window.getComponentSetup().createEditorPayload().levels[0]))),exported);
+    await button('保存').click();await page.locator('.editor-save-dialog h2').getByText('保存成功',{exact:true}).waitFor();await mount();
+    assert.deepEqual(await page.evaluate(()=>JSON.parse(JSON.stringify(window.getComponentSetup().createEditorPayload().levels.at(-1)))),exported);
     await page.evaluate(value=>{Object.assign(window.fixture.game,value);window.fixture.confirmResult=false;},backup);await mount();
   });
   await check('保存重开中心与旧叠层无损，错误仍可见，导出和预览正常',async()=>{

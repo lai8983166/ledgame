@@ -91,7 +91,7 @@ defineExpose({
 }
 
 .button-mastery-2:disabled {
-  cursor: wait;
+  cursor: not-allowed;
   opacity: 0.56;
 }
 

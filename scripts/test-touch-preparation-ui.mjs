@@ -66,12 +66,13 @@ try{
     await page.evaluate(()=>window.fixture.scan('102'));await step('game');
     assert.equal(await page.getByTestId('game-preparation-step-timeout').locator('strong').innerText(),'20');
   });
-  await check('操作刷新20秒倒计时，大小屏更换封面不改变容器且完整显示',async()=>{
+  await check('仅点击刷新20秒倒计时，移动滚轮键盘输入不刷新，大小屏封面保持',async()=>{
     const shell=page.locator('.touch-shell'),clock=page.getByTestId('game-preparation-step-timeout').locator('strong');
-    for(const [name,detail] of [['pointermove',{pointerId:1}],['wheel',{deltaY:1}],['keydown',{key:'Tab'}],['input',{}],['click',{}]]){
+    for(const [name,detail] of [['pointermove',{pointerId:1}],['wheel',{deltaY:1}],['keydown',{key:'Tab'}],['input',{}]]){
       await page.waitForTimeout(1100);assert.ok(Number(await clock.innerText())<20);
-      await shell.dispatchEvent(name,detail);assert.equal(await clock.innerText(),'20',name);
+      const before=Number(await clock.innerText());await shell.dispatchEvent(name,detail);assert.ok(Number(await clock.innerText())<=before,name);
     }
+    await page.locator('.touch-category-card').first().click();assert.equal(await clock.innerText(),'20');
     for (const [selector,ratio] of [['.touch-category-card',2.2],['.touch-carousel-card.current',1/2.2]]) {
       const actual=await page.locator(selector).first().evaluate(e=>e.offsetWidth/e.offsetHeight);
       assert.ok(Math.abs(actual-ratio)<0.03,selector+': '+actual);
@@ -273,7 +274,8 @@ try{
     await page.evaluate(()=>window.fixture.changeSettings(2));assert.equal(await clock.innerText(),'2');
     await page.getByTestId('game-player-count-1').click();await step('wristband');
     await page.waitForTimeout(1100);assert.equal(await clock.innerText(),'1');
-    await page.locator('.touch-shell').dispatchEvent('pointermove',{pointerId:1});assert.equal(await clock.innerText(),'2');
+    await page.locator('.touch-shell').dispatchEvent('pointermove',{pointerId:1});assert.equal(await clock.innerText(),'1');
+    await page.getByTestId('game-wristband-prompt').click();assert.equal(await clock.innerText(),'2');
     const id=await page.evaluate(()=>window.fixture.state().preparation.sessionId);
     await page.locator('.touch-shell[data-state="IDLE"]').waitFor({timeout:4000});
     assert.ok(await page.evaluate(id=>window.fixture.canceled.includes(id),id));

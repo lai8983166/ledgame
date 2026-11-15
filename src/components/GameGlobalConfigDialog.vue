@@ -286,7 +286,7 @@ onBeforeUnmount(() => {
             >
               <span class="global-config-label" :class="{ 'editor-required-label': field.marked }">{{ field.label }}</span>
 
-              <input v-if="field.kind === 'game-type'" type="text" readonly :value="t(draft.type === 'rank' ? 'gameCreation.ranked' : 'gameCreation.entertainment')" />
+              <input v-if="field.kind === 'game-type'" class="global-config-game-type" type="text" disabled :value="t(draft.type === 'rank' ? 'gameCreation.ranked' : 'gameCreation.entertainment')" />
               <input v-else-if="field.kind === 'color'" type="color" :value="getPath(field.path)" :disabled="saving" @input="setPath(field.path, $event.target.value)" />
               <input
                 v-else-if="field.kind === 'text'"
@@ -640,5 +640,6 @@ onBeforeUnmount(() => {
   width: 100%;
 }
 .global-config-page { height:100%; min-height:0; min-width:0; }
+.global-config-field input.global-config-game-type:disabled { background:#151a22; color:#8b95a5; cursor:not-allowed; opacity:1; }
 .global-config-page > .global-config-dialog { width:100%; height:100%; max-height:none; box-sizing:border-box; grid-template-rows:auto minmax(0,1fr); box-shadow:none; }
 </style>

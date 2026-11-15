@@ -736,7 +736,6 @@ function handleWristbandScanned(payload) {
   }
   const wristbandId = String(payload?.wristbandId || "").trim();
   if (!wristbandId) return;
-  handlePreparationActivity();
   wristbandRead.value = {
     wristbandId,
   };
@@ -1414,12 +1413,7 @@ async function confirmReturnToIdle() {
     :class="{ 'touch-game-presentation': isGamePresentation }"
     :data-state="view"
     :data-preparation-step="gamePreparationStep"
-    @pointerdown.capture="handlePreparationActivity"
-    @pointermove.capture.passive="handlePreparationActivity"
-    @pointerup.capture="handlePreparationActivity(); handleReturnIdleEdgeTap($event)"
-    @keydown.capture="handlePreparationActivity"
-    @wheel.capture.passive="handlePreparationActivity"
-    @input.capture="handlePreparationActivity"
+    @pointerup.capture="handleReturnIdleEdgeTap($event)"
     @click.capture="handlePreparationActivity"
   >
     <TouchMatrixCanvas

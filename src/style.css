@@ -534,7 +534,7 @@ p {
 }
 
 button:disabled {
-  cursor: wait;
+  cursor: not-allowed;
   opacity: 0.56;
 }
 
@@ -4041,7 +4041,7 @@ body:has(.debug-shell) {
 .catalog-sorting :is(.game-card,.game-category-card):hover { transform:none; }
 .catalog-dragging { opacity:.65; }
 .catalog-drop-target { outline:2px solid var(--ui-accent); outline-offset:3px; }
-.catalog-sorting .catalog-drag-handle:disabled { cursor:wait; }
+.catalog-sorting .catalog-drag-handle:disabled { cursor:not-allowed; }
 
 .media-tree-panel,
 .media-preview-panel,

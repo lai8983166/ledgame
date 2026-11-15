@@ -119,7 +119,9 @@ try {
     await button('导出当前关卡').click();
     assert.deepEqual(await page.evaluate(()=>window.fixture.exportedLevel.option),saved);
     await page.locator('#level-game-description').fill('导入前临时文字');
-    page.once('dialog',dialog=>dialog.accept());await button('导入替换当前关卡').click();
+    const levelCount=await page.evaluate(()=>window.getComponentSetup().document.levels.length);
+    await button('导入关卡').click();
+    assert.equal(await page.evaluate(()=>window.getComponentSetup().document.levels.length),levelCount+1);
     assert.equal(await page.locator('#level-game-description').inputValue(),'未保存的关卡说明');
     assert.equal(await page.locator('#level-gameplay-intro').locator('..').getAttribute('data-resource'),'intro.mp4');assert.equal(await page.locator('#level-voice-description').locator('..').getAttribute('data-resource'),'voice.mp3');
     await page.screenshot({path:path.join(output,'关卡说明与玩法介绍.png')});
@@ -128,8 +130,10 @@ try {
     assert.equal(await page.locator('.editor-left input[type=text]').count(),0);
     await page.evaluate(()=>window.getComponentSetup().activeFrame.matrix.push({id:'draft',x:0,y:0,color:0,points:[[0,0]]}));
     await tab('global').click();for(const [label,value] of [['名称','新名称'],['描述','新描述'],['备注','新备注'],['宽度','18'],['高度','40']])await field(label).fill(value);
+    const typeInput=page.locator('.global-config-game-type');assert.equal(await typeInput.isDisabled(),true);
+    assert.deepEqual(await typeInput.evaluate(node=>{const s=getComputedStyle(node);return [s.backgroundColor,s.color,s.cursor];}),['rgb(21, 26, 34)','rgb(139, 149, 165)','not-allowed']);
     await button('保存').click();await page.locator('.editor-save-dialog').waitFor();await close();
-    const doc=await page.evaluate(()=>window.fixture.doc);assert.equal(doc.name,'新名称');assert.equal(doc.description,'新描述');assert.equal(doc.remark,'新备注');assert.equal(doc.siteSizeWidth,18);assert.equal(doc.siteSizeHeight,40);assert.equal(doc.levels[0].frameList[0].matrix.length,1);
+    const doc=await page.evaluate(()=>window.fixture.doc);assert.equal(doc.name,'新名称');assert.equal(doc.description,'新描述');assert.equal(doc.remark,'新备注');assert.equal(doc.siteSizeWidth,18);assert.equal(doc.siteSizeHeight,40);assert.equal(doc.levels.at(-1).frameList[0].matrix.length,1);
     assert.equal(await page.evaluate(()=>window.getComponentSetup().activeFrame.matrix.length),1);
     await tab('global').click();await field('名称').fill('切页草稿');await tab('levels').click();assert.equal(await page.evaluate(()=>window.fixture.doc.name),'新名称');await tab('global').click();assert.equal(await field('名称').inputValue(),'切页草稿');await field('名称').fill('新名称');
   });
@@ -141,7 +145,7 @@ try {
     await page.locator('.elc408-wiring-panel').evaluate(node=>node.__vueParentComponent.setupState.document.lines=[[[0,0],[1,0]]]);
     await page.evaluate(()=>window.fixture.fail=true);await button('保存').click();await page.locator('.editor-save-dialog').getByText('模拟保存失败').waitFor();await close();assert.equal(await page.locator('.game-wiring-dialog').count(),1);
     await page.evaluate(()=>window.fixture.fail=false);await button('保存').click();await page.locator('.editor-save-dialog h2').getByText('保存成功').waitFor();await close();
-    const doc=await page.evaluate(()=>window.fixture.doc);assert.equal(doc.wiringData.width,18);assert.equal(doc.wiringData.height,40);assert.equal(doc.levels[0].frameList[0].matrix.length,1);
+    const doc=await page.evaluate(()=>window.fixture.doc);assert.equal(doc.wiringData.width,18);assert.equal(doc.wiringData.height,40);assert.equal(doc.levels.at(-1).frameList[0].matrix.length,1);
   });
   await check('布线本地校验失败也弹窗，不发保存请求',async()=>{
     await tab('wiring').click();await page.locator('.elc408-wiring-panel').waitFor();const before=await page.evaluate(()=>window.fixture.calls);
@@ -151,7 +155,7 @@ try {
   await check('复制常见图标、复制全帧隐藏和关卡JSON入口归工具栏',async()=>{
     const copy=page.locator('.frame-icon-actions').getByRole('button',{name:'复制当前帧到后一帧',exact:true});assert.equal(await copy.locator('svg rect').count(),1);assert.equal((await copy.innerText()).trim(),'');
     assert.equal(await button('复制当前帧到所有帧').count(),0);
-    for(const name of ['导出当前关卡','导入替换当前关卡']){assert.equal(await page.locator('.editor-toolbar').getByRole('button',{name,exact:true}).count(),1);assert.equal(await page.locator('.frame-icon-actions').getByRole('button',{name,exact:true}).count(),0);}
+    for(const name of ['导出当前关卡','导入关卡']){assert.equal(await page.locator('.editor-toolbar').getByRole('button',{name,exact:true}).count(),1);assert.equal(await page.locator('.frame-icon-actions').getByRole('button',{name,exact:true}).count(),0);}
   });
   await check('颜色复制图标普通、悬停和禁用均对应绿蓝红紫',async()=>{
     await page.evaluate(()=>{

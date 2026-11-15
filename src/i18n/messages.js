@@ -1654,6 +1654,26 @@ for (const [locale, dataLoading] of Object.entries(dataLoadingLabels)) {
   mergedMessages[locale].common = { ...mergedMessages[locale].common, dataLoading };
 }
 
+const levelAppendLabels = {
+  'zh-CN': ['导入关卡', '已在末尾添加关卡，共 {count} 帧，请保存游戏', '游戏已切换，请重新导入'],
+  'en-US': ['Import level', 'Added a level at the end with {count} frames. Save the game', 'The game has changed. Import again'],
+  'es-ES': ['Importar nivel', 'Nivel añadido al final con {count} fotogramas. Guarda el juego', 'El juego ha cambiado. Importa de nuevo'],
+  'pt-PT': ['Importar nível', 'Nível adicionado ao fim com {count} fotogramas. Guarde o jogo', 'O jogo mudou. Importe novamente'],
+  'fr-FR': ['Importer un niveau', 'Niveau ajouté à la fin avec {count} images. Enregistrez le jeu', 'Le jeu a changé. Importez à nouveau'],
+  'de-DE': ['Level importieren', 'Level mit {count} Frames am Ende hinzugefügt. Spiel speichern', 'Das Spiel wurde gewechselt. Erneut importieren'],
+  'pl-PL': ['Importuj poziom', 'Dodano poziom na końcu z {count} klatkami. Zapisz grę', 'Gra została zmieniona. Importuj ponownie'],
+  'ru-RU': ['Импорт уровня', 'В конец добавлен уровень: {count} кадров. Сохраните игру', 'Игра изменилась. Повторите импорт'],
+  'vi-VN': ['Nhập màn chơi', 'Đã thêm màn chơi ở cuối với {count} khung hình. Hãy lưu trò chơi', 'Trò chơi đã thay đổi. Hãy nhập lại'],
+  'it-IT': ['Importa livello', 'Livello aggiunto in fondo con {count} fotogrammi. Salva il gioco', 'Il gioco è cambiato. Importa di nuovo'],
+  'cs-CZ': ['Importovat úroveň', 'Na konec byla přidána úroveň s {count} snímky. Uložte hru', 'Hra se změnila. Importujte znovu'],
+  'ko-KR': ['레벨 가져오기', '끝에 {count} 프레임의 레벨을 추가했습니다. 게임을 저장하세요', '게임이 변경되었습니다. 다시 가져오세요'],
+  'ro-RO': ['Importă nivelul', 'Nivel adăugat la sfârșit cu {count} cadre. Salvează jocul', 'Jocul s-a schimbat. Importă din nou'],
+  'ar-SA': ['استيراد مرحلة', 'تمت إضافة مرحلة في النهاية تحتوي على {count} إطار. احفظ اللعبة', 'تم تغيير اللعبة. أعد الاستيراد'],
+};
+for (const [locale, [importLevel, levelAppended, importDocumentChanged]] of Object.entries(levelAppendLabels)) {
+  mergedMessages[locale].simple = { ...mergedMessages[locale].simple, importLevel, importLevelJson: `${importLevel} (JSON)`, levelAppended, importDocumentChanged };
+}
+
 export const authoredMessages = Object.fromEntries(
   canonicalLocales.map((locale) => [locale, mergedMessages[locale] || {}]),
 );

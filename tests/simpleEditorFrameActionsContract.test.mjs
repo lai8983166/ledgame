@@ -114,22 +114,22 @@ test("color controls protect busy/modal editing and import/export icons follow d
 
   const exportButton = editorSource.slice(
     editorSource.indexOf(":data-tip=\"t\('simple.exportCurrentLevelJson'\)\""),
-    editorSource.indexOf(":data-tip=\"t\('simple.importReplaceLevelJson'\)\"")
+    editorSource.indexOf(":data-tip=\"t\('simple.importLevelJson'\)\"")
   );
   const importButton = editorSource.slice(
-    editorSource.indexOf(":data-tip=\"t\('simple.importReplaceLevelJson'\)\""),
-    editorSource.indexOf("</div>", editorSource.indexOf(":data-tip=\"t\('simple.importReplaceLevelJson'\)\"")),
+    editorSource.indexOf(":data-tip=\"t\('simple.importLevelJson'\)\""),
+    editorSource.indexOf("</div>", editorSource.indexOf(":data-tip=\"t\('simple.importLevelJson'\)\"")),
   );
   assert.match(exportButton, /@click="exportCurrentLevel"[\s\S]*EditorActionIcon name="export"/);
   assert.match(importButton, /@click="importCurrentLevel"[\s\S]*EditorActionIcon name="import"/);
 });
 
-test("level import validates before confirmation and replacement, and restores focus", () => {
+test("level import validates before appending without replacement, and restores focus", () => {
   const importing = functionSource("importCurrentLevel", "runEditorAction");
-  assert.ok(importing.indexOf('normalizeImportedLevel(') < importing.indexOf('confirmWithRendererFocus('));
-  assert.ok(importing.indexOf('confirmWithRendererFocus(') < importing.indexOf('document.value.levels[levelIndex] ='));
+  assert.ok(importing.indexOf('normalizeImportedLevel(') < importing.indexOf('document.value.levels.push(imported)'));
+  assert.doesNotMatch(importing, /confirmWithRendererFocus|levels\[levelIndex\] =/);
   assert.match(importing, /nextTick\(restoreRendererFocus\)/);
-  assert.match(importing, /activeLevel\.value !== level/);
+  assert.match(importing, /document\.value !== targetDocument/);
   assert.doesNotMatch(importing, /saveGameEditor/);
   assert.match(preloadSource, /importFrameJson: \(payload\) => ipcRenderer\.invoke\('frame:import-json', payload\)/);
   assert.match(mainSource, /title: payload\?\.title \|\| '导入帧'/);

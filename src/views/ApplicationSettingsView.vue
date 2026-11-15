@@ -577,7 +577,7 @@ async function testMemberPlatform() {
 
 .application-settings-secondary:disabled {
   color: var(--ui-text-disabled);
-  cursor: wait;
+  cursor: not-allowed;
 }
 
 .application-settings-success {

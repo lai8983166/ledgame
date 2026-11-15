@@ -22,6 +22,8 @@ let renderRAF = 0;
 
 const dragState = ref(null);
 const DRAG_THRESHOLD = 4;
+let viewZoom = 1;
+let drawnLayout = null;
 
 onMounted(() => {
   const canvas = canvasRef.value;
@@ -64,10 +66,15 @@ function render() {
     return;
   }
   const dpr = window.devicePixelRatio || 1;
-  const containerWidth = containerRef.value?.clientWidth || 320;
-  const containerHeight = containerRef.value?.clientHeight || 240;
-  const cssWidth = Math.max(64, containerWidth);
-  const cssHeight = Math.max(64, containerHeight);
+  const container = containerRef.value;
+  // Scrollbars must not change the zoom baseline while the surface grows.
+  const viewportWidth = Math.max(64, container ? container.offsetWidth - 2 * container.clientLeft : 320);
+  const viewportHeight = Math.max(64, container ? container.offsetHeight - 2 * container.clientTop : 240);
+  const { width, height } = props.document;
+  if (width <= 0 || height <= 0) return;
+  const cell = Math.max(8, Math.min(viewportWidth / width, viewportHeight / height)) * viewZoom;
+  const cssWidth = Math.max(viewportWidth, Math.ceil(cell * width));
+  const cssHeight = Math.max(viewportHeight, Math.ceil(cell * height));
   if (canvas.width !== Math.floor(cssWidth * dpr) || canvas.height !== Math.floor(cssHeight * dpr)) {
     canvas.width = Math.floor(cssWidth * dpr);
     canvas.height = Math.floor(cssHeight * dpr);
@@ -78,15 +85,11 @@ function render() {
   ctx.fillStyle = "#0a0e14";
   ctx.fillRect(0, 0, cssWidth, cssHeight);
 
-  const { width, height } = props.document;
-  if (width <= 0 || height <= 0) {
-    return;
-  }
-  const cell = Math.max(8, Math.min(cssWidth / width, cssHeight / height));
   const totalWidth = cell * width;
   const totalHeight = cell * height;
   const offsetX = Math.max(0, (cssWidth - totalWidth) / 2);
   const offsetY = Math.max(0, (cssHeight - totalHeight) / 2);
+  drawnLayout = { cell, offsetX, offsetY };
 
   // grid
   ctx.strokeStyle = "rgba(255,255,255,0.08)";
@@ -266,25 +269,26 @@ function onContextMenu(event) {
   event.preventDefault();
 }
 
-function computeCellLayout() {
-  const canvas = canvasRef.value;
+function onWheel(event) {
   const container = containerRef.value;
-  if (!canvas || !container) {
-    return null;
-  }
-  // Use the same logical surface that was drawn, including the minimum size.
-  const cssWidth = parseFloat(canvas.style.width) || Math.max(64, container.clientWidth || 320);
-  const cssHeight = parseFloat(canvas.style.height) || Math.max(64, container.clientHeight || 240);
-  const { width, height } = props.document;
-  if (width <= 0 || height <= 0) {
-    return null;
-  }
-  const cell = Math.max(8, Math.min(cssWidth / width, cssHeight / height));
-  const totalWidth = cell * width;
-  const totalHeight = cell * height;
-  const offsetX = Math.max(0, (cssWidth - totalWidth) / 2);
-  const offsetY = Math.max(0, (cssHeight - totalHeight) / 2);
-  return { cell, offsetX, offsetY };
+  const layout = drawnLayout;
+  if (!container || !layout || !event.deltaY) return;
+  const nextZoom = Math.min(4, Math.max(0.25, viewZoom * (event.deltaY < 0 ? 1.1 : 1 / 1.1)));
+  if (nextZoom === viewZoom) return;
+  const pointer = getMousePos(event);
+  const viewportX = pointer.x - container.scrollLeft;
+  const viewportY = pointer.y - container.scrollTop;
+  const gridX = (pointer.x - layout.offsetX) / layout.cell;
+  const gridY = (pointer.y - layout.offsetY) / layout.cell;
+  dragState.value = null;
+  viewZoom = nextZoom;
+  render();
+  container.scrollLeft = drawnLayout.offsetX + gridX * drawnLayout.cell - viewportX;
+  container.scrollTop = drawnLayout.offsetY + gridY * drawnLayout.cell - viewportY;
+}
+
+function computeCellLayout() {
+  return drawnLayout;
 }
 
 function isInBounds(document, x, y) {
@@ -313,6 +317,7 @@ function channelColor(index) {
       @pointerleave="onPointerLeave"
       @pointercancel="onPointerLeave"
       @contextmenu="onContextMenu"
+      @wheel.prevent="onWheel"
     />
   </div>
 </template>
@@ -321,17 +326,18 @@ function channelColor(index) {
 .elc408-wiring-canvas {
   flex: 1;
   min-height: 280px;
-  display: flex;
+  min-width: 0;
+  display: block;
   background: #0a0e14;
   border: 1px solid #2e3947;
   border-radius: 6px;
   box-shadow:
     0 8px 22px rgba(37, 46, 57, 0.17),
     inset 0 0 0 1px rgba(255, 255, 255, 0.035);
-  overflow: hidden;
+  overflow: auto;
 }
 .elc408-wiring-canvas canvas {
-  flex: 1;
+  display: block;
   min-width: 0;
   touch-action: none;
   cursor: crosshair;

@@ -84,7 +84,7 @@ try {
     assert.equal(await page.locator('.object-sprite-button').count(),0);
     assert.equal(await page.locator('.object-panel .object-color-button').count(),4);
     assert.equal(await page.locator('.object-panel .palette-label').evaluateAll(items=>items.every(e=>getComputedStyle(e).display==='none')),true);
-    // 只替换本隔离进程的文件选择器；真实 IPC 写入/读取文件，保存仍走真实后端。
+    // 隔离进程文件选择器；真实 IPC 读取，导入在末尾新增且不提前保存。
     const jsonPath=path.join(app.runtime.directory,'level-'+id+'.json');
     await app.electron.evaluate(({dialog},filePath)=>{
       globalThis.levelJsonDialogTitles=[];
@@ -100,22 +100,21 @@ try {
     assert.equal(exported.frameList[0].__matrixVersion,undefined);
     const repeatInput=page.locator('.repeat-times-control input');
     await repeatInput.fill('9');
-    await page.getByRole('button',{name:'导入替换当前关卡',exact:true}).click();
-    await expect.poll(()=>page.evaluate(()=>window.levelImportConfirms.length)).toBe(1);
-    assert.match(await page.evaluate(()=>window.levelImportConfirms[0]),/覆盖.*全部配置和.*帧/);
-    assert.equal(await repeatInput.inputValue(),'9','cancel must retain unsaved changes');
-    await page.evaluate(()=>window.levelImportConfirmed=true);
-    await page.getByRole('button',{name:'导入替换当前关卡',exact:true}).click();
+    const priorCount=(await api('getGameEditor',id)).data.levels.length;
+    await page.getByRole('button',{name:'导入关卡',exact:true}).click();
+    assert.equal(await page.evaluate(()=>window.levelImportConfirms.length),0);
     await expect.poll(()=>repeatInput.inputValue()).toBe('1');
     assert.equal(await page.locator('.editor-feedback').count(),0);
     assert.equal(await page.getByRole('button',{name:'保存',exact:true}).isEnabled(),true);
     assert.equal((await api('getGameEditor',id)).data.levels[0].frameList[0].repeatTimes,1);
     await page.getByRole('button',{name:'保存',exact:true}).click();
-    await expect.poll(async()=>JSON.stringify((await api('getGameEditor',id)).data.levels[0].frameList)).toBe(JSON.stringify(exported.frameList));
+    await expect.poll(async()=>(await api('getGameEditor',id)).data.levels.length).toBe(priorCount+1);
     const restored=(await api('getGameEditor',id)).data;
-    assert.deepEqual(restored.levels[0].option,exported.option);
+    assert.equal(restored.levels[0].frameList[0].repeatTimes,9);
+    assert.deepEqual(restored.levels.at(-1).option,exported.option);
+    assert.deepEqual(restored.levels.at(-1).frameList,exported.frameList);
     assert.deepEqual(restored.commonConfig,doc.commonConfig);
-    assert.deepEqual(await app.electron.evaluate(()=>globalThis.levelJsonDialogTitles),['导出当前关卡','导入替换当前关卡','导入替换当前关卡']);
+    assert.deepEqual(await app.electron.evaluate(()=>globalThis.levelJsonDialogTitles),['导出当前关卡','导入关卡']);
     await page.locator('.object-color-2').click();
     const canvas=page.locator('.matrix-overlay-canvas'),bounds=await canvas.boundingBox();
     const position={x:bounds.width*14.5/20,y:bounds.height*26.5/40};

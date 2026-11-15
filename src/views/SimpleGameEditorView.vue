@@ -1265,31 +1265,23 @@ async function importCurrentLevel() {
   if (busyAction.value) return;
   statusMessage.value = "";
   errorMessage.value = "";
-  const level = activeLevel.value;
-  if (!level) {
-    errorMessage.value = t("simple.noReplaceLevel");
-    return;
-  }
   const targetDocument = document.value;
-  const levelIndex = activeLevelIndex.value;
   busyAction.value = "level-import";
   try {
     if (!api?.importFrameJson) {
       throw new Error(t("simple.importApiUnavailable"));
     }
-    const result = await api.importFrameJson({ title: t("simple.importReplaceLevel") });
+    const result = await api.importFrameJson({ title: t("simple.importLevel") });
     if (result?.canceled) {
       return;
     }
-    if (document.value !== targetDocument || activeLevel.value !== level || activeLevelIndex.value !== levelIndex) {
-      throw new Error(t("simple.levelImportStale"));
+    if (document.value !== targetDocument) {
+      throw new Error(t("simple.importDocumentChanged"));
     }
     const imported = normalizeImportedLevel(JSON.parse(result?.content || ""));
     if (!imported.frameList.every(frame => canApplyColorOccupancy([], frame.matrix))) return;
-    if (!confirmWithRendererFocus(t("simple.confirmReplaceLevel", {
-      name: level.label || `Level ${levelIndex + 1}`, count: level.frameList.length,
-    }))) return;
-    document.value.levels[levelIndex] = imported;
+    document.value.levels.push(imported);
+    activeLevelIndex.value = document.value.levels.length - 1;
     activeFrameIndex.value = 0;
     previewFrameIndex.value = null;
     draggingFrameProgress.value = false;
@@ -1298,7 +1290,7 @@ async function importCurrentLevel() {
     clearRgbEditHistory();
     syncSelectedObject();
     scheduleMatrixCacheWarmup(0);
-    statusMessage.value = t("simple.levelImported", { count: imported.frameList.length });
+    statusMessage.value = t("simple.levelAppended", { count: imported.frameList.length });
   } catch (error) {
     errorMessage.value = t("simple.levelImportFailed", { message: error.message || String(error) });
   } finally {
@@ -3596,7 +3588,7 @@ function formatRuntimeSummary(value) {
               </button>
               </template>
 <button class="soft-button compact-button object-icon-button" type="button" :aria-label="t('simple.exportCurrentLevel')" :data-tip="t('simple.exportCurrentLevelJson')" :title="t('simple.exportCurrentLevelJson')" :disabled="Boolean(busyAction) || !activeLevel" @click="exportCurrentLevel"><EditorActionIcon name="export" /></button>
-<button class="soft-button compact-button object-icon-button" type="button" :aria-label="t('simple.importReplaceLevel')" :data-tip="t('simple.importReplaceLevelJson')" :title="t('simple.importReplaceLevelJson')" :disabled="Boolean(busyAction) || !activeLevel" @click="importCurrentLevel"><EditorActionIcon name="import" /></button>
+<button class="soft-button compact-button object-icon-button" type="button" :aria-label="t('simple.importLevel')" :data-tip="t('simple.importLevelJson')" :title="t('simple.importLevelJson')" :disabled="Boolean(busyAction) || !document" @click="importCurrentLevel"><EditorActionIcon name="import" /></button>
 <button class="soft-button compact-button object-icon-button" type="button" :aria-label="t('simple.openPreview')" :title="t('simple.openPreview')" :disabled="Boolean(busyAction) || !activeLevel" @click="openPreview"><EditorActionIcon name="preview" /></button>
 <button class="soft-button compact-button object-icon-button" type="button" :aria-label="t('simple.exportGif')" :title="t('simple.exportGif')" :disabled="Boolean(busyAction) || !activeLevel?.frameList?.length" @click="exportCurrentLevelGif"><EditorActionIcon name="gif" /></button>
 <button class="soft-button compact-button object-icon-button" type="button" :aria-label="t('pixelLight.open')" :title="t('pixelLight.open')" :disabled="Boolean(busyAction) || !document" @click="openPixelLightLayout"><EditorActionIcon name="pixel-light" /></button>

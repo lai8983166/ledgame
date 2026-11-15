@@ -27,14 +27,22 @@ await page.addInitScript(() => {
     { id: 4, type: 'default', name: 'simple-demo', firstCatalog: '' },
   ];
   const categories = [{ id: 1, name: '空分类', cover: 'wide.svg' }, { id: 2, name: '原分类', cover: 'tall.svg' }, { id: 3, name: '第二个空分类' }];
-  const fixture = window.categoryFixture = { games, categories, requests: [], failId: null, delay: 0 };
+  const fixture = window.categoryFixture = { games, categories, requests: [], failId: null, delay: 0, listDelay: 0, catalogListeners: [] };
   window.appLanguage = { get: async () => 'zh-CN', onChanged: () => () => {} };
   window.mediaLibrary = {
     list: async () => ({items:['wide.svg','tall.svg'].map(name=>({kind:'file',name,relativePath:name,mediaType:'image'}))}),
     getPreviewUrl: async relativePath => ({url:'led-media://preview/'+relativePath,mediaType:'image'}),
   };
   window.ledGame = {
-    listManageableGames: async () => ({ data: structuredClone(games) }),
+    listManageableGames: async () => {
+      const data = structuredClone(games);
+      if (fixture.listDelay) await new Promise(resolve => setTimeout(resolve, fixture.listDelay));
+      return { data };
+    },
+    onCatalogChanged: callback => {
+      fixture.catalogListeners.push(callback);
+      return () => fixture.catalogListeners.splice(fixture.catalogListeners.indexOf(callback), 1);
+    },
     listGameCategories: async () => ({ data: structuredClone(categories) }),
     updateGameMetadata: async (id, patch) => {
       fixture.requests.push([id, structuredClone(patch)]);
@@ -42,6 +50,7 @@ await page.addInitScript(() => {
       if (id === fixture.failId) throw Error('测试保存失败');
       const game = games.find(item => item.id === id);
       Object.assign(game, patch);
+      fixture.catalogListeners.forEach(callback => callback({ gameId: id }));
       return { code: 200, data: structuredClone(game) };
     },
   };
@@ -73,7 +82,8 @@ try {
         }else await expect(target.locator('.game-card-cover-placeholder')).toBeVisible();
         const box=await target.boundingBox();
         assert.ok(Math.abs(box.width-baseline.width)<.1 && Math.abs(box.height-baseline.height)<.1,JSON.stringify({width,cover,baseline,box}));
-        assert.ok(Math.abs(box.width/box.height-2)<.01);
+        const card = await target.locator('..').locator('..').boundingBox();
+        assert.ok(Math.abs(card.width/card.height-2.2)<.01);
       }
     }
     await page.setViewportSize({width:1366,height:768});
@@ -100,9 +110,15 @@ try {
     await button('添加游戏').click();
     await page.getByRole('checkbox', { name: '未分类游戏', exact: true }).check();
     await page.getByRole('checkbox', { name: '其他分类游戏', exact: true }).check();
+    // Every metadata save broadcasts before returning, like the real Electron
+    // IPC. A slow first snapshot must not later hide the rest of the batch.
+    await page.evaluate(() => { window.categoryFixture.listDelay = 150; window.categoryFixture.delay = 20; });
     await button('确认').click();
     await expect(page.locator('.category-game-picker-dialog')).toHaveCount(0);
+    await page.waitForTimeout(250);
     await expect(page.locator('.game-card')).toHaveCount(2);
+    await expect(button('添加游戏')).toBeVisible();
+    await page.evaluate(() => { window.categoryFixture.listDelay = 0; window.categoryFixture.delay = 0; });
     assert.deepEqual(await page.evaluate(() => window.categoryFixture.requests), [[1, { firstCatalog: '1' }], [2, { firstCatalog: '1' }]]);
     await page.evaluate(() => window.mountComponent('GameListView'));
     await openCategory('空分类');
@@ -134,6 +150,18 @@ try {
       [1, { firstCatalog: '3' }], [2, { firstCatalog: '3' }], [2, { firstCatalog: '3' }],
     ]);
     await page.screenshot({ path: path.join(output, 'category-games.png') });
+  });
+  await check('已有游戏的分类保留加号，可继续添加且不重复列出已加入游戏', async () => {
+    await expect(page.locator('.game-card')).toHaveCount(2);
+    await button('添加游戏').click();
+    await expect(page.locator('.category-game-picker-option')).toHaveCount(1);
+    await expect(page.getByRole('checkbox', { name: '未分类游戏', exact: true })).toHaveCount(0);
+    await page.getByRole('checkbox', { name: '儿童模式隐藏游戏', exact: true }).check();
+    await button('确认').click();
+    await expect(page.locator('.category-game-picker-dialog')).toHaveCount(0);
+    await expect(page.locator('.game-card')).toHaveCount(3);
+    await expect(button('添加游戏')).toBeVisible();
+    assert.deepEqual(await page.evaluate(() => window.categoryFixture.requests.at(-1)), [3, { firstCatalog: '3' }]);
   });
   await check('未知历史分类不生成乱码选项，有效中文分类保持可选且取消不修改原数据', async () => {
     await page.evaluate(() => {
