@@ -82,11 +82,17 @@ try {
   await check('激活查询等待期间不挂载激活窗口或业务，返回未激活后才显示窗口', async () => {
     await page.evaluate(() => { window.fixture.deferStatus = true; });
     await mount(); await noWorkspace(); await expect(dialog()).toHaveCount(0);
+    await expect(page.getByRole('status')).toHaveText('数据加载中');
+    await expect(page.getByRole('status')).toHaveCSS('color', 'rgb(255, 255, 255)');
+    const center = await page.getByRole('status').boundingBox();
+    assert.ok(Math.abs(center.x + center.width / 2 - 640) < 1);
+    assert.ok(Math.abs(center.y + center.height / 2 - 400) < 1);
     await expect(button('重试')).toHaveCount(0);
     assert.deepEqual(await businessCalls(), []);
     await page.screenshot({ path: path.join(output, '启动查询等待无误报.png') });
     await page.evaluate(() => { window.fixture.deferStatus = false; window.fixture.resolveStatus(); });
     await expect(dialog().locator('textarea').first()).toHaveValue('GAME-MACHINE-123');
+    await expect(page.locator('.startup-loading')).toHaveCount(0);
     await noWorkspace(); assert.deepEqual(await businessCalls(), []);
   });
   await check('未激活关闭按钮、叉号和 Escape 退出软件，门禁不消失；点击外层不关闭', async () => {
@@ -163,8 +169,11 @@ try {
     });
     await page.waitForFunction(() => window.fixture.resolveWorkspace);
     await noWorkspace(); await expect(dialog()).toHaveCount(0);
+    await expect(page.getByRole('status')).toHaveText('数据加载中');
+    await page.screenshot({ path: path.join(output, '主界面数据加载中.png') });
     await page.evaluate(() => { window.fixture.deferWorkspace = false; window.fixture.resolveWorkspace(); });
     await expect(page.getByTestId('game-menu-button')).toBeVisible(); await expect(dialog()).toHaveCount(0);
+    await expect(page.locator('.startup-loading')).toHaveCount(0);
     assert.equal(await page.evaluate(() => { window.fixture.dialogObserver.disconnect(); return window.fixture.activationFlashed; }), false);
     const calls = await businessCalls();
     for (const name of ['settings', 'state', 'secondary', 'icon']) assert.equal(calls.filter(call => call === name).length, 1, name);
@@ -172,6 +181,7 @@ try {
   await check('激活后主界面初始化失败仍不开放业务，重新打开恢复', async () => {
     await page.evaluate(() => { window.fixture.failWorkspace = true; });
     await mount(); await noWorkspace(); await expect(dialog().getByRole('alert')).toHaveText('workspace unavailable');
+    await expect(page.locator('.startup-loading')).toHaveCount(0);
     await page.evaluate(() => { window.fixture.failWorkspace = false; });
     await expect(button('重试')).toHaveCount(0);
     await mount(); await expect(page.getByTestId('game-menu-button')).toBeVisible();

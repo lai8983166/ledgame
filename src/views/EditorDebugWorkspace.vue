@@ -2,7 +2,7 @@
 import {computed,ref,reactive,onMounted,onBeforeUnmount,nextTick} from 'vue';
 import {useI18n} from 'vue-i18n';
 import DebugLightBoard from '../components/DebugLightBoard.vue';
-import {isDebugRuntimeAvailable,debugLaunchPayload,appendDebugWristband,pixelsFromDebugFrame} from '../lib/editorDebugSession.js';
+import {isDebugRuntimeAvailable,debugPlayerCounts,debugLaunchPayload,appendDebugWristband,pixelsFromDebugFrame} from '../lib/editorDebugSession.js';
 import {wristbandErrorMessageKey,playerAccessRemainingSeconds} from '../lib/playerAccess.js';
 const props=defineProps({game:{type:Object,required:true},startLevelIndex:{type:Number,default:0},exitLabel:{type:String,default:''}});
 const emit=defineEmits(['exit']);
@@ -34,7 +34,10 @@ async function showHardwareNotice(){
 }
 const hardwareWarning=computed(()=>sessionId.value && state.value.sessionId===sessionId.value
   ? hardwareMessage(state.value.hardwareWarning || '') : entryHardwareWarning.value);
-const options=reactive({userCount:props.game.minPlayers || 1,startLevel:Math.min(props.startLevelIndex+1,props.game.levels?.length || 1),launchMethod:'debug',stageFailurePolicy:'END_GAME'});
+const playerCounts=computed(()=>debugPlayerCounts(props.game));
+const options=reactive({userCount:playerCounts.value[0] || 1,startLevel:Math.min(props.startLevelIndex+1,props.game.levels?.length || 1),launchMethod:'debug',stageFailurePolicy:'END_GAME'});
+const startedOnce=ref(false);
+const launchPayload=()=>debugLaunchPayload(props.game,{...options,skipGameStartAudio:startedOnce.value});
 const blank=()=>Array.from({length:props.game.siteSizeHeight},()=>Array.from({length:props.game.siteSizeWidth},()=>({r:0,g:0,b:0})));
 const pixels=ref(blank());
 const active=computed(()=>sessionId.value && state.value.sessionId===sessionId.value && ['STARTING','RUNNING','SETTLING','PAUSED'].includes(state.value.engineState));
@@ -63,7 +66,7 @@ const countdown=computed(()=>{
 let removeState,removeFrame,balanceTimer,alive=true,scanBuffer='';
 function apply(result){const data=result?.data || result;if(data && (!sessionId.value || data.sessionId===sessionId.value || isDebugRuntimeAvailable(data))){state.value=data;if(data.gameTime)lastGameTime.value=data.gameTime;if(active.value && !startingStandby.value && (pixels.value.length!==props.game.siteSizeHeight || pixels.value[0]?.length!==props.game.siteSizeWidth))pixels.value=blank();}}
 async function action(fn){if(busy.value)return;busy.value=true;error.value='';try{return await fn();}catch(e){const key=wristbandErrorMessageKey(e);error.value=e.message?.startsWith('editorDebug.')?t(e.message):key?t(key):e.message;}finally{busy.value=false;}}
-async function prepare(payload=debugLaunchPayload(props.game,options)){
+async function prepare(payload=launchPayload()){
   const current=(await api.gameState())?.data;
   if(!isDebugRuntimeAvailable(current))throw new Error('editorDebug.busy');
   const result=await api.createEditorPreparation(payload);
@@ -75,7 +78,7 @@ async function prepare(payload=debugLaunchPayload(props.game,options)){
 async function start(){const needsScan=await action(async()=>{
   if(!preparation.value)await prepare();
   if(options.launchMethod==='wristband'&&!enough.value)return true;
-  apply(await api.confirmPreparation(sessionId.value));
+  apply(await api.confirmPreparation(sessionId.value));startedOnce.value=true;
 });if(needsScan)await openScan();}
 async function openScan(){scanBuffer='';scanOpen.value=true;await nextTick();scanPrompt.value?.focus();}
 async function scanKey(event){
@@ -96,11 +99,15 @@ async function cleanup(){
   if(!isDebugRuntimeAvailable(after))throw new Error('editorDebug.cleanupFailed');
   sessionId.value=null;scanOpen.value=false;scanBuffer='';
 }
-async function restart(){const needsScan=await action(async()=>{const payload=debugLaunchPayload(props.game,options);await cleanup();await prepare(payload);if(enough.value)apply(await api.confirmPreparation(sessionId.value));else return true;});if(needsScan)await openScan();}
+async function restart(){const needsScan=await action(async()=>{const payload=launchPayload();await cleanup();await prepare(payload);if(enough.value){apply(await api.confirmPreparation(sessionId.value));startedOnce.value=true;}else return true;});if(needsScan)await openScan();}
 async function selectLevel(index){
   if(levelChoiceDisabled.value || !Number.isInteger(index) || index<0 || index>=levelList.value.length)return;
-  options.startLevel=index+1;
-  if(canSwitchLevel.value)await restart();
+  if(canSwitchLevel.value){
+    await action(async()=>{
+      apply(await api.sendDebugCommand({command:'switchlevel',sessionId:sessionId.value,levelIndex:index}));
+      options.startLevel=index+1;
+    });
+  }else options.startLevel=index+1;
 }
 async function exit(){return Boolean(await action(async()=>{await cleanup();emit('exit');return true;}));}
 defineExpose({exit});
@@ -140,14 +147,14 @@ onBeforeUnmount(()=>{alive=false;clearTimeout(hardwareNoticeTimer);clearInterval
     <div class="debug-workspace-columns">
       <aside class="debug-workspace-controls">
         <!-- <label><span>{{t('editorDebug.method')}}</span><select v-model="options.launchMethod" :disabled="busy || active || !!preparation"><option value="debug">{{t('editorDebug.direct')}}</option><option value="wristband">{{t('editorDebug.wristband')}}</option></select></label> -->
-        <label><span>{{t('editorDebug.players')}}</span><input v-model.number="options.userCount" type="number" :min="game.minPlayers || 1" :max="game.maxPlayers || game.participants || 1" :disabled="busy || active || !!preparation" /></label>
+        <label><span>{{t('editorDebug.players')}}</span><select v-model.number="options.userCount" data-testid="debug-player-count" :disabled="busy || active || !!preparation"><option v-for="count in playerCounts" :key="count" :value="count">{{count}}</option></select></label>
         <section class="debug-level-section" :aria-label="t('editorDebug.levelList')">
           <h2>{{t('editorDebug.levelList')}}</h2>
           <div class="debug-level-list">
             <button v-for="(level,index) in levelList" :key="index" class="soft-button" type="button"
               :data-debug-level="index" :class="{selected:options.startLevel===index+1}"
               :aria-pressed="options.startLevel===index+1" :disabled="levelChoiceDisabled" @click="selectLevel(index)">
-              <strong>{{index+1}}</strong><span>{{level.label || `${t('editorDebug.level')} ${index+1}`}}</span>
+              <span>{{level.label || `${t('editorDebug.level')} ${index+1}`}}</span>
             </button>
           </div>
         </section>

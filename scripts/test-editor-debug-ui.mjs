@@ -14,6 +14,7 @@ const browser=await chromium.launch({executablePath:path.join(cache,chrome,'chro
 const context=await browser.newContext({viewport:{width:1366,height:768}});
 await context.addInitScript(()=>{
   const simple={id:1,name:'Simple测试',displayName:'Simple测试',type:'default',mode:'[1]',siteSizeWidth:16,siteSizeHeight:36,participants:3,
+    cover:'cover.png',firstCatalog:'1',audio:{scoreSound:'score.mp3',injurySound:'injury.mp3',purpleSound:'purple.mp3'},gif:{standby:'idle.gif',gameFailure:'fail.gif',gameOver:'over.gif'},commonConfig:{gameStartAudio:'start.mp3',gameEndSuccessAudio:'success.mp3',gameEndFailAudio:'fail.mp3',levelPassAudio:'pass.mp3',levelRestartAudio:'restart.mp3'},
     levels:[{label:'第一关',frameList:[{repeatTimes:1,matrix:[]}]}]};
   const rank={id:4,name:'Rank测试',displayName:'Rank测试',type:'rank',siteSizeWidth:8,siteSizeHeight:8,minPlayers:1,maxPlayers:3,
     palette:['#ff0000','#00ff00','#0000ff'],levels:[{type:1,bounds:{minX:0,minY:0,maxX:7,maxY:7}}]};
@@ -34,8 +35,8 @@ await context.addInitScript(()=>{
     readHelpDocument:async()=> '测试帮助内容',
     onLedFrame:f=>{frameListeners.push(f);return()=>{frameListeners=frameListeners.filter(x=>x!==f);};},
     getGameEditor:async()=>({data:clone(simple)}),getRankGameEditor:async()=>({data:clone(rank)}),listGameCategories:async()=>({data:[]}),
-    saveGameEditor:async(id,value)=>{if(window.fixture.failSave)throw Error('保存失败');Object.assign(simple,clone(value));return {data:{saved:true}};},
-    saveRankGameEditor:async(id,value)=>{if(window.fixture.failSave)throw Error('保存失败');Object.assign(rank,clone(value));return {data:{saved:true}};},
+    saveGameEditor:async(id,value)=>{if(window.fixture.failSave)throw Error('保存失败');Object.assign(simple,clone(value));return {data:{saved:true,gameId:id}};},
+    saveRankGameEditor:async(id,value)=>{if(window.fixture.failSave)throw Error('保存失败');Object.assign(rank,clone(value));return {data:{saved:true,gameId:id}};},
     validateRankGameEditor:async()=>({data:{valid:true}}),
     createEditorPreparation:async request=>{window.fixture.requests.push(['prepare',clone(request)]);state={engineState:'PREPARING',sessionId:'session-'+(++sequence),preparation:{sessionId:'session-'+sequence,options:clone(request),participants:[]},queueSummary:{waiting:[]}};return ret();},
     updatePreparation:async(id,patch)=>{window.fixture.requests.push(['update',id,patch]);state.playerAccesses=patch.tokenList.map(uid=>({member:{id:Number(uid),phone:'13800000000',name:'测试会员'},access:{uid,bindingId:1,status:'READY',durationMinutes:60,remainingSeconds:3600}}));return ret();},
@@ -90,11 +91,31 @@ try{
     const saved=(await page.evaluate(()=>window.componentEvents))[0];assert.equal(saved[0],'save');assert.deepEqual(saved[1],exported);
     await page.screenshot({path:path.join(output,'布线导入导出.png')});
   });
+  await check('人数下拉：普通游戏旧participants=1仍可2/6人启动，Rank使用配置范围',async()=>{
+    const base=await page.evaluate(()=>window.fixture.simple);
+    for(const count of [2,6]){
+      await page.evaluate(()=>window.fixture.update({engineState:'IDLE',queueSummary:{waiting:[]}}));
+      await mount('EditorDebugWorkspace',{game:{...base,participants:1}});
+      const select=page.getByTestId('debug-player-count');
+      assert.deepEqual(await select.locator('option').allTextContents(),['1','2','3','4','5','6']);
+      assert.equal(await page.locator('.debug-workspace-controls input[type=number]').count(),0);
+      await select.selectOption(String(count));await button('启动游戏').click();
+      assert.equal((await page.evaluate(()=>window.fixture.requests.filter(r=>r[0]==='prepare').at(-1)))[1].userCount,count);
+      assert.equal(await select.isDisabled(),true);
+      assert.equal(await page.locator('.debug-workspace-controls .error-line').count(),0);
+      await button('退出调试，返回编辑').click();
+    }
+    await page.evaluate(()=>window.fixture.update({engineState:'IDLE',queueSummary:{waiting:[]}}));
+    const rank=await page.evaluate(()=>window.fixture.rank);await mount('EditorDebugWorkspace',{game:{...rank,minPlayers:2,maxPlayers:3}});
+    assert.deepEqual(await page.getByTestId('debug-player-count').locator('option').allTextContents(),['2','3']);
+    assert.equal(await page.getByTestId('debug-player-count').inputValue(),'2');
+    await button('启动游戏').click();await button('退出调试，返回编辑').click();
+  });
   await check('调试隐藏启动方式，默认直接启动，结束只显示客户可读文本',async()=>{
     await page.evaluate(()=>window.fixture.update({engineState:'IDLE',queueSummary:{waiting:[]}}));
     const game=await page.evaluate(()=>window.fixture.simple);await mount('EditorDebugWorkspace',{game});
     assert.equal(await page.getByText('启动方式',{exact:true}).count(),0);
-    assert.equal(await page.locator('.debug-workspace-controls select').count(),1);
+    assert.equal(await page.locator('.debug-workspace-controls select').count(),2);
     await button('启动游戏').click();
     assert.equal((await page.evaluate(()=>window.fixture.requests)).filter(r=>r[0]==='prepare').at(-1)[1].launchMethod,'debug');
     for(const terminationReason of ['NATURAL_SUCCESS','MANUAL_STOP']){
@@ -169,11 +190,11 @@ try{
     await mount('GameWiringDialog',{width:8,height:8});assert.deepEqual(await page.evaluate(()=>window.fixture.listeners()),[0,0]);
   });
   await check('真实 UID 加回车，多人刷卡数量、重复卡、取消不算成功、普通输入不被扫描捕获',async()=>{
-    const game=await page.evaluate(()=>window.fixture.simple);await mount('EditorDebugWorkspace',{game});await page.locator('.editor-debug-workspace').evaluate(node=>{node.__vueParentComponent.setupState.options.launchMethod='wristband';});await page.locator('input[type=number]').first().fill('2');
+    const game=await page.evaluate(()=>window.fixture.simple);await mount('EditorDebugWorkspace',{game});await page.locator('.editor-debug-workspace').evaluate(node=>{node.__vueParentComponent.setupState.options.launchMethod='wristband';});await page.getByTestId('debug-player-count').selectOption('2');
     await button('请刷手环').click();await page.keyboard.type('2283055618');await page.keyboard.press('Enter');await page.locator('[role=dialog]').waitFor({state:'hidden'});
     await button('请刷手环').click();await page.keyboard.type('2283055618');await page.keyboard.press('Enter');assert.equal(await page.locator('[role=dialog]').count(),1);await button('取消').click();
     await button('请刷手环').click();await page.keyboard.type('2283055619');await page.keyboard.press('Enter');await page.locator('[role=dialog]').waitFor({state:'hidden'});await button('启动游戏').click();await button('退出调试，返回编辑').click();
-    await mount('EditorDebugWorkspace',{game});await page.locator('input[type=number]').first().fill('3');assert.equal(await page.locator('input[type=number]').first().inputValue(),'3');await button('退出调试，返回编辑').click();
+    await mount('EditorDebugWorkspace',{game});await page.getByTestId('debug-player-count').selectOption('3');assert.equal(await page.getByTestId('debug-player-count').inputValue(),'3');await button('退出调试，返回编辑').click();
   });
   await check('外围灯按保存布局显示黑灯、运行冻结多墙序号、点击不串地砖、暂停禁用及三种尺寸',async()=>{
     const game=await page.evaluate(()=>structuredClone(window.fixture.simple));
@@ -256,18 +277,37 @@ try{
       await page.screenshot({path:path.join(output,`rank-${width}.png`)});}
     await button('退出调试，返回编辑').click();await page.setViewportSize({width:1366,height:768});
   });
+  await check('同场地RGB矩阵有无符号灯及Simple/Rank视觉尺寸一致',async()=>{
+    const simple=await page.evaluate(()=>window.fixture.simple),rank=await page.evaluate(()=>window.fixture.rank);
+    const layout={form:{open:1,topWallPixelLightNum:1,rightWallPixelLightNum:1,bottomWallPixelLightNum:1,leftWallPixelLightNum:1}};
+    for(const [width,height] of [[1366,768],[1920,1080],[1280,600]]){
+      await page.setViewportSize({width,height});const boxes=[];
+      for(const [name,game] of [['simple-no-lights',{...simple,commonConfig:{}}],['simple-lights',{...simple,commonConfig:{pixelLightWiring:layout}}],['rank-no-lights',{...rank,commonConfig:{}}]]){
+        await page.evaluate(()=>window.fixture.update({engineState:'IDLE',queueSummary:{waiting:[]}}));
+        await mount('EditorDebugWorkspace',{game:{...game,siteSizeWidth:16,siteSizeHeight:36}});await page.waitForTimeout(150);
+        const box=await page.locator('.debug-workspace-rgb canvas').boundingBox();boxes.push(box);
+        assert.equal(await page.locator('.debug-symbol-light').count(),name==='simple-lights'?4:0);
+        if(width===1366)await page.screenshot({path:path.join(output,`统一矩阵-${name}.png`)});
+      }
+      for(const box of boxes.slice(1))for(const key of ['width','height','x','y'])assert.ok(Math.abs(box[key]-boxes[0][key])<1,JSON.stringify({width,height,boxes}));
+    }
+    await page.setViewportSize({width:1366,height:768});
+  });
   await check('编辑草稿尺寸和布线校验保留，启动入口已移到卡片',async()=>{
     await mount('SimpleGameEditorView',{gameId:1});
     await page.evaluate(()=>window.getComponentSetup().document.siteSizeWidth=7);
     assert.equal(await button('启动游戏').count(),0);
-    await button('地砖布线').click();await button('保存此游戏布线').click();
-    assert.match(await page.locator('.game-wiring-dialog .error-line').innerText(),/先保存游戏的场地尺寸/);
+    await button('地砖布线').click();await page.locator('.elc408-wiring-panel').waitFor();
+    await page.locator('.elc408-wiring-panel').evaluate(node=>node.__vueParentComponent.setupState.document.lines=[[[15,0]]]);
+    await button('保存').click();await page.locator('.editor-save-dialog').waitFor();
+    assert.match(await page.locator('.editor-save-dialog').innerText(),/布线无效|场地范围/);
+    assert.equal(await page.evaluate(()=>window.fixture.simple.siteSizeWidth),16);
     await page.locator('.editor-save-dialog button').click();
-    await button('取消').click();await page.evaluate(()=>window.getComponentSetup().document.siteSizeWidth=16);
-    await button('地砖布线').click();await button('保存此游戏布线').click();await page.locator('.game-wiring-dialog').waitFor({state:'hidden'});
+    await page.evaluate(()=>window.getComponentSetup().document.siteSizeWidth=16);
+    await button('保存').click();await page.locator('.editor-save-dialog').waitFor();
     await page.locator('.editor-save-dialog button').click();
     assert.equal(await page.evaluate(()=>window.fixture.simple.wiringData.runtimeEnabled),true);
-    await mount('RankGameEditorView',{gameId:4});await button('地砖布线').click();await button('取消').click();
+    await mount('RankGameEditorView',{gameId:4});await button('地砖布线').click();await page.locator('.elc408-wiring-panel').waitFor();await page.locator('.rank-level-tab .sequence-pill').first().click();
     assert.equal(await page.evaluate(()=>window.fixture.rank.wiringData),undefined);
   });
   await check('实际应用外壳中的 Rank：16×36/8×8、窗口缩放、完整末行及末行点击',async()=>{
@@ -344,10 +384,10 @@ try{
     assert.equal(await page.evaluate(()=>window.fixture.requests.length),before+1);
     await page.waitForTimeout(850);assert.equal(await page.locator('.debug-hardware-dialog').count(),1);
     await page.locator('.debug-hardware-dialog').waitFor({state:'hidden',timeout:1800});
-    await page.locator('.debug-workspace-controls input').first().fill('2');await button('启动游戏').click();await button('退出调试，返回编辑').click();
+    await page.getByTestId('debug-player-count').selectOption('2');await button('启动游戏').click();await button('退出调试，返回编辑').click();
     await mount('EditorDebugWorkspace',{game});await page.locator('.debug-hardware-dialog').waitFor();
     await page.locator('.debug-hardware-dialog button').click();assert.equal(await page.locator('.debug-hardware-dialog').count(),0);
-    await page.locator('.debug-workspace-controls input').first().fill('2');
+    await page.getByTestId('debug-player-count').selectOption('2');
     await mount('GameWiringDialog',{width:8,height:8});await page.waitForTimeout(2100);assert.equal(await page.locator('.debug-hardware-dialog').count(),0);
     await page.evaluate(()=>window.fixture.deferHardware=true);await mount('EditorDebugWorkspace',{game});
     await page.waitForFunction(()=>typeof window.fixture.resolveHardware==='function');

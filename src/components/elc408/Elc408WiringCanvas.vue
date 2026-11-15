@@ -187,8 +187,8 @@ function getMousePos(event) {
   }
   const rect = canvas.getBoundingClientRect();
   return {
-    x: event.clientX - rect.left,
-    y: event.clientY - rect.top,
+    x: (event.clientX - rect.left) * parseFloat(canvas.style.width) / rect.width,
+    y: (event.clientY - rect.top) * parseFloat(canvas.style.height) / rect.height,
   };
 }
 
@@ -272,8 +272,9 @@ function computeCellLayout() {
   if (!canvas || !container) {
     return null;
   }
-  const cssWidth = container.clientWidth || 320;
-  const cssHeight = container.clientHeight || 240;
+  // Use the same logical surface that was drawn, including the minimum size.
+  const cssWidth = parseFloat(canvas.style.width) || Math.max(64, container.clientWidth || 320);
+  const cssHeight = parseFloat(canvas.style.height) || Math.max(64, container.clientHeight || 240);
   const { width, height } = props.document;
   if (width <= 0 || height <= 0) {
     return null;

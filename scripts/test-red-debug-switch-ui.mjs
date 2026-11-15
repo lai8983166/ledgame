@@ -52,6 +52,12 @@ await page.addInitScript(() => {
         if (f.failStop) throw Error('停止失败');
         if (f.delayStop) await new Promise(resolve => { f.releaseStop = resolve; });
         if (!f.keepRunning) state = { engineState: 'STOPPED', queueSummary: { waiting: [] } };
+      } else if (command.command === 'switchlevel') {
+        if (command.sessionId !== state.sessionId) throw Error('editorDebug.sessionLost');
+        if (f.failStop) throw Error('切关失败');
+        if (f.delayStop) await new Promise(resolve => { f.releaseStop = resolve; });
+        state = {...state, engineState:'RUNNING', currentStageIndex:command.levelIndex,
+          gameplay:{score:0,life:3},gameTime:{mode:'LIMITED',remainingMillis:120000}};
       } else if (command.command === 'pause') state.engineState = 'PAUSED';
       else if (command.command === 'resume') state.engineState = 'RUNNING';
       return ret();
@@ -82,6 +88,7 @@ try {
   await expect(button('启动游戏')).toBeEnabled();
   await check('精简调试界面保留列表选关，不显示所选配置及重复控件和状态提示', async () => {
     assert.equal(await page.locator('[data-debug-level]').count(),3);
+    assert.deepEqual(await page.locator('[data-debug-level]').allTextContents(),['关卡1','关卡2','关卡3']);
     assert.equal(await page.locator('[data-debug-field=startLevel], .debug-level-selection').count(),0);
     assert.equal(await button('切换关卡').count(),0);
     for(const text of ['起始关卡','运行状态','当前关卡'])assert.equal(await page.getByText(text,{exact:true}).count(),0);
@@ -93,13 +100,17 @@ try {
     await page.locator('[data-debug-level="0"]').click();
   });
   await button('启动游戏').click();
-  await check('运行中切到所选关，清理先于新准备并重置本局显示', async () => {
+  assert.equal(await page.evaluate(()=>window.fixture.requests.find(item=>item[0]==='prepare')[1].skipGameStartAudio===true),false);
+  await check('运行中一次命令立即切到所选关，不重新准备且重置本局显示', async () => {
     await page.evaluate(() => window.fixture.publish({ gameplay: { score: 99, life: 1 }, gameTime: { mode: 'LIMITED', remainingMillis: 7000 } }));
     await expect(level(1)).toBeEnabled(); await level(1).click();
     const state = await snapshot(); assert.equal(state.currentStageIndex, 1);
     assert.deepEqual(state.gameplay, { score: 0, life: 3 }); assert.equal(state.gameTime.remainingMillis, 120000);
-    const last = await page.evaluate(() => window.fixture.requests.slice(-3));
-    assert.equal(last[0][1].command, 'endgame'); assert.equal(last[1][0], 'prepare'); assert.equal(last[1][1].startLevelIndex, 1); assert.equal(last[2][0], 'confirm');
+    const last = await page.evaluate(() => window.fixture.requests.at(-1));
+    assert.equal(last[1].command, 'switchlevel'); assert.equal(last[1].levelIndex,1);
+    assert.equal(await count('prepare'),1); assert.equal(await count('confirm'),1);
+    await button('重新开始').click();
+    assert.equal(await page.evaluate(()=>window.fixture.requests.filter(item=>item[0]==='prepare').at(-1)[1].skipGameStartAudio),true);
   });
   await check('暂停中同样从所选关重新运行，准备和过渡中禁用切关', async () => {
     await button('暂停').click(); await page.locator('[data-debug-level="2"]').click();
@@ -117,38 +128,37 @@ try {
       assert.equal(await page.evaluate(() => window.fixture.requests.length), before); assert.equal((await snapshot()).sessionId, id);
     }
   });
-  await check('停止报错或未真正停止均不创建第二会话，可恢复重试', async () => {
-    for (const flag of ['failStop', 'keepRunning']) {
+  await check('切关失败保留原会话和所选关卡，可恢复重试', async () => {
+    for (const flag of ['failStop']) {
       const before = await count('prepare'); await page.evaluate(flag => { window.fixture[flag] = true; }, flag);
       await level(1).click(); await expect(page.getByRole('alert')).toBeVisible(); assert.equal(await count('prepare'), before);
       await expect(level(1)).toBeEnabled(); await page.evaluate(flag => { window.fixture[flag] = false; }, flag);
     }
     await level(1).click(); assert.equal((await snapshot()).currentStageIndex, 1);
   });
-  await check('切关处理中重复点击不重复停止或准备', async () => {
+  await check('切关处理中重复点击不重复发送命令或准备', async () => {
     await page.evaluate(() => { window.fixture.delayStop = true; });
     const before = await count('prepare'); await level(0).click();
     await expect(level(0)).toBeDisabled();
     await page.evaluate(() => { const setup = window.getComponentSetup(); setup.restart(); setup.restart(); });
     assert.equal(await count('prepare'), before);
     await page.evaluate(() => { window.fixture.delayStop = false; window.fixture.releaseStop(); });
-    await expect(level(0)).toBeEnabled(); assert.equal(await count('prepare'), before + 1); assert.equal((await snapshot()).currentStageIndex, 0);
+    await expect(level(0)).toBeEnabled(); assert.equal(await count('prepare'), before); assert.equal((await snapshot()).currentStageIndex, 0);
   });
   await check('新准备失败后恢复启动入口，重试使用所选关', async () => {
-    await page.evaluate(() => { window.fixture.failPrepare = true; }); await level(2).click();
+    await page.evaluate(() => { window.fixture.failPrepare = true; }); await button('重新开始').click();
     await expect(page.getByRole('alert')).toContainText('准备失败'); await expect(button('启动游戏')).toBeEnabled();
-    await page.evaluate(() => { window.fixture.failPrepare = false; }); await button('启动游戏').click(); assert.equal((await snapshot()).currentStageIndex, 2);
+    await page.evaluate(() => { window.fixture.failPrepare = false; }); await level(2).click(); await button('启动游戏').click(); assert.equal((await snapshot()).currentStageIndex, 2);
   });
-  await check('手环切关复用重新开始流程，清空旧参与者并重新扫码', async () => {
+  await check('手环切关复用当前参与者直接运行，不再重新扫码准备', async () => {
     await page.evaluate(async () => { await window.getComponentSetup().cleanup(); window.mountComponent('EditorDebugWorkspace', { game: { ...window.fixture.game, type: 'rank' } }); });
-    await page.locator('select').first().selectOption('wristband'); await button('启动游戏').click();
+    await page.evaluate(()=>window.getComponentSetup().options.launchMethod='wristband'); await button('启动游戏').click();
+    assert.equal(await page.evaluate(()=>window.fixture.requests.filter(item=>item[0]==='prepare').at(-1)[1].skipGameStartAudio===true),false);
     await expect(page.locator('.debug-scan-backdrop')).toBeVisible(); await expect(level(0)).toBeDisabled();
     await page.keyboard.type('123456'); await page.keyboard.press('Enter'); await button('启动游戏').click();
     await button('暂停').click(); await level(1).click();
-    await expect(page.locator('.debug-scan-backdrop')).toBeVisible(); assert.equal((await snapshot()).engineState, 'PREPARING');
-    assert.deepEqual((await snapshot()).playerAccesses, []); await expect(level(1)).toBeDisabled();
-    await page.keyboard.type('654321'); await page.keyboard.press('Enter'); await button('启动游戏').click();
-    assert.equal((await snapshot()).currentStageIndex, 1); assert.equal((await snapshot()).playerAccesses[0].access.uid, '654321');
+    await expect(page.locator('.debug-scan-backdrop')).toHaveCount(0); assert.equal((await snapshot()).engineState, 'RUNNING');
+    assert.equal((await snapshot()).currentStageIndex, 1); assert.equal((await snapshot()).playerAccesses[0].access.uid, '123456');
     await page.screenshot({ path: path.join(output, '调试切关.png') });
   });
   await check('长关卡列表完整可滚动选择最后一关，Rank不显示配置摘要且小屏布局正常', async () => {
@@ -174,7 +184,7 @@ try {
     const before=await page.evaluate(()=>window.fixture.requests.length);
     await page.locator('[data-debug-level="1"]').click();
     await expect(page.getByRole('alert')).toContainText('当前会话已改变');
-    assert.equal(await page.evaluate(()=>window.fixture.requests.length),before);
+    assert.equal(await page.evaluate(()=>window.fixture.requests.length),before+1);
     assert.equal((await snapshot()).sessionId,'foreign-session');
   });
   assert.deepEqual(errors, []);

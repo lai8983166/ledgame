@@ -3832,6 +3832,7 @@ function formatRuntimeSummary(value) {
           />
         </div>
 
+        <Teleport to="body">
         <div
           v-if="contextMenu.visible"
           class="matrix-context-menu"
@@ -3844,6 +3845,7 @@ function formatRuntimeSummary(value) {
             <button type="button" @click="stopSelectionMode">{{ t("simple.cancel") }}</button>
           </template>
         </div>
+        </Teleport>
       </main>
 
       <aside class="editor-panel editor-right">

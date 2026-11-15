@@ -1643,6 +1643,17 @@ for (const [locale, levelEditing] of Object.entries(levelEditingLabels)) {
   mergedMessages[locale].simple = { ...mergedMessages[locale].simple, levelEditing };
 }
 
+const dataLoadingLabels = {
+  'zh-CN': '数据加载中', 'en-US': 'Loading data', 'es-ES': 'Cargando datos',
+  'pt-PT': 'A carregar dados', 'fr-FR': 'Chargement des données', 'de-DE': 'Daten werden geladen',
+  'pl-PL': 'Ładowanie danych', 'ru-RU': 'Загрузка данных', 'vi-VN': 'Đang tải dữ liệu',
+  'it-IT': 'Caricamento dati', 'cs-CZ': 'Načítání dat', 'ko-KR': '데이터 로딩 중',
+  'ro-RO': 'Se încarcă datele', 'ar-SA': 'جارٍ تحميل البيانات',
+};
+for (const [locale, dataLoading] of Object.entries(dataLoadingLabels)) {
+  mergedMessages[locale].common = { ...mergedMessages[locale].common, dataLoading };
+}
+
 export const authoredMessages = Object.fromEntries(
   canonicalLocales.map((locale) => [locale, mergedMessages[locale] || {}]),
 );

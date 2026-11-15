@@ -728,6 +728,7 @@ function formatRuntimeValue(value, fallback = "-") {
 
 <template>
   <main v-if="!workspaceAccessible" class="app-shell" :class="{ 'app-shell--custom-titlebar': api?.customTitleBarEnabled }" data-testid="activation-gate">
+    <p v-if="!activationDialogVisible" class="startup-loading" role="status">{{ t('common.dataLoading') }}</p>
     <div v-if="api?.customTitleBarEnabled" class="window-titlebar" data-testid="window-titlebar">
       <span class="window-titlebar-drag-region"><span class="window-titlebar-icon window-titlebar-icon--fallback" aria-hidden="true">◆</span><span class="window-titlebar-title">{{ applicationTitle }}</span></span>
       <span class="window-titlebar-controls">
@@ -1020,3 +1021,16 @@ function formatRuntimeValue(value, fallback = "-") {
   </main>
   <GameActivationDialog v-if="activationDialogVisible" :status="activationStatus" :startup-error="activationStartupError" @status="applyActivationStatus" @close="closeActivationDialog" />
 </template>
+
+<style scoped>
+.startup-loading {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  margin: 0;
+  color: #fff;
+  font-size: 20px;
+  pointer-events: none;
+}
+</style>

@@ -2,13 +2,18 @@ export function isDebugRuntimeAvailable(state) {
   return ['IDLE','STOPPED'].includes(state?.engineState)
     && !state?.preparation && !state?.queueSummary?.waiting?.length;
 }
+export function debugPlayerCounts(game) {
+  const minimum=game.type==='rank'?Number(game.minPlayers || 1):1;
+  const maximum=game.type==='rank'?Number(game.maxPlayers || game.participants || 6):6;
+  return [1,2,3,4,5,6].filter(count=>count>=minimum&&count<=maximum);
+}
 export function debugLaunchPayload(game, options) {
   const count=Number(options.userCount), level=Number(options.startLevel);
-  const minimum=Number(game.minPlayers || 1), maximum=Number(game.maxPlayers || game.participants || 1);
-  if (!Number.isInteger(count) || count<minimum || count>maximum || !Number.isInteger(level) || level<1 || level>(game.levels?.length || 1))
+  if (!debugPlayerCounts(game).includes(count) || !Number.isInteger(level) || level<1 || level>(game.levels?.length || 1))
     throw new Error('editorDebug.invalidOptions');
   return {gameId:Number(game.id),userCount:count,startLevelIndex:level-1,
-    launchMethod:options.launchMethod==='wristband'?'wristband':'debug',runtimeMode:'SIMULATION',stageFailurePolicy:options.stageFailurePolicy || 'END_GAME'};
+    launchMethod:options.launchMethod==='wristband'?'wristband':'debug',runtimeMode:'SIMULATION',stageFailurePolicy:options.stageFailurePolicy || 'END_GAME',
+    ...(options.skipGameStartAudio===true?{skipGameStartAudio:true}:{})};
 }
 export function appendDebugWristband(state, sessionId, uid) {
   if(state?.preparation?.sessionId!==sessionId || state.engineState!=='PREPARING') throw new Error('editorDebug.sessionLost');

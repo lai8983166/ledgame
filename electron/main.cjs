@@ -1,6 +1,7 @@
 const path = require('node:path')
 const childProcess = require('node:child_process')
 const nodeNet = require('node:net')
+const { createDebugFrameServer } = require('./debug-frame-server.cjs')
 const nodeFs = require('node:fs')
 const fs = require('node:fs/promises')
 const { gameId: normalizeGameRecordId, exportGameRecord, importGameRecord } = require('./game-transfer.cjs')
@@ -74,7 +75,7 @@ const {
 const isDev = Boolean(process.env.VITE_DEV_SERVER_URL)
 const shouldUseEmbeddedBackend = !isDev && !process.env.LED_BACKEND_URL
 const preferredBackendPort = Number(process.env.LED_PORTABLE_BACKEND_PORT || 37680)
-const framePort = Number(process.env.LED_DEBUG_TCP_PORT || 3002)
+let framePort = Number(process.env.LED_DEBUG_TCP_PORT || 3002)
 const runtimeStateThrottleMs = Number(process.env.LED_RUNTIME_STATE_THROTTLE_MS || 100)
 const mediaProtocol = 'led-media'
 const idleMediaProtocol = 'led-idle-media'
@@ -141,8 +142,11 @@ let backendBaseUrl = process.env.LED_BACKEND_URL || 'http://127.0.0.1:8080'
 let runtimeStateStreamUrl = process.env.LED_RUNTIME_STATE_URL || defaultRuntimeStateStreamUrl(backendBaseUrl)
 let latestFrame = null
 let latestEngineState = null
-let tcpServer = null
-const frameSockets = new Set()
+const debugFrameServer = createDebugFrameServer({
+  isActivated: () => activationConfirmed,
+  onPayload: publishFrame,
+  onWarning: error => console.warn(`LED debug TCP socket error: ${error.message || String(error)}`),
+})
 let runtimeStateSocket = null
 let runtimeStateReconnectTimer = null
 let runtimeStateStreamStopped = false
@@ -852,76 +856,19 @@ async function openSecondaryDisplay() {
 }
 
 function startFrameServer() {
-  if (tcpServer) {
-    return
-  }
-
-  tcpServer = nodeNet.createServer((socket) => {
-    let buffer = Buffer.alloc(0)
-    frameSockets.add(socket)
-
-    socket.on('data', (chunk) => {
-      buffer = Buffer.concat([buffer, chunk])
-      buffer = parseFrames(buffer)
-    })
-    socket.on('error', (error) => {
-      const code = error && error.code
-      if (code !== 'ECONNRESET' && code !== 'ECONNABORTED') {
-        console.warn(`LED debug TCP socket error: ${error.message || String(error)}`)
-      }
-    })
-    socket.on('close', () => {
-      frameSockets.delete(socket)
-    })
-  })
-
-  tcpServer.on('error', (error) => {
-    console.error(`LED debug TCP server failed on port ${framePort}`, error)
-  })
-
-  tcpServer.listen(framePort, '127.0.0.1', () => {
-    console.log(`LED debug TCP server listening on 127.0.0.1:${framePort}`)
+  return debugFrameServer.listen(framePort, shouldUseEmbeddedBackend).then(port => {
+    framePort = port
+    appendStartupLog(`LED debug TCP server listening on 127.0.0.1:${framePort}`)
+    return port
   })
 }
 
-function stopFrameServer() {
-  for (const socket of frameSockets) {
-    socket.destroy()
-  }
-  frameSockets.clear()
-  if (!tcpServer) {
-    return
-  }
-  const server = tcpServer
-  tcpServer = null
-  server.close((error) => {
-    if (error && error.code !== 'ERR_SERVER_NOT_RUNNING') {
-      console.warn(`Close LED debug TCP server failed: ${error.message || String(error)}`)
-    }
+function stopFrameServer(keepListener = false) {
+  debugFrameServer.disconnect()
+  latestFrame = null
+  if (!keepListener) void debugFrameServer.close().catch(error => {
+    console.warn(`Close LED debug TCP server failed: ${error.message || String(error)}`)
   })
-}
-
-function parseFrames(buffer) {
-  let offset = 0
-
-  while (buffer.length - offset >= 5) {
-    if (buffer[offset] !== 0x67) {
-      offset += 1
-      continue
-    }
-
-    const length = buffer.readUInt32BE(offset + 1)
-    const frameEnd = offset + 5 + length
-    if (buffer.length < frameEnd) {
-      break
-    }
-
-    const payload = buffer.subarray(offset + 5, frameEnd)
-    publishFrame(payload)
-    offset = frameEnd
-  }
-
-  return buffer.subarray(offset)
 }
 
 function publishFrame(payload) {
@@ -1131,12 +1078,13 @@ async function applyActivationState(state) {
   if (!activationConfirmed) {
     activationFeaturesStarted = false
     stopRuntimeStateStream()
-    stopFrameServer()
+    stopFrameServer(shouldUseEmbeddedBackend && !quitCleanupStarted)
     return
   }
   if (!activationFeaturesStarted && !quitCleanupStarted) {
+    await startFrameServer()
+    if (!activationConfirmed || quitCleanupStarted) return
     activationFeaturesStarted = true
-    startFrameServer()
     startRuntimeStateStream()
   }
 }
@@ -1298,6 +1246,10 @@ async function startEmbeddedBackend() {
 
   await prepareUserDatabase()
 
+  // Reserve the actual RGB receiver before starting Java. When another local
+  // app owns the default port, the embedded backend follows the chosen port.
+  await startFrameServer()
+
   const backendPort = await findAvailablePort(preferredBackendPort)
   const selectedBackendBaseUrl = `http://127.0.0.1:${backendPort}`
   const savedApplicationSettings = await applicationSettings.get()
@@ -1327,6 +1279,7 @@ async function startEmbeddedBackend() {
     env: {
       ...process.env,
       SERVER_PORT: String(backendPort),
+      LED_DEBUG_TCP_PORT: String(framePort),
       // Allow the packaged app to start before the first conf/wiring files are generated.
       ELC408_ENABLED: process.env.ELC408_ENABLED ?? String(hasElc408Config),
       // Windows termination cannot run Java's shutdown hook: acknowledge commits only after the H2 log is flushed.
@@ -1657,6 +1610,7 @@ function normalizeGameStartRequest(request) {
     id,
     icList: Array.isArray(source.icList) ? source.icList : [],
     userCount: source.userCount ?? null,
+    skipGameStartAudio: source.skipGameStartAudio === true,
     startLevelIndex: Number.isFinite(startLevelIndex) ? startLevelIndex : 0,
     tokenList: Array.isArray(source.tokenList) ? source.tokenList : [],
     isAdmin: source.isAdmin ?? false,
