@@ -9,6 +9,7 @@ const { createLibraryFolder, importMediaFiles, resolveLibraryFolder } = require(
 const { pathToFileURL } = require('node:url')
 const { app, BrowserWindow, clipboard, dialog, ipcMain: nativeIpcMain, Menu, nativeImage, protocol, shell, net: electronNet, screen } = require('electron')
 const { resolveLaunchOptions, createBackendEnvironment, backendArguments, verifyBackendIntegrity } = require('./backend-protection.cjs')
+const { configureDataDirectory } = require('./portable-data.cjs')
 const { registerActivationIpc, createActivationIpcGate } = require('./game-activation.cjs')
 const ipcMain = createActivationIpcGate({ ipcMain: nativeIpcMain, requireActivated: requireGameActivation })
 const {
@@ -112,8 +113,16 @@ protocol.registerSchemesAsPrivileged([
   },
 ])
 
-if (process.env.LED_USER_DATA_DIR) {
-  app.setPath('userData', path.resolve(process.env.LED_USER_DATA_DIR))
+try {
+  configureDataDirectory({ app, fs: nodeFs })
+} catch (error) {
+  // Do not initialize stores, windows or the backend after a storage failure.
+  // Wait for readiness so this remains an ordinary startup error dialog.
+  app.whenReady().then(() => {
+    dialog.showErrorBox('LED Game 数据目录不可用', error.message)
+    app.exit(1)
+  }).catch(() => app.exit(1))
+  return
 }
 
 const hasSingleInstanceLock = app.requestSingleInstanceLock()
@@ -126,6 +135,7 @@ const languagePreferences = createLanguagePreferenceStore({
 const applicationSettings = createApplicationSettingsStore({
   fs,
   settingsPath: path.join(app.getPath('userData'), 'settings', 'application.json'),
+  resourceRoot: app.getPath('userData'),
 })
 
 const applicationResources = createApplicationResourcePreview({ settingsStore: applicationSettings })

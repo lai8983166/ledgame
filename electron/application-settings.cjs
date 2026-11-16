@@ -1,4 +1,5 @@
 const path = require('node:path')
+const { createApplicationResourcePaths } = require('./application-resource-paths.cjs')
 
 const ENTRY_METHODS = Object.freeze(['touch', 'coin', 'wristband'])
 const APPLICATION_MODES = Object.freeze(['debug', 'game'])
@@ -272,13 +273,14 @@ function validateSettingsPatch(value) {
   return patch
 }
 
-function createApplicationSettingsStore({ fs, settingsPath }) {
+function createApplicationSettingsStore({ fs, settingsPath, resourceRoot }) {
   if (!fs || !settingsPath) {
     throw new Error('Application settings store requires fs and settingsPath')
   }
 
   let cachedSettings = null
   let writeQueue = Promise.resolve()
+  const resources = resourceRoot ? createApplicationResourcePaths(resourceRoot) : null
 
   async function get() {
     if (cachedSettings) {
@@ -286,7 +288,8 @@ function createApplicationSettingsStore({ fs, settingsPath }) {
     }
     try {
       const content = await fs.readFile(settingsPath, 'utf8')
-      cachedSettings = normalizeApplicationSettings(JSON.parse(content))
+      const stored = JSON.parse(content)
+      cachedSettings = normalizeApplicationSettings(resources ? resources.hydrate(stored) : stored)
     } catch (error) {
       if (error?.code !== 'ENOENT' && error?.name !== 'SyntaxError') {
         throw error
@@ -297,7 +300,8 @@ function createApplicationSettingsStore({ fs, settingsPath }) {
   }
 
   async function update(value) {
-    const patch = validateSettingsPatch(value)
+    const validated = validateSettingsPatch(value)
+    const patch = resources ? resources.hydrate(validated, { strict: true }) : validated
     writeQueue = writeQueue.catch(() => {}).then(async () => {
       const current = await get()
       const next = normalizeApplicationSettings({
@@ -309,7 +313,8 @@ function createApplicationSettingsStore({ fs, settingsPath }) {
       const directory = path.dirname(settingsPath)
       const temporaryPath = `${settingsPath}.tmp`
       await fs.mkdir(directory, { recursive: true })
-      await fs.writeFile(temporaryPath, `${JSON.stringify(next, null, 2)}\n`, 'utf8')
+      const stored = resources ? resources.serialize(next) : next
+      await fs.writeFile(temporaryPath, `${JSON.stringify(stored, null, 2)}\n`, 'utf8')
       await fs.rename(temporaryPath, settingsPath)
       cachedSettings = next
       return structuredClone(next)

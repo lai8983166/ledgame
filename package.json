@@ -20,6 +20,7 @@
     "portable:prepare": "node scripts/prepare-portable-resources.cjs",
     "portable:verify-protection": "node scripts/verify-portable-protection.cjs",
     "portable:smoke-protection": "node scripts/smoke-portable-protection.cjs",
+    "portable:smoke-data": "node scripts/smoke-portable-data.cjs",
     "portable:dir": "pnpm run portable:prepare && pnpm run build && electron-builder --config electron-builder.json --win dir && pnpm run portable:verify-protection",
     "portable:zip": "pnpm run portable:prepare && pnpm run build && electron-builder --config electron-builder.json --win zip && pnpm run portable:verify-protection",
     "portable:dist": "pnpm run portable:prepare && pnpm run build && electron-builder --config electron-builder.json --win dir zip && pnpm run portable:verify-protection",
