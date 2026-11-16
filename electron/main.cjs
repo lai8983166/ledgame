@@ -10,6 +10,7 @@ const { pathToFileURL } = require('node:url')
 const { app, BrowserWindow, clipboard, dialog, ipcMain: nativeIpcMain, Menu, nativeImage, protocol, shell, net: electronNet, screen } = require('electron')
 const { resolveLaunchOptions, createBackendEnvironment, backendArguments, verifyBackendIntegrity } = require('./backend-protection.cjs')
 const { configureDataDirectory } = require('./portable-data.cjs')
+const { resolveActivationStorage } = require('./activation-storage.cjs')
 const { registerActivationIpc, createActivationIpcGate } = require('./game-activation.cjs')
 const ipcMain = createActivationIpcGate({ ipcMain: nativeIpcMain, requireActivated: requireGameActivation })
 const {
@@ -1282,6 +1283,7 @@ async function startEmbeddedBackend() {
   const backendPort = await findAvailablePort(preferredBackendPort)
   const selectedBackendBaseUrl = `http://127.0.0.1:${backendPort}`
   const savedApplicationSettings = await applicationSettings.get()
+  const activationStorage = resolveActivationStorage({ app })
   const mediaRoot = getPackagedMediaRoot()
   const elc408ConfigDirectory = getElc408ConfigDirectory()
   const hasElc408Config =
@@ -1313,7 +1315,8 @@ async function startEmbeddedBackend() {
       // Windows termination cannot run Java's shutdown hook: acknowledge commits only after the H2 log is flushed.
       SPRING_DATASOURCE_URL: `jdbc:h2:file:${getUserDatabaseBasePath()};MODE=MySQL;DATABASE_TO_LOWER=TRUE;WRITE_DELAY=0`,
       LED_MEDIA_ROOT: mediaRoot,
-      LED_ACTIVATION_DIRECTORY: path.join(app.getPath('userData'), 'activation'),
+      LED_ACTIVATION_DIRECTORY: activationStorage.directory,
+      LED_ACTIVATION_LEGACY_DIRECTORIES: JSON.stringify(activationStorage.legacyDirectories),
       LED_BRIDGE_ENABLED: process.env.LED_BRIDGE_ENABLED || 'false',
       MEMBER_PLATFORM_BASE_URL: `http://${savedApplicationSettings.memberPlatformHost}:${savedApplicationSettings.memberPlatformPort}`,
       LED_ROOM_CONNECTION_ENABLED: process.env.LED_ROOM_CONNECTION_ENABLED ?? 'true',

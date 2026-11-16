@@ -87,7 +87,7 @@ async function smokePortableProtection(directory) {
     fs.cpSync(directory, appDirectory, { recursive: true, filter: source => {
       const relative = path.relative(directory, source).split(path.sep)
       return !(relative[0] === 'resources' && ['media', 'seed-database'].includes(relative[1])) &&
-        relative[0] !== 'elc408'
+        relative[0] !== 'elc408' && relative[0] !== 'data'
     } })
     fs.writeFileSync(path.join(appDirectory, 'application.properties'),
       'server.address=0.0.0.0\nspring.datasource.url=jdbc:h2:mem:untrusted\nspring.h2.console.enabled=true\n')

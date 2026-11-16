@@ -4,7 +4,7 @@
 
 ## 构建与启动
 
-运行 `pnpm portable:dist` 生成目录和 ZIP 包。`beforePack` 对 `build-resources/backend/ledGame-backend.jar` 计算 SHA-256，并生成 `electron/backend-integrity.generated.cjs`。该文件进入 ASAR，但不进入 Git。直接调用 electron-builder 同样执行此步骤；缺少 JAR 或生成失败时构建失败。
+运行 `pnpm portable:dist` 生成目录和 ZIP 包；该入口先保留旧发行目录数据并在暂存目录构建，详见 `portable-data.md`。`beforePack` 对 `build-resources/backend/ledGame-backend.jar` 计算 SHA-256，并生成 `electron/backend-integrity.generated.cjs`。该文件进入 ASAR，但不进入 Git。直接调用 electron-builder 同样执行完整性生成，但不会执行数据保留流程；缺少 JAR 或生成失败时构建失败。
 
 正式程序在准备数据库、启动 Java 前验证实际 JAR。校验值缺失、读取失败或内容不匹配都会阻止服务启动，记录原因并提示重新安装完整程序。发布和升级必须同时替换 EXE、ASAR、后端 JAR 及配套运行时，不支持单独替换后端 JAR。
 
@@ -19,6 +19,8 @@ Java 子进程只接收明确列出的系统和业务变量，以及启动器生
 内嵌后端命令行固定从 classpath 加载配置、使用 default profile、监听 `127.0.0.1`，并关闭 H2 控制台、API 文档、Swagger UI、Knife4j 及默认静态资源映射。应用目录和 `config/` 下的外部 Spring 配置不会覆盖这些设置。原先依赖 `SPRING_APPLICATION_JSON` 或 acceptance profile 注入的打包版模拟验收方式需改用开发环境或专用测试构建，正式发行包不保留这些入口。
 
 游戏端向会员平台发起的 HTTP 和 WebSocket 出站连接保持原有方式。会员平台自身的监听配置不在本次修改范围内。
+
+正式机器授权固定保存在当前用户 `%APPDATA%/led-game/activation`，各独立游戏包共用本机已验证授权。旧包内授权及历史目录只在验证签名、产品和本机身份后迁移，原文件保留；保存失败不报告成功。新 ZIP 不携带本机授权。显式 `LED_USER_DATA_DIR` 的自动化启动仍仅使用隔离目录，不读取正式机器授权。
 
 ## 验证与边界
 

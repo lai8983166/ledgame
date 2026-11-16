@@ -94,9 +94,15 @@ async function smokePortableData(directory) {
     assert.ok(slash(backendLog).includes(`url=jdbc:h2:file:${slash(database)}`),
       'The real embedded backend must connect to the database in its own package')
     const activation = await (await fetch(`http://127.0.0.1:${run.port}/activation`)).json()
-    assert.equal(activation.data.activated, false)
+    assert.equal(typeof activation.data.activated, 'boolean')
+    if (summary.machineActivated === undefined) summary.machineActivated = activation.data.activated
+    assert.equal(activation.data.activated, summary.machineActivated,
+      'Packages on the same machine must observe the same verified machine authorization')
     assert.match(activation.data.machineCode, /^LGG1-[A-F0-9]{64}$/)
-    assert.equal((await fetch(`http://127.0.0.1:${run.port}/game-categories`)).status, 403)
+    assert.equal(fs.existsSync(path.join(run.data, 'activation', 'license.json')), false,
+      'Default portable launches must not need a package-local license')
+    assert.equal((await fetch(`http://127.0.0.1:${run.port}/game-categories`)).status,
+      activation.data.activated ? 200 : 403)
     return run
   }
 
