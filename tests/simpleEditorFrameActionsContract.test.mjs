@@ -16,11 +16,6 @@ const mainSource = await readFile(
   new URL("../electron/main.cjs", import.meta.url),
   "utf8",
 );
-const rendererFocusSource = await readFile(
-  new URL("../src/lib/rendererFocus.js", import.meta.url),
-  "utf8",
-);
-
 function functionSource(name, nextName) {
   const start = editorSource.indexOf(`function ${name}`);
   const end = nextName ? editorSource.indexOf(`function ${nextName}`, start + 1) : editorSource.length;
@@ -78,15 +73,10 @@ test("copying a frame remounts repeat input and selects a newly created next fra
   assert.match(editorSource, /:key="`repeat-\$\{activeLevelIndex\}-\$\{activeFrameIndex\}`"/);
 });
 
-test("native confirmations restore focus once, not again after ordinary edits", () => {
-  assert.match(editorSource, /import \{ confirmWithRendererFocus, restoreRendererFocus \}/);
-  assert.match(rendererFocusSource, /targetWindow\.confirm\(message\)/);
-  assert.match(rendererFocusSource, /targetWindow\?\.ledGame\?\.restoreFocus\?\.\(\)/);
-  assert.match(rendererFocusSource, /targetWindow\?\.focus\?\.\(\)/);
-  assert.match(rendererFocusSource, /activeElement\.blur\(\)/);
-  assert.match(preloadSource, /restoreFocus: \(\) => ipcRenderer\.invoke\('window:restore-focus'\)/);
-  assert.match(mainSource, /ipcMain\.handle\('window:restore-focus', \(event\) =>/);
-  assert.match(mainSource, /restoreBrowserWindowFocus\(targetWindow\)/);
+test("destructive editor actions use awaited application confirmation without restacking ordinary edits", () => {
+  assert.match(editorSource, /useConfirmationDialog/);
+  assert.match(editorSource, /<ConfirmationDialog/);
+  assert.doesNotMatch(editorSource, /confirmWithRendererFocus|window\.confirm/);
 
   for (const [name, nextName] of [
     ["deleteCurrentLevel", "addFrame"],
@@ -94,8 +84,8 @@ test("native confirmations restore focus once, not again after ordinary edits", 
   ]) {
     assert.match(
       functionSource(name, nextName),
-      /confirmWithRendererFocus\(/,
-      `${name} retains focus recovery at the native confirmation boundary`,
+      /await confirmAction\(/,
+      `${name} awaits application confirmation before modifying its original target`,
     );
   }
   for (const [name,next] of [['deleteCurrentLevel','addFrame'],['deleteCurrentFrame','applyCurrentRepeatTimesToAllFrames'],['deleteSelectedObject','moveSelectedObjectLayerUp'],['executeWholeFrameCopy','replaceFrameObjects']]) {

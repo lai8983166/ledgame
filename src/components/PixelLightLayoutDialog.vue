@@ -1,6 +1,7 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
+import { isComposingEvent } from "../lib/dialogInput.js";
 import {
   PIXEL_LIGHT_CHANNEL_COUNT,
   PIXEL_LIGHT_WALLS,
@@ -144,6 +145,7 @@ function rowErrorMessage(row) {
 }
 
 function handleKeydown(event) {
+  if (isComposingEvent(event)) return;
   if (event.key === "Escape") {
     if (!props.saving) {
       emit("cancel");

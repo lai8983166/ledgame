@@ -52,11 +52,13 @@ import {
   TOUCH_PREPARATION_STEP_TIMEOUT_SECONDS,
   touchCarouselSlots,
 } from "../lib/touchGamePreparation.js";
-import { confirmWithRendererFocus } from "../lib/rendererFocus.js";
+import ConfirmationDialog from '../components/ConfirmationDialog.vue';
+import { useConfirmationDialog } from '../lib/useConfirmationDialog.js';
 
 const api = window.ledGame;
 const mediaApi = window.mediaLibrary;
 const { t, locale } = useI18n({ useScope: "global" });
+const { confirmation, confirmAction, resolveConfirmation, isConfirmationCurrent } = useConfirmationDialog();
 const defaultIdlePrompt = () => t("applicationSettings.defaultIdlePrompt");
 const TOUCH_IDLE_VIDEO_ASSET = "dashboard/idle.mp4";
 const TOUCH_GAME_BACKGROUND_ASSET = "touch/background.png";
@@ -1307,7 +1309,10 @@ async function returnToIdle() {
 }
 
 async function stopGame() {
-  if (!confirmWithRendererFocus(t("touch.stopConfirm"))) return;
+  const targetGameId = runtimeState.value.gameId;
+  const targetSessionId = runtimeState.value.sessionId;
+  if (!await confirmAction(t("touch.stopConfirm"))) return;
+  if (!isConfirmationCurrent() || runtimeState.value.gameId !== targetGameId || runtimeState.value.sessionId !== targetSessionId) return;
   await runAction("stop", () => api.stopTouchGame());
 }
 
@@ -2287,6 +2292,8 @@ async function confirmReturnToIdle() {
       </section>
     </div>
   </main>
+  <ConfirmationDialog v-if="confirmation" :key="confirmation.id" :request-id="confirmation.id" :message="confirmation.message"
+    @accept="resolveConfirmation(true, $event)" @cancel="resolveConfirmation(false, $event)" />
 </template>
 
 <style scoped>

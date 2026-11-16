@@ -1,6 +1,7 @@
 <script setup>
 import { nextTick, onMounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
+import { isComposingEvent } from '../lib/dialogInput.js';
 
 const props = defineProps({ status: { type: Object, default: null }, startupError: { type: String, default: '' } });
 const emit = defineEmits(['close', 'status']);
@@ -47,6 +48,7 @@ function activate() {
   });
 }
 function onKeydown(event) {
+  if (isComposingEvent(event)) return;
   if (event.key === 'Escape') { event.stopPropagation(); close(); }
   if (event.key !== 'Tab') return;
   const controls = [...dialog.value.querySelectorAll('button:not(:disabled), input:not(:disabled), textarea:not(:disabled)')];

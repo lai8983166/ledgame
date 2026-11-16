@@ -1,9 +1,11 @@
 <script setup>
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
-import { confirmWithRendererFocus } from "../lib/rendererFocus.js";
+import ConfirmationDialog from '../components/ConfirmationDialog.vue';
+import { useConfirmationDialog } from '../lib/useConfirmationDialog.js';
 
 const { t } = useI18n({ useScope: "global" });
+const { confirmation, confirmAction, resolveConfirmation, isConfirmationCurrent } = useConfirmationDialog();
 const api = window.ledGame;
 const refreshing = ref(false);
 const result = ref(null);
@@ -38,11 +40,12 @@ async function refreshDatabase() {
     };
     return;
   }
-  const confirmed = confirmWithRendererFocus(t("databaseRefresh.confirm"));
+  const confirmed = await confirmAction(t("databaseRefresh.confirm"));
   if (!confirmed) {
     result.value = { status: "CANCELED" };
     return;
   }
+  if (!isConfirmationCurrent() || refreshing.value || !available.value) return;
 
   refreshing.value = true;
   result.value = null;
@@ -125,6 +128,8 @@ onUnmounted(() => {
       <small v-if="result.message && statusMessage !== result.message">{{ result.message }}</small>
     </section>
   </section>
+  <ConfirmationDialog v-if="confirmation" :key="confirmation.id" :request-id="confirmation.id" :message="confirmation.message"
+    @accept="resolveConfirmation(true, $event)" @cancel="resolveConfirmation(false, $event)" />
 </template>
 
 <style scoped>

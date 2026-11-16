@@ -64,6 +64,40 @@ for (const outcome of ['success', 'cancel', 'failure']) test(`native dialog ${ou
   assert.deepEqual(f.calls, ['webContents.focus']);
 });
 
+for (const outcome of ['success', 'cancel', 'failure']) {
+  for (const departure of ['another-window', 'outside-application', 'minimized', 'hidden', 'destroyed']) {
+    test(`native dialog ${outcome} does not reactivate an owner that is ${departure}`, async () => {
+      const f = fixture({ contentFocused: false })
+      let finish
+      const pending = new Promise(resolve => { finish = resolve })
+      let focusedWindow = f.targetWindow
+      const result = showNativeDialogWithFocusRestore({
+        BrowserWindow: {
+          fromWebContents: () => f.targetWindow,
+          getFocusedWindow: () => focusedWindow,
+        },
+        event: { sender: {} },
+        dialog: { showOpenDialog: async () => {
+          await pending
+          if (outcome === 'failure') throw Error('dialog failed')
+          return { canceled: outcome === 'cancel' }
+        } },
+        method: 'showOpenDialog', options: {}, focusOptions: f.focusOptions,
+      })
+      if (departure === 'another-window') focusedWindow = {}
+      if (departure === 'outside-application') { focusedWindow = null; f.state.focused = false }
+      if (departure === 'minimized') f.state.minimized = true
+      if (departure === 'hidden') f.state.visible = false
+      if (departure === 'destroyed') f.state.destroyed = true
+      finish()
+      if (outcome === 'failure') await assert.rejects(result, /dialog failed/)
+      else await result
+      f.immediate.forEach(fn => fn())
+      assert.deepEqual(f.calls, [])
+    })
+  }
+}
+
 test('main process routes every file dialog through the focus-restoring boundary', async () => {
   const main = await readFile(new URL('../electron/main.cjs', import.meta.url), 'utf8');
   assert.doesNotMatch(main, /await dialog\.show(?:Save|Open)Dialog/);

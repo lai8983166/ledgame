@@ -33,7 +33,7 @@ test("help documents use a fixed key whitelist and are packaged as resources", (
 test("spirit library uses selectable thumbnails and deletion uses confirmation", () => {
   assert.match(spiritSource, /SpiritThumbnail/);
   assert.match(spiritSource, /spirit-thumbnail-card/);
-  assert.match(spiritSource, /confirmWithRendererFocus/);
+  assert.match(spiritSource, /await confirmAction/);
   assert.match(spiritSource, /requestSpiritDeletion/);
   assert.match(spiritSource, /spirits\.value = spirits\.value\.filter/);
   assert.doesNotMatch(spiritSource, /spirit-preview-stage|spirit-list-row/);

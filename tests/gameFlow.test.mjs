@@ -466,7 +466,8 @@ test("Touch window is reusable; native close keeps gameplay and authenticated ex
   assert.match(createTouchWindow, /targetWindow\.show\(\)/);
   assert.match(createTouchWindow, /targetWindow\.focus\(\)/);
   assert.match(createTouchWindow, /targetWindow\.webContents\.focus\(\)/);
-  assert.match(createTouchWindow, /setImmediate\(\(\)\s*=>\s*activateTouchWindow/);
+  assert.match(createTouchWindow, /createDeferredWindowPresentation\(/);
+  assert.match(createTouchWindow, /setImmediate\(presentTouchWindow\)/);
   assert.match(createTouchWindow, /touchWindow\s*=\s*null/);
   assert.match(createTouchWindow, /window=touch/);
   const nativeClosedHandler=createTouchWindow.slice(createTouchWindow.indexOf("touchWindow.on('closed'"),createTouchWindow.indexOf("async function exitTouchFullScreen"));

@@ -1,5 +1,7 @@
 # Electron 原生对话框关闭后输入框失去焦点
 
+> 本文保留历史故障分析。自 `client-feedback-2026-11-16` 起，业务确认已改为页面内异步弹窗；下文的原生 confirm 加 focus/blur 方案不再使用。当前实现与回归命令见 [游戏端弹窗与输入安全](dialog-input-safety.md)。
+
 ## 问题概述
 
 在 Electron + Vue 等前端应用中，使用 `window.confirm()`、`window.alert()` 或其他原生对话框后，可能出现以下现象：

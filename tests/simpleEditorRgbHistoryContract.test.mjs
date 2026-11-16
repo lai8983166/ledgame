@@ -98,7 +98,7 @@ test("history restores full frame lists for effects while RGB snapshots stay mat
 
 test("level deletion is confirmed and disabled when only one level remains", () => {
   const deletion = functionSource("deleteCurrentLevel", "addFrame");
-  assert.match(deletion, /confirmWithRendererFocus\(t\("simple\.deleteLevelConfirm"/);
+  assert.match(deletion, /await confirmAction\(t\("simple\.deleteLevelConfirm"/);
   assert.match(deletion, /deleteLevelAt\(document\.value\.levels, index, activeLevelIndex\.value\)/);
   assert.match(deletion, /activeFrameIndex\.value = 0/);
   assert.match(deletion, /clearRgbEditHistory\(\)/);

@@ -1,6 +1,7 @@
 <script setup>
 import { nextTick, onBeforeUnmount, onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
+import { isComposingEvent } from "../lib/dialogInput.js";
 import MediaPickerDialog from "./MediaPickerDialog.vue";
 
 defineProps({
@@ -20,6 +21,7 @@ function close() {
 }
 
 function handleKeydown(event) {
+  if (isComposingEvent(event)) return;
   if (pickerOpen.value) return;
   if (event.key === "Escape") {
     close();

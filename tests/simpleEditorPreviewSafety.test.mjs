@@ -40,7 +40,7 @@ test("whole-frame overwrite confirms before any frame mutation", () => {
     editorSource.indexOf("function executeWholeFrameCopy(mode)"),
     editorSource.indexOf("function replaceFrameObjects"),
   );
-  const confirmIndex = executeCopy.indexOf("confirmWithRendererFocus(message)");
+  const confirmIndex = executeCopy.indexOf("await confirmAction(message)");
   assert.ok(confirmIndex > 0);
   assert.ok(confirmIndex < executeCopy.indexOf("level.frameList.splice"));
   assert.ok(confirmIndex < executeCopy.indexOf("replaceFrameObjects"));

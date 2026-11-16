@@ -50,9 +50,13 @@ import {
   MERGE_ERROR,
   mergeSameColorObjects,
 } from "../lib/simpleObjectMerge.js";
-import { confirmWithRendererFocus, restoreRendererFocus } from "../lib/rendererFocus.js";
+import { restoreRendererFocus } from "../lib/rendererFocus.js";
+import ConfirmationDialog from '../components/ConfirmationDialog.vue';
+import { useConfirmationDialog } from '../lib/useConfirmationDialog.js';
+import { hasVisibleModalDialog, isComposingEvent } from "../lib/dialogInput.js";
 
 const { t } = useI18n({ useScope: "global" });
+const { confirmation, confirmAction, resolveConfirmation, isConfirmationCurrent } = useConfirmationDialog();
 const saveFeedback = ref(null);
 const draggingLevelIndex = ref(null);
 const levelDropIndex = ref(null);
@@ -1119,7 +1123,7 @@ function closeEffectDialog() {
   }
 }
 
-function applyEffectResult(result) {
+async function applyEffectResult(result) {
   const level = activeLevel.value;
   if (busyAction.value || !level || !result?.config || !Array.isArray(result.frames) || !result.frames.length) {
     return;
@@ -1154,9 +1158,14 @@ function applyEffectResult(result) {
   if (JSON.stringify(level.frameList) === JSON.stringify(applied.frameList)) return;
   const impact = getEffectWriteImpact(level.frameList.length, activeFrameIndex.value, generatedFrames.length, config.mode);
   const modeKey = { insert: 'insert', after: 'insertAfter', overwrite: 'overwrite', merge: 'merge' }[config.mode];
-  if (!confirmWithRendererFocus(t('effect.confirmImpact', {
+  const originalDocument = document.value;
+  const originalFrameList = level.frameList;
+  const originalFrameIndex = activeFrameIndex.value;
+  if (!await confirmAction(t('effect.confirmImpact', {
     ...impact, level: activeLevelIndex.value + 1, mode: t(`effect.${modeKey}`),
   }))) return;
+  if (!isConfirmationCurrent() || busyAction.value || document.value !== originalDocument || activeLevel.value !== level ||
+      level.frameList !== originalFrameList || activeFrameIndex.value !== originalFrameIndex || !effectDialogOpen.value) return;
   const before = captureEffectHistorySnapshot();
   level.frameList = applied.frameList;
   activeFrameIndex.value = applied.selectedFrameIndex;
@@ -1872,16 +1881,19 @@ function dropLevel(index) {
   resetMatrixFrameCache();
 }
 
-function deleteCurrentLevel(index = activeLevelIndex.value) {
+async function deleteCurrentLevel(index = activeLevelIndex.value) {
   const level = document.value?.levels?.[index];
   if (busyAction.value || anchorEditMode.value || draggingLevelIndex.value !== null || !level || !canDeleteActiveLevel.value) {
     return;
   }
   const levelName = level.label || `Level ${index + 1}`;
   const frameCount = level.frameList?.length || 0;
-  if (!confirmWithRendererFocus(t("simple.deleteLevelConfirm", { name: levelName, count: frameCount }))) {
+  const originalDocument = document.value;
+  if (!await confirmAction(t("simple.deleteLevelConfirm", { name: levelName, count: frameCount }))) {
     return;
   }
+  if (!isConfirmationCurrent() || busyAction.value || document.value !== originalDocument ||
+      document.value.levels[index] !== level || !canDeleteActiveLevel.value) return;
 
   const deletingActive = index === activeLevelIndex.value;
   const result = deleteLevelAt(document.value.levels, index, activeLevelIndex.value);
@@ -1928,14 +1940,19 @@ function addFrameAfterCurrent() {
   selectFrame(result.index);
 }
 
-function deleteCurrentFrame() {
+async function deleteCurrentFrame() {
   const level = activeLevel.value;
   if (!level?.frameList?.length) {
     return;
   }
-  if (!confirmWithRendererFocus(t("simple.deleteFrameConfirm", { number: activeFrameIndex.value + 1 }))) {
+  const originalDocument = document.value;
+  const originalFrameIndex = activeFrameIndex.value;
+  const originalFrame = level.frameList[originalFrameIndex];
+  if (!await confirmAction(t("simple.deleteFrameConfirm", { number: originalFrameIndex + 1 }))) {
     return;
   }
+  if (!isConfirmationCurrent() || busyAction.value || document.value !== originalDocument || activeLevel.value !== level ||
+      activeFrameIndex.value !== originalFrameIndex || level.frameList[originalFrameIndex] !== originalFrame) return;
   level.frameList.splice(activeFrameIndex.value, 1);
   resetMatrixFrameCache();
   if (!level.frameList.length) {
@@ -2477,14 +2494,14 @@ function updateActiveLevelLifeMode(mode) {
 }
 
 function copyCurrentFrameToNextFrame() {
-  executeWholeFrameCopy("next");
+  return executeWholeFrameCopy("next");
 }
 
 function copyCurrentFrameToAllFrames() {
-  executeWholeFrameCopy("all");
+  return executeWholeFrameCopy("all");
 }
 
-function executeWholeFrameCopy(mode) {
+async function executeWholeFrameCopy(mode) {
   const level = activeLevel.value;
   if (!level) {
     return;
@@ -2499,9 +2516,15 @@ function executeWholeFrameCopy(mode) {
     const message = mode === "all"
       ? t("simple.frameOverwriteManyConfirm", { count: plan.overwriteIndices.length })
       : t("simple.frameOverwriteConfirm", { number: plan.overwriteIndices[0] + 1 });
-    if (!confirmWithRendererFocus(message)) {
+    const originalDocument = document.value;
+    const originalFrameIndex = activeFrameIndex.value;
+    const originalFrames = [...level.frameList];
+    if (!await confirmAction(message)) {
       return;
     }
+    if (!isConfirmationCurrent() || busyAction.value || document.value !== originalDocument || activeLevel.value !== level ||
+        activeFrameIndex.value !== originalFrameIndex || level.frameList.length !== originalFrames.length ||
+        originalFrames.some((frame, index) => level.frameList[index] !== frame)) return;
   }
 
   const sourceFrame = ensureActiveFrame();
@@ -3133,7 +3156,10 @@ function canTriggerGlobalShortcut(event) {
 }
 
 function handleGlobalKeydown(event) {
-  if (editorPage.value !== 'levels' || levelMediaPicker.value) return;
+  if (editorPage.value !== 'levels' || busyAction.value || levelMediaPicker.value ||
+      globalConfigOpen.value || gameWiringOpen.value || pixelLightLayoutOpen.value ||
+      effectDialogOpen.value || levelPreviewSnapshot.value || saveFeedback.value ||
+      hasVisibleModalDialog(window.document) || isComposingEvent(event)) return;
   const tagName = event.target?.tagName?.toLowerCase();
   if (["input", "textarea", "select", "audio"].includes(tagName) || event.target?.isContentEditable) {
     return;
@@ -3141,9 +3167,6 @@ function handleGlobalKeydown(event) {
   const lowerKey = event.key.toLowerCase();
   if (event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey &&
       !event.repeat && !event.isComposing && ["a", "d"].includes(lowerKey)) {
-    if (busyAction.value || globalConfigOpen.value || gameWiringOpen.value || pixelLightLayoutOpen.value ||
-        effectDialogOpen.value || levelPreviewSnapshot.value || saveFeedback.value ||
-        [...window.document.querySelectorAll('[role="dialog"][aria-modal="true"]')].some(node => node.getClientRects().length)) return;
     event.preventDefault();
     selectDrawingTool(lowerKey === "a" ? "add" : "delete");
     return;
@@ -4001,6 +4024,8 @@ function formatRuntimeSummary(value) {
       @close="closeLevelPreview"
     />
   </div>
+  <ConfirmationDialog v-if="confirmation" :key="confirmation.id" :request-id="confirmation.id" :message="confirmation.message"
+    @accept="resolveConfirmation(true, $event)" @cancel="resolveConfirmation(false, $event)" />
 </template>
 
 <style scoped>

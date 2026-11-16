@@ -3,10 +3,12 @@ import { computed, onMounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import SpiritPointEditorDialog from '../components/SpiritPointEditorDialog.vue';
 import SpiritThumbnail from '../components/SpiritThumbnail.vue';
-import { confirmWithRendererFocus } from '../lib/rendererFocus.js';
+import ConfirmationDialog from '../components/ConfirmationDialog.vue';
+import { useConfirmationDialog } from '../lib/useConfirmationDialog.js';
 import { requestSpiritDeletion } from '../lib/spiritLibraryState.js';
 
 const { t } = useI18n();
+const { confirmation, confirmAction, resolveConfirmation, isConfirmationCurrent } = useConfirmationDialog();
 const spirits = ref([]);
 const selectedSpiritId = ref('');
 const isLoading = ref(false);
@@ -42,7 +44,8 @@ async function deleteSpirit(selected) {
   try {
     const result = await requestSpiritDeletion({
       selected, visibleItems:sortedSpirits.value,
-      confirm:() => confirmWithRendererFocus(t('management.deleteSpiritConfirm', { name:spiritName(selected) })),
+      confirm:async () => (await confirmAction(t('management.deleteSpiritConfirm', { name:spiritName(selected) })))
+        && isConfirmationCurrent() && spirits.value.includes(selected),
       remove:(id) => spiritApi.value.delete(id),
     });
     if (result.status !== 'deleted') return;
@@ -131,6 +134,8 @@ onMounted(loadSpirits);
     <p v-if="noticeMessage && !errorMessage" class="status-line">{{ noticeMessage }}</p>
     <SpiritPointEditorDialog v-if="editingSpirit" :spirit="editingSpirit" :creating="creatingSpirit" :saving="isSavingSpirit" :error="editErrorMessage" @cancel="closeSpiritEditor" @save="saveSpirit" />
   </section>
+  <ConfirmationDialog v-if="confirmation" :key="confirmation.id" :request-id="confirmation.id" :message="confirmation.message"
+    @accept="resolveConfirmation(true, $event)" @cancel="resolveConfirmation(false, $event)" />
 </template>
 
 <style scoped>

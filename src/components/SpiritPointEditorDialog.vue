@@ -1,6 +1,7 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
+import { isComposingEvent } from "../lib/dialogInput.js";
 import {
   MAX_SPIRIT_DIMENSION,
   clampSpiritDimension,
@@ -21,6 +22,7 @@ const emit = defineEmits(["cancel", "save"]);
 const { t } = useI18n();
 
 const dialogRef = ref(null);
+const nameInputRef = ref(null);
 const canvasRef = ref(null);
 const stageRef = ref(null);
 const width = ref(1);
@@ -173,6 +175,7 @@ function handleSave() {
 }
 
 function handleKeydown(event) {
+  if (isComposingEvent(event)) return;
   if (event.key === "Escape" && !props.saving) {
     emit("cancel");
     return;
@@ -210,7 +213,7 @@ onMounted(() => {
     resizeObserver.observe(stageRef.value);
   }
   window.addEventListener("keydown", handleKeydown);
-  nextTick(() => dialogRef.value?.focus());
+  nextTick(() => nameInputRef.value?.focus({ preventScroll: true }));
 });
 
 onBeforeUnmount(() => {
@@ -243,7 +246,7 @@ onBeforeUnmount(() => {
 
       <label class="spirit-editor-name">
         {{ t("spiritEditor.name") }}
-        <input v-model="name" type="text" maxlength="255" :disabled="saving" autofocus />
+        <input ref="nameInputRef" v-model="name" type="text" maxlength="255" :disabled="saving" />
       </label>
 
       <div class="spirit-editor-size-controls">

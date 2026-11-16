@@ -3,7 +3,8 @@ import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { extractErrorMessage } from '../lib/gameFlowState.js';
 import { RANK_BOMB_TYPES, RANK_RANGE_FIELDS, createRankEditorPayload, createRankLevel, duplicateRankLevel, normalizeRankEditorDocument, applyRankGlobalConfig, parseRankEditorRange, rankRangeText, setRankRangeDraft } from '../lib/rankGameEditor.js';
-import { confirmWithRendererFocus } from '../lib/rendererFocus.js';
+import ConfirmationDialog from '../components/ConfirmationDialog.vue';
+import { useConfirmationDialog } from '../lib/useConfirmationDialog.js';
 import { normalizeGameCategoryList } from '../lib/gameCategories.js';
 import { buildMediaPreviewUrl } from '../lib/mediaPreview.js';
 import { requiredEditorFields } from '../lib/editorRequiredFields.js';
@@ -21,6 +22,7 @@ import GameWiringDialog from '../components/GameWiringDialog.vue';
 const props=defineProps({ gameId:{type:[Number,String],default:null}, initialDocument:{type:Object,default:null}, gameName:{type:String,default:''}, openGlobalConfigOnEntry:{type:Boolean,default:false} });
 const emit=defineEmits(['back']);
 const {t}=useI18n({useScope:'global'}), api=window.ledGame;
+const { confirmation, confirmAction, resolveConfirmation, isConfirmationCurrent } = useConfirmationDialog();
 const document=ref(null), loading=ref(true), busy=ref(null), dirty=ref(false), errorMessage=ref(''), saveFeedback=ref(null);
 const activeLevelIndex=ref(0), draggingLevelIndex=ref(null), levelDropIndex=ref(null), gameCategories=ref([]);
 const levels=computed(()=>document.value?.levels || []), type1Config=computed(()=>levels.value[activeLevelIndex.value]);
@@ -92,9 +94,12 @@ function duplicateLevel(){
   activeLevelIndex.value=index;
   selectEditorPage('levels');
 }
-function deleteLevel(index){
+async function deleteLevel(index){
   const target=levels.value[index];
-  if(!canSave.value||draggingLevelIndex.value!==null||!target||levels.value.length<2||!confirmWithRendererFocus(t('rank.deleteLevelConfirm',{name:target.label})))return;
+  if(!canSave.value||draggingLevelIndex.value!==null||!target||levels.value.length<2)return;
+  const originalDocument=document.value;
+  if(!await confirmAction(t('rank.deleteLevelConfirm',{name:target.label})))return;
+  if(!isConfirmationCurrent()||document.value!==originalDocument||levels.value[index]!==target||!canSave.value||levels.value.length<2)return;
   const result=deleteLevelAt(levels.value,index,activeLevelIndex.value);
   rangeDrafts.delete(target);document.value.levels=result.levels;activeLevelIndex.value=result.activeIndex;
 }
@@ -222,6 +227,8 @@ function goBack(){emit('back');}
     <GameWiringDialog v-if="wiringPageMounted" v-show="editorPage==='wiring'" ref="wiringPageRef" embedded class="rank-wiring-page" :wiring="document?.wiringData" :width="document.siteSizeWidth" :height="document.siteSizeHeight" :saving="busy==='save'" />
     <MediaPickerDialog v-if="mediaPicker" :accept="mediaPicker.accept" :current-value="mediaPicker.level?.[mediaPicker.field]||''" :title="mediaPicker.label" @cancel="mediaPicker=null" @select="applyMedia" />
   </section>
+  <ConfirmationDialog v-if="confirmation" :key="confirmation.id" :request-id="confirmation.id" :message="confirmation.message"
+    @accept="resolveConfirmation(true, $event)" @cancel="resolveConfirmation(false, $event)" />
 </template>
 
 <style scoped>

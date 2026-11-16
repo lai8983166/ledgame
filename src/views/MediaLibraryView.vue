@@ -2,6 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { createLatestAsyncValueLoader } from "../lib/latestAsyncTask.js";
+import { isComposingEvent } from "../lib/dialogInput.js";
 
 const { t } = useI18n({ useScope: "global" });
 
@@ -207,6 +208,7 @@ function closeFolderDialog() {
   nextTick(() => folderTrigger?.focus?.());
 }
 function handleFolderKey(event) {
+  if (isComposingEvent(event)) return;
   if (event.key === 'Escape') { event.stopPropagation(); closeFolderDialog(); }
   if (event.key !== 'Tab') return;
   const nodes = [...event.currentTarget.querySelectorAll('input:not(:disabled),button:not(:disabled)')];

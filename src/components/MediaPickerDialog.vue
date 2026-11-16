@@ -1,6 +1,7 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
+import { isComposingEvent } from "../lib/dialogInput.js";
 import { createLatestAsyncValueLoader } from "../lib/latestAsyncTask.js";
 import { filterMediaTree, visibleMediaRows } from "../lib/mediaSelectionTree.js";
 
@@ -98,6 +99,7 @@ function confirm() {
 }
 
 function handleKeydown(event) {
+  if (isComposingEvent(event)) return;
   if (event.key === "Escape") {
     emit("cancel");
     return;

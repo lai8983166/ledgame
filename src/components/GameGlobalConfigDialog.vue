@@ -2,6 +2,7 @@
 import { GAME_FIELD_DIMENSION_MAX, gameFieldDimensionsValid } from '../lib/gameFieldDimensions.js';
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
+import { isComposingEvent } from "../lib/dialogInput.js";
 import MediaPickerDialog from "./MediaPickerDialog.vue";
 import MediaResourceButton from './MediaResourceButton.vue';
 import EditorSaveDialog from './EditorSaveDialog.vue';
@@ -211,6 +212,7 @@ const lifeError = computed(() => draft.value.globalLifeLimit &&
 const canSave = computed(() => !props.saving);
 
 function handleKeydown(event) {
+  if (isComposingEvent(event)) return;
   if (props.embedded) return;
   if (picker.value) {
     return;

@@ -15,6 +15,8 @@
     "i18n:import": "node scripts/i18n-workflow.mjs import && node scripts/i18n-workflow.mjs extract",
     "i18n:check": "node scripts/i18n-workflow.mjs check",
     "test": "npm run i18n:check && node --test tests/*.test.mjs",
+    "test:dialog-input": "node scripts/check-dialog-input.cjs",
+    "test:dialog-input:electron": "node scripts/check-dialog-input.cjs --electron",
     "portable:prepare": "node scripts/prepare-portable-resources.cjs",
     "portable:verify-protection": "node scripts/verify-portable-protection.cjs",
     "portable:smoke-protection": "node scripts/smoke-portable-protection.cjs",
@@ -37,6 +39,7 @@
     "cross-env": "^7.0.3",
     "electron": "^34.0.0",
     "electron-builder": "^26.15.3",
+    "playwright": "1.55.0",
     "vite": "^6.0.7",
     "wait-on": "^8.0.1"
   },

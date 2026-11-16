@@ -70,6 +70,7 @@ const {
 } = require('./wristband-reader.cjs')
 const {
   restoreBrowserWindowFocus,
+  createDeferredWindowPresentation,
   showNativeDialogWithFocusRestore,
 } = require('./window-focus.cjs')
 
@@ -620,6 +621,7 @@ function createTouchWindow(mode = 'debug', layoutBounds = null) {
     return touchWindow
   }
   touchPresentationMode = presentationMode
+  const requestWindow = BrowserWindow.getFocusedWindow()
 
   const bounds = layoutBounds || resolveWindowBounds({
     targetWidth: 960,
@@ -653,6 +655,13 @@ function createTouchWindow(mode = 'debug', layoutBounds = null) {
   preventRendererTitleOverride(touchWindow)
   touchWindow.setMenuBarVisibility(false)
   const createdTouchWindow = touchWindow
+  const presentTouchWindow = createDeferredWindowPresentation({
+    targetWindow: createdTouchWindow,
+    requestWindow,
+    getFocusedWindow: () => BrowserWindow.getFocusedWindow(),
+    isCurrentTarget: () => createdTouchWindow === touchWindow,
+    activate: () => activateTouchWindow(createdTouchWindow, presentationMode),
+  })
   touchKeyboardEditableFocused = false
   const wristbandReader = createKeyboardWristbandReader()
 
@@ -686,7 +695,7 @@ function createTouchWindow(mode = 'debug', layoutBounds = null) {
   })
 
   touchWindow.once('ready-to-show', () => {
-    activateTouchWindow(createdTouchWindow, presentationMode)
+    presentTouchWindow()
   })
   touchWindow.on('focus', () => {
     if (!createdTouchWindow.isDestroyed()) {
@@ -715,7 +724,7 @@ function createTouchWindow(mode = 'debug', layoutBounds = null) {
     if (latestEngineState && !createdTouchWindow.isDestroyed()) {
       createdTouchWindow.webContents.send('engine-state', latestEngineState)
     }
-    setImmediate(() => activateTouchWindow(createdTouchWindow, presentationMode))
+    setImmediate(presentTouchWindow)
   })
   return createdTouchWindow
 }

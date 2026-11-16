@@ -1,6 +1,7 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
+import { isComposingEvent } from "../lib/dialogInput.js";
 import {
   DEFAULT_EFFECT_CONFIG,
   expandEffectFrames,
@@ -207,6 +208,7 @@ function handleConfirm() {
 }
 
 function handleKeydown(event) {
+  if (isComposingEvent(event)) return;
   if (event.key === "Escape") {
     if (!props.saving) {
       emit("cancel");

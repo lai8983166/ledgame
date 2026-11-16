@@ -21,6 +21,7 @@ import LanguageSelectionDialog from "./components/LanguageSelectionDialog.vue";
 import GameActivationDialog from './components/GameActivationDialog.vue';
 import EditorLeaveDialog from './components/EditorLeaveDialog.vue';
 import { resolveEditorDeparture } from './lib/editorLeaveGuard.js';
+import { hasVisibleModalDialog, isComposingEvent } from './lib/dialogInput.js';
 
 const { t } = useI18n({ useScope: "global" });
 
@@ -246,6 +247,8 @@ function attachHelpMenuListeners() {
     }
   }
   function onKeydown(event) {
+    if (isComposingEvent(event) ||
+        hasVisibleModalDialog(document, document.querySelector?.('.help-document-dialog'))) return;
     if (event.key === "Escape") {
       if (gameMenuOpen.value) { gameMenuOpen.value = false; gameButtonRef.value?.focus(); }
       if (helpDocument.value) {
