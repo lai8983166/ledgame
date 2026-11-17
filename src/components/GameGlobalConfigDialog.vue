@@ -471,6 +471,14 @@ onBeforeUnmount(() => {
   overflow: auto;
 }
 
+.global-config-section {
+  min-width: 0;
+  padding: 14px 16px;
+  border: 1px solid var(--ui-border);
+  border-radius: 10px;
+  background: var(--ui-surface);
+}
+
 .global-config-section h3 {
   margin: 0 0 10px;
   color: var(--ui-text);
