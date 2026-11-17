@@ -17,6 +17,7 @@
     "test": "npm run i18n:check && node --test tests/*.test.mjs",
     "test:dialog-input": "node scripts/check-dialog-input.cjs",
     "test:dialog-input:electron": "node scripts/check-dialog-input.cjs --electron",
+    "test:game-home-navigation": "node scripts/check-game-home-navigation.mjs",
     "portable:prepare": "node scripts/prepare-portable-resources.cjs",
     "portable:verify-protection": "node scripts/verify-portable-protection.cjs",
     "portable:smoke-protection": "node scripts/smoke-portable-protection.cjs",

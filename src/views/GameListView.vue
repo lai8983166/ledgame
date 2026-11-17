@@ -16,6 +16,7 @@ const { t } = useI18n({ useScope: "global" });
 const api = window.ledGame;
 const props = defineProps({
   section: { type: String, default: "home" },
+  navigationRequest: { type: Number, default: 0 },
 });
 const emit = defineEmits(["open-game", "play-game", "update:section"]);
 const section = computed({
@@ -91,7 +92,7 @@ const visibleGames = computed(() => (selectedCategory.value
 const displayGames = visibleGames;
 
 watch(
-  () => props.section,
+  [() => props.section, () => props.navigationRequest],
   () => {
     selectedCategory.value = null;
     gamePickerOpen.value = false;
@@ -180,7 +181,6 @@ async function loadCategories() {
 
 function openCategory(category) {
   selectedCategory.value = category;
-  section.value = "home";
   endDrag();
 }
 

@@ -39,6 +39,7 @@ const hoverCell = ref(null);
 const gameRuntimeState = ref(null);
 const activeView = ref("games");
 const gameSection = ref("home");
+const gameNavigationRequest = ref(0);
 const gameMenuOpen = ref(false);
 const gameButtonRef = ref(null);
 const gameMenuRef = ref(null);
@@ -435,6 +436,7 @@ async function selectGameSection(value) {
   if (!await leaveCurrentWorkspace()) return;
   gameMenuOpen.value = false;
   gameSection.value = value === "list" ? "list" : "home";
+  gameNavigationRequest.value += 1;
   activeView.value = "games";
 }
 
@@ -960,6 +962,7 @@ function formatRuntimeValue(value, fallback = "-") {
     <GameListView
       v-if="activeView === 'games'"
       :section="gameSection"
+      :navigation-request="gameNavigationRequest"
       @update:section="selectGameSection"
       @open-game="openGameEditor"
       @play-game="openGameDebug"
