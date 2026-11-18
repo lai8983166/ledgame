@@ -59,6 +59,7 @@ function fileList(directory, relative = '') {
 async function fakeBuild({ projectRoot, config, targets }) {
   const app = path.join(config.directories.output, 'win-unpacked')
   write(app, 'LED Game.exe', 'new-program')
+  write(app, 'LED Game Play.exe', 'new-play-program')
   for (const [entries, prefix] of [[config.extraResources, 'resources'], [config.extraFiles, '']]) {
     for (const entry of entries) {
       const from = path.resolve(projectRoot, entry.from)
@@ -70,9 +71,18 @@ async function fakeBuild({ projectRoot, config, targets }) {
 
 const noProcesses = () => []
 const noPreparation = () => {}
-const verify = directory => assert.equal(fs.readFileSync(path.join(directory, 'LED Game.exe'), 'utf8'), 'new-program')
+const verify = directory => {
+  assert.equal(fs.readFileSync(path.join(directory, 'LED Game.exe'), 'utf8'), 'new-program')
+  assert.equal(fs.readFileSync(path.join(directory, 'LED Game Play.exe'), 'utf8'), 'new-play-program')
+}
+const verifyArchive = archive => {
+  const entries = JSON.parse(fs.readFileSync(archive, 'utf8'))
+  for (const name of ['LED Game.exe', 'LED Game Play.exe']) {
+    assert.ok(entries.includes(name), `Missing ${name} in ZIP`)
+  }
+}
 const run = (fixture, options = {}) => rebuildPortable({ projectRoot: fixture.root,
-  probe: noProcesses, prepare: noPreparation, build: fakeBuild, verify, ...options })
+  probe: noProcesses, prepare: noPreparation, build: fakeBuild, verify, verifyArchive, ...options })
 
 test('rebuilding retains edited data and resources, while ZIP excludes machine license and temporary data', async t => {
   const current = fixture(t)
@@ -81,6 +91,7 @@ test('rebuilding retains edited data and resources, while ZIP excludes machine l
   assert.equal(result.passed, true)
   assert.deepEqual(await preservedFingerprint(current.source), before)
   assert.equal(fs.readFileSync(path.join(current.source, 'LED Game.exe'), 'utf8'), 'new-program')
+  assert.equal(fs.readFileSync(path.join(current.source, 'LED Game Play.exe'), 'utf8'), 'new-play-program')
   const archived = JSON.parse(fs.readFileSync(result.archives[0], 'utf8'))
   for (const required of ['data/database/runtime/ledgame.mv.db', 'data/database/backups/saved.mv.db',
     'data/settings/application.json', 'data/settings/language.json',
@@ -160,6 +171,18 @@ test('staged files must actually match saved customer data before replacing the 
     write(path.join(options.config.directories.output, 'win-unpacked'), 'data/settings/application.json', '{}')
   } }), /did not preserve data\/settings/)
   assert.equal(fs.readFileSync(path.join(current.source, 'LED Game.exe'), 'utf8'), 'old-program')
+})
+
+test('a ZIP missing the play executable is rejected before replacing either release artifact', async t => {
+  const current = fixture(t)
+  const previousArchive = path.join(current.root, 'release', 'LED Game-test-win.zip')
+  fs.writeFileSync(previousArchive, 'previous ZIP')
+  await assert.rejects(run(current, { build: async options => {
+    await fakeBuild(options)
+    write(options.config.directories.output, 'LED Game-test-win.zip', JSON.stringify(['LED Game.exe']))
+  } }), /Missing LED Game Play\.exe in ZIP/)
+  assert.equal(fs.readFileSync(path.join(current.source, 'LED Game.exe'), 'utf8'), 'old-program')
+  assert.equal(fs.readFileSync(previousArchive, 'utf8'), 'previous ZIP')
 })
 
 test('directory-only target retains live data but does not regenerate or overwrite an existing ZIP', async t => {

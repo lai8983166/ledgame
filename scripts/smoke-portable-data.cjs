@@ -195,7 +195,7 @@ async function smokePortableData(directory) {
     const main = asar.extractFile(archive, path.join('electron', 'main.cjs')).toString('utf8')
     assert.match(main, /resourceRoot:\s*app\.getPath\('userData'\)/,
       'The released main process must wire settings resource resolution to its own userData')
-    assert.ok(main.indexOf('configureDataDirectory({') < main.indexOf('app.requestSingleInstanceLock()'),
+    assert.ok(main.indexOf('configureDataDirectory({') < main.indexOf('app.requestSingleInstanceLock('),
       'The released main process must select its data root before acquiring the instance lock')
     const inspected = path.join(work, 'packaged-settings-modules')
     fs.mkdirSync(inspected)

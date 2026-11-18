@@ -122,6 +122,15 @@ const fullLedGameApi = {
     return () => ipcRenderer.removeListener('window:close-requested', listener)
   },
   respondToClose: (requestId, allowed) => ipcRenderer.send('window:close-response', requestId, allowed === true),
+  ...(windowKind === 'main' ? {
+    takeGameLaunch: () => ipcRenderer.invoke('window:take-game-launch'),
+    onGameLaunchRequested: (callback) => {
+      const listener = () => callback()
+      ipcRenderer.on('window:game-launch-requested', listener)
+      return () => ipcRenderer.removeListener('window:game-launch-requested', listener)
+    },
+    finishGameLaunch: (launched) => ipcRenderer.send('window:game-launch-finished', launched === true),
+  } : {}),
   minimizeWindow: () => ipcRenderer.invoke('window:minimize'),
   toggleMaximizeWindow: () => ipcRenderer.invoke('window:toggle-maximize'),
   closeWindow: () => ipcRenderer.invoke('window:close'),

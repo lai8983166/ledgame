@@ -1,6 +1,6 @@
 <script setup>
 import { DEFAULT_NAVIGATION_TITLE } from "./lib/applicationBranding.js";
-import { computed, nextTick, onMounted, onUnmounted, ref } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import DemoView from "./views/DemoView.vue";
 import EditorDebugWorkspace from "./views/EditorDebugWorkspace.vue";
@@ -33,6 +33,7 @@ const engineState = ref("UNKNOWN");
 const demoType = ref(null);
 const busyAction = ref("");
 const errorMessage = ref("");
+const gameLaunchError = ref("");
 const frameState = ref(createFrameState(16, 36));
 const standbyFrameState = createFrameState(16, 36);
 const hoverCell = ref(null);
@@ -56,6 +57,7 @@ let initializationPromise = null;
 let disposed = false;
 let activationReturnTarget = null;
 let removeActivationListener = null;
+let removeGameLaunchListener = null;
 const selectedEditorGame = ref(null);
 const editorDebugActive = computed(() => activeView.value === 'game-debug');
 const debugWorkspaceRef = ref(null);
@@ -149,7 +151,12 @@ onMounted(async () => {
     finally { api.respondToClose?.(requestId, allowed); }
   });
   removeActivationListener = api?.onActivationChanged?.(applyActivationStatus) || null;
+  removeGameLaunchListener = api?.onGameLaunchRequested?.(takeGameLaunch) || null;
   await refreshActivationStatus();
+});
+
+watch(workspaceAccessible, (available) => {
+  if (available) void takeGameLaunch();
 });
 
 function initializeWorkspace() {
@@ -184,6 +191,7 @@ function initializeWorkspace() {
       workspaceReady.value = true;
     } catch (error) {
       activationStartupError.value = error?.message || t('common.operationFailed');
+      api?.finishGameLaunch?.(false);
     } finally { initializationPromise = null; }
   })();
   return initializationPromise;
@@ -199,6 +207,7 @@ onUnmounted(() => {
   removeSecondaryDisplayListener?.();
   removeApplicationSettingsListener?.();
   removeActivationListener?.();
+  removeGameLaunchListener?.();
   removeHelpMenuListeners?.();
   hoverCell.value = null;
 });
@@ -344,8 +353,10 @@ async function runAction(name, action) {
   try {
     const result = await action();
     applyState(result?.data);
+    return true;
   } catch (error) {
     errorMessage.value = error.message || String(error);
+    return false;
   } finally {
     busyAction.value = "";
   }
@@ -389,13 +400,32 @@ function openDebugPanel() {
 }
 
 async function enterGameFlow() {
-  if (!await ensureActivated()) return;
-  if (!await leaveCurrentWorkspace()) return;
+  if (!await ensureActivated()) return false;
+  if (!await leaveCurrentWorkspace()) return false;
   if (!api?.enterGameFlow) {
     errorMessage.value = t("debug.entryApiUnavailable");
-    return;
+    return false;
   }
   return runAction("game-flow", () => api.enterGameFlow());
+}
+
+async function takeGameLaunch() {
+  if (disposed || !workspaceAccessible.value || !api?.takeGameLaunch) return;
+  let claimed = false;
+  let launched = false;
+  try {
+    claimed = await api.takeGameLaunch();
+    if (!claimed || disposed) return;
+    gameLaunchError.value = "";
+    errorMessage.value = "";
+    launched = await enterGameFlow();
+    if (!launched) gameLaunchError.value = errorMessage.value;
+  } catch (error) {
+    gameLaunchError.value = error?.message || t("common.operationFailed");
+    if (!claimed) api.finishGameLaunch?.(false);
+  } finally {
+    if (claimed) api.finishGameLaunch?.(launched);
+  }
 }
 
 async function openGameDebug(game) {
@@ -942,9 +972,9 @@ function formatRuntimeValue(value, fallback = "-") {
       </nav>
     </header>
 
-    <div v-if="secondaryErrorMessage" class="app-global-error" role="alert">
-      <span>{{ secondaryErrorMessage }}</span>
-      <button type="button" :aria-label="t('common.close')" @click="secondaryErrorMessage = ''">
+    <div v-if="secondaryErrorMessage || gameLaunchError" class="app-global-error" role="alert">
+      <span>{{ secondaryErrorMessage || gameLaunchError }}</span>
+      <button type="button" :aria-label="t('common.close')" @click="secondaryErrorMessage = ''; gameLaunchError = ''">
         ×
       </button>
     </div>

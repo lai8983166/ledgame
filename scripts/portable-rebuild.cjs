@@ -70,6 +70,12 @@ function copyTree(source, target, { skipData = false, workspaceRoot } = {}) {
   })
 }
 
+async function streamFingerprint(stream) {
+  const hash = createHash('sha256')
+  for await (const chunk of stream) hash.update(chunk)
+  return hash.digest('hex')
+}
+
 async function fingerprint(directory) {
   const manifest = {}
   if (!exists(directory)) return manifest
@@ -80,9 +86,7 @@ async function fingerprint(directory) {
     else files.push([key, file])
   })
   for (const [relative, file] of files) {
-    const hash = createHash('sha256')
-    for await (const chunk of fs.createReadStream(file)) hash.update(chunk)
-    manifest[relative] = hash.digest('hex')
+    manifest[relative] = await streamFingerprint(fs.createReadStream(file))
   }
   return manifest
 }
@@ -205,8 +209,25 @@ async function verifyRelease(appDirectory) {
   return verifyPortableProtection(appDirectory)
 }
 
+async function verifyReleaseArchive(archivePath, stagedApp) {
+  const { standardExecutable, playExecutable } = require('./prepare-play-executable.cjs')
+  const builderRequire = createRequire(require.resolve('electron-builder'))
+  const packagingRequire = createRequire(builderRequire.resolve('app-builder-lib'))
+  const { files } = await packagingRequire('unzipper').Open.file(archivePath)
+  for (const { name } of [standardExecutable, playExecutable]) {
+    const matching = files.filter(entry => entry.path.toLowerCase() === name.toLowerCase())
+    if (matching.length !== 1 || matching[0].type !== 'File') {
+      throw new Error(`Expected one ${name} at the root of the rebuilt ZIP`)
+    }
+    const archived = await streamFingerprint(matching[0].stream())
+    const staged = await streamFingerprint(fs.createReadStream(path.join(stagedApp, name)))
+    if (archived !== staged) throw new Error(`ZIP executable differs from the verified staged file: ${name}`)
+  }
+}
+
 async function rebuildPortable({ projectRoot = path.resolve(__dirname, '..'), target = 'dist',
-  probe = runningPackageProcesses, prepare = prepareBuild, build = buildRelease, verify = verifyRelease } = {}) {
+  probe = runningPackageProcesses, prepare = prepareBuild, build = buildRelease, verify = verifyRelease,
+  verifyArchive = verifyReleaseArchive } = {}) {
   if (!['dir', 'zip', 'dist'].includes(target)) throw new Error('Expected portable rebuild target: dir, zip or dist')
   projectRoot = path.resolve(projectRoot)
   const base = JSON.parse(fs.readFileSync(path.join(projectRoot, 'electron-builder.json'), 'utf8'))
@@ -259,7 +280,13 @@ async function rebuildPortable({ projectRoot = path.resolve(__dirname, '..'), ta
       if (exists(path.join(stagedApp, 'data', forbidden))) throw new Error(`Unexpected runtime data in release staging: ${forbidden}`)
     }
     const archives = fs.readdirSync(output).filter(name => name.endsWith('.zip'))
+    if (target === 'dir' && archives.length) throw new Error('Unexpected ZIP archive from directory-only rebuild')
     if (target !== 'dir' && archives.length !== 1) throw new Error('Expected one rebuilt ZIP archive')
+    for (const name of archives) {
+      const archivePath = inside(output, path.join(output, name))
+      requireUnlinkedAncestors(projectRoot, archivePath)
+      await verifyArchive(archivePath, stagedApp)
+    }
     await requireStopped(source, probe)
     if (!sameManifest(before, await preservedFingerprint(source))) {
       throw new Error('旧发行包数据在构建期间发生变化，已停止发布；原目录与备份均保留。')
@@ -295,4 +322,4 @@ if (require.main === module) {
   })
 }
 
-module.exports = { rebuildPortable, createBuildConfig, preservedFingerprint, runningPackageProcesses, publishArchive, buildRelease }
+module.exports = { rebuildPortable, createBuildConfig, preservedFingerprint, runningPackageProcesses, publishArchive, buildRelease, verifyReleaseArchive }

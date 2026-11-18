@@ -3,6 +3,7 @@
   "productName": "LED Game",
   "asar": true,
   "beforePack": "scripts/prepare-backend-integrity.cjs",
+  "afterSign": "scripts/prepare-play-executable.cjs",
   "electronFuses": {
     "runAsNode": false,
     "enableNodeOptionsEnvironmentVariable": false,
@@ -73,6 +74,7 @@
     }
   ],
   "win": {
+    "icon": "build-resources/icons/led-game.ico",
     "target": [
       "dir",
       "zip"

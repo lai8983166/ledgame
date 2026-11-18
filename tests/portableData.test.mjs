@@ -8,6 +8,7 @@ import vm from 'node:vm'
 
 const require = createRequire(import.meta.url)
 const { configureDataDirectory, resolveDataDirectory } = require('../electron/portable-data.cjs')
+const { executableStartsGame, gameExecutableName } = require('../electron/game-launch.cjs')
 
 function appFixture(root, isPackaged = true) {
   const paths = { exe: path.join(root, 'LED Game.exe'), userData: path.join(root, '..', 'old-roaming') }
@@ -101,23 +102,32 @@ const main = fs.readFileSync(new URL('../electron/main.cjs', import.meta.url), '
 const bootstrap = main.slice(main.indexOf('try {\n  configureDataDirectory'), main.indexOf('const languagePreferences'))
 
 test('storage is established before the single-instance lock so separate copies use separate locks', () => {
-  const roots = [], locks = new Set()
-  const run = (location) => {
+  const attempts = [], locks = new Set()
+  const run = (location, play = false) => {
     const app = appFixture(path.resolve(location))
-    app.requestSingleInstanceLock = () => {
-      roots.push(app.paths.userData)
+    if (play) app.paths.exe = path.join(path.resolve(location), gameExecutableName)
+    app.requestSingleInstanceLock = ({ enterGame }) => {
+      attempts.push([app.paths.userData, enterGame])
       const duplicate = locks.has(app.paths.userData)
       locks.add(app.paths.userData)
       return !duplicate
     }
-    app.quit = () => roots.push('quit')
+    app.quit = () => attempts.push('quit')
     const fsStub = { mkdirSync() {}, writeFileSync() {}, unlinkSync() {} }
     vm.runInNewContext(`(function() { ${bootstrap} })()`, {
-      app, nodeFs: fsStub, configureDataDirectory: options => configureDataDirectory({ ...options, env: {} }),
+      app, executableStartsGame, nodeFs: fsStub,
+      configureDataDirectory: options => configureDataDirectory({ ...options, env: {} }),
     })
   }
-  run('package-one'); run('package-two'); run('package-one')
-  assert.deepEqual(roots, [path.resolve('package-one/data'), path.resolve('package-two/data'), path.resolve('package-one/data'), 'quit'])
+  run('package-one')
+  run('package-two', true)
+  run('package-one', true)
+  assert.deepEqual(attempts, [
+    [path.resolve('package-one/data'), false],
+    [path.resolve('package-two/data'), true],
+    [path.resolve('package-one/data'), true],
+    'quit',
+  ])
 })
 
 test('storage failure reports and exits without acquiring the lock or continuing startup', async () => {

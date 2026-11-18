@@ -10,6 +10,7 @@ const { pathToFileURL } = require('node:url')
 const { app, BrowserWindow, clipboard, dialog, ipcMain: nativeIpcMain, Menu, nativeImage, protocol, shell, net: electronNet, screen } = require('electron')
 const { resolveLaunchOptions, createBackendEnvironment, backendArguments, verifyBackendIntegrity } = require('./backend-protection.cjs')
 const { configureDataDirectory } = require('./portable-data.cjs')
+const { executableStartsGame } = require('./game-launch.cjs')
 const { resolveActivationStorage } = require('./activation-storage.cjs')
 const { registerActivationIpc, createActivationIpcGate } = require('./game-activation.cjs')
 const ipcMain = createActivationIpcGate({ ipcMain: nativeIpcMain, requireActivated: requireGameActivation })
@@ -126,8 +127,11 @@ try {
   return
 }
 
-const hasSingleInstanceLock = app.requestSingleInstanceLock()
-if (!hasSingleInstanceLock) app.quit()
+const launchDirectlyInGame = executableStartsGame(app.isPackaged, app.getPath('exe'))
+if (!app.requestSingleInstanceLock({ enterGame: launchDirectlyInGame })) {
+  app.quit()
+  return
+}
 
 const languagePreferences = createLanguagePreferenceStore({
   fs,
@@ -175,6 +179,10 @@ let quitCleanupFinished = false
 let mainCloseApproved = false
 let quitRequestPromise = null
 let mainCloseListening = false
+let mainReadyToShow = false
+let initialGamePresentationPending = launchDirectlyInGame
+let gameLaunchRequested = launchDirectlyInGame
+let gameLaunchInProgress = false
 let activationConfirmed = false
 let activationFeaturesStarted = false
 const startupAbortController = new AbortController()
@@ -196,6 +204,15 @@ function activateMainWindow() {
   mainWindow.webContents.focus()
 }
 
+function revealMainWindowAfterGameLaunch() {
+  if (!initialGamePresentationPending) return
+  initialGamePresentationPending = false
+  if (!mainReadyToShow) return
+  activateMainWindow()
+  splashLifecycle.close('main-ready')
+  splashWindow = null
+}
+
 async function requestApplicationQuit() {
   if (quitCleanupStarted) return
   if (quitRequestPromise) return quitRequestPromise
@@ -207,7 +224,22 @@ async function requestApplicationQuit() {
   return quitRequestPromise
 }
 
-app.on('second-instance', () => activateMainWindow())
+app.on('second-instance', (_event, _argv, _workingDirectory, additionalData) => {
+  if (additionalData?.enterGame !== true) {
+    if (initialGamePresentationPending) revealMainWindowAfterGameLaunch()
+    else activateMainWindow()
+    return
+  }
+  if (touchPresentationMode === 'game' && touchWindow && !touchWindow.isDestroyed()) {
+    if (touchWindow.isVisible() || touchWindow.isMinimized()) activateTouchWindow()
+    return
+  }
+  if (quitCleanupStarted || gameLaunchRequested || gameLaunchInProgress) return
+  gameLaunchRequested = true
+  if (!mainWindow || mainWindow.isDestroyed()) return
+  if (mainReadyToShow) activateMainWindow()
+  mainWindow.webContents.send('window:game-launch-requested')
+})
 const splashLifecycle = createSplashLifecycle({
   createWindow: () => {
     const window = new BrowserWindow({
@@ -480,17 +512,27 @@ function createWindow() {
   }
   mainWindow = new BrowserWindow(windowOptions)
   mainCloseListening = false
+  mainReadyToShow = false
   mainWindow.webContents.on('did-start-loading', () => {
     mainCloseListening = false
     mainCloseApproval.cancel()
+    if (gameLaunchInProgress) {
+      gameLaunchInProgress = false
+      revealMainWindowAfterGameLaunch()
+    }
   })
   preventRendererTitleOverride(mainWindow)
   mainWindow.setMenuBarVisibility(false)
   logWindowGeometry(mainWindow, 'main-window-created')
   mainWindow.once('maximize', () => logWindowGeometry(mainWindow, 'main-window-maximized'))
-  mainWindow.maximize()
+  // Maximizing can show a hidden window. Keep it hidden until play ends or
+  // the management window is explicitly needed for activation or an error.
+  if (launchDirectlyInGame) mainWindow.once('show', () => mainWindow.maximize())
+  else mainWindow.maximize()
   mainWindow.once('ready-to-show', () => {
     logWindowGeometry(mainWindow, 'main-window-ready')
+    mainReadyToShow = true
+    if (initialGamePresentationPending) return
     mainWindow.show()
     splashLifecycle.close('main-ready')
     splashWindow = null
@@ -504,6 +546,7 @@ function createWindow() {
   mainWindow.on('closed', () => {
     mainCloseApproval.cancel()
     mainCloseListening = false
+    mainReadyToShow = false
     void releaseElc408LogCapture()
     mainWindow = null
   })
@@ -632,6 +675,7 @@ function createTouchWindow(mode = 'debug', layoutBounds = null) {
     return touchWindow
   }
   touchPresentationMode = presentationMode
+  const firstDirectPresentation = initialGamePresentationPending && presentationMode === 'game'
   const requestWindow = BrowserWindow.getFocusedWindow()
 
   const bounds = layoutBounds || resolveWindowBounds({
@@ -654,6 +698,7 @@ function createTouchWindow(mode = 'debug', layoutBounds = null) {
     title: 'LED Game',
     backgroundColor: '#071018',
     autoHideMenuBar: false,
+    fullscreen: firstDirectPresentation,
     show: false,
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
@@ -708,6 +753,20 @@ function createTouchWindow(mode = 'debug', layoutBounds = null) {
   touchWindow.once('ready-to-show', () => {
     presentTouchWindow()
   })
+  if (firstDirectPresentation) {
+    createdTouchWindow.once('show', () => {
+      if (!initialGamePresentationPending) return
+      initialGamePresentationPending = false
+      splashLifecycle.close('game-ready')
+      splashWindow = null
+    })
+    createdTouchWindow.webContents.on('did-fail-load', (_event, _code, _description, _url, isMainFrame) => {
+      if (isMainFrame && initialGamePresentationPending) {
+        revealMainWindowAfterGameLaunch()
+        createdTouchWindow.close()
+      }
+    })
+  }
   touchWindow.on('focus', () => {
     if (!createdTouchWindow.isDestroyed()) {
       createdTouchWindow.webContents.focus()
@@ -718,6 +777,7 @@ function createTouchWindow(mode = 'debug', layoutBounds = null) {
     if (touchWindow === createdTouchWindow) {
       touchWindow = null
       touchKeyboardEditableFocused = false
+      if (firstDirectPresentation) revealMainWindowAfterGameLaunch()
     }
   })
 
@@ -1098,6 +1158,7 @@ async function backendRequest(pathname, options = {}) {
 async function applyActivationState(state) {
   activationConfirmed = state?.activated === true
   if (!activationConfirmed) {
+    revealMainWindowAfterGameLaunch()
     activationFeaturesStarted = false
     stopRuntimeStateStream()
     stopFrameServer(shouldUseEmbeddedBackend && !quitCleanupStarted)
@@ -1860,6 +1921,18 @@ ipcMain.on('window:close-listening', (event) => {
     mainCloseListening = true
   }
 })
+ipcMain.handle('window:take-game-launch', (event) => {
+  if (!mainWindow || mainWindow.isDestroyed() || event.sender !== mainWindow.webContents) return false
+  if (!gameLaunchRequested || gameLaunchInProgress) return false
+  gameLaunchRequested = false
+  gameLaunchInProgress = true
+  return true
+})
+ipcMain.on('window:game-launch-finished', (event, launched) => {
+  if (!mainWindow || mainWindow.isDestroyed() || event.sender !== mainWindow.webContents) return
+  gameLaunchInProgress = false
+  if (launched !== true) revealMainWindowAfterGameLaunch()
+})
 ipcMain.on('window:close-response', (event, requestId, allowed) => {
   if (mainWindow && !mainWindow.isDestroyed() && event.sender === mainWindow.webContents) {
     mainCloseApproval.respond(requestId, allowed)
@@ -2484,7 +2557,6 @@ function registerIdleMediaProtocol() {
 
 app.whenReady()
   .then(async () => {
-    if (!hasSingleInstanceLock) return
     // The app has no native menu. Removing it keeps the Windows content bounds
     // stable instead of collapsing an auto-hidden menu on first input.
     Menu.setApplicationMenu(null)

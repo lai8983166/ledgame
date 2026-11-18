@@ -1,10 +1,11 @@
 # 每份游戏包独立保存数据
 
-正式游戏端将 `LED Game.exe` 所在目录下的 `data` 作为数据根目录。启动快捷方式的工作目录不影响该位置；两个不同目录的游戏包使用各自的数据与单实例锁。重复打开同一目录的包只唤回已有窗口。
+正式游戏端将 EXE 所在目录下的 `data` 作为数据根目录。包内的 `LED Game.exe` 和 `LED Game Play.exe` 共用该目录和单实例锁。启动快捷方式的工作目录不影响数据位置；两个不同目录的游戏包使用各自的数据与单实例锁。重复打开同一包时，由已有实例处理打开管理界面或进入游戏的请求。
 
 ```text
 游戏包/
   LED Game.exe
+  LED Game Play.exe
   data/
     database/runtime/ledgame.mv.db
     database/backups/
