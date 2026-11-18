@@ -1,5 +1,7 @@
 <script setup>
 import { DEFAULT_NAVIGATION_TITLE } from "../lib/applicationBranding.js";
+import SecondaryIdleSubtitle from "../components/SecondaryIdleSubtitle.vue";
+import subtitleStyles from "../../electron/secondary-subtitle-styles.json";
 import { computed, onMounted, onUnmounted, reactive, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { SUPPORTED_LOCALES } from "../i18n/index.js";
@@ -27,6 +29,7 @@ const saved = ref({
   secondaryIdlePromptText: "LED FLOOR GAME",
   secondaryIdlePromptFontSize: 72,
   secondaryIdleSubtitleFontSize: 72,
+  secondaryIdleSubtitleStyle: "sans",
   navigationTitle: DEFAULT_NAVIGATION_TITLE,
   applicationIconPath: "",
   secondaryDisplayBackgroundPath: "",
@@ -43,6 +46,7 @@ const draft = reactive({
   secondaryIdlePromptText: "LED FLOOR GAME",
   secondaryIdlePromptFontSize: 72,
   secondaryIdleSubtitleFontSize: 72,
+  secondaryIdleSubtitleStyle: "sans",
   navigationTitle: DEFAULT_NAVIGATION_TITLE,
   applicationIconPath: "",
   secondaryDisplayBackgroundPath: "",
@@ -73,6 +77,7 @@ const dirty = computed(
     || draft.secondaryIdlePromptText !== saved.value.secondaryIdlePromptText
     || draft.secondaryIdlePromptFontSize !== saved.value.secondaryIdlePromptFontSize
     || draft.secondaryIdleSubtitleFontSize !== saved.value.secondaryIdleSubtitleFontSize
+    || draft.secondaryIdleSubtitleStyle !== saved.value.secondaryIdleSubtitleStyle
     || draft.navigationTitle !== saved.value.navigationTitle
     || draft.applicationIconPath !== saved.value.applicationIconPath
     || draft.secondaryDisplayBackgroundPath !== saved.value.secondaryDisplayBackgroundPath
@@ -137,6 +142,7 @@ function applySettings(settings, preserveDraft = true) {
   const normalized = {
     coinCount: Number.isInteger(settings?.coinCount) && settings.coinCount >= 1 && settings.coinCount <= 999 ? settings.coinCount : 1,
     secondaryIdleSubtitleText: typeof settings?.secondaryIdleSubtitleText === 'string' ? settings.secondaryIdleSubtitleText : '',
+    secondaryIdleSubtitleStyle: subtitleStyles.includes(settings?.secondaryIdleSubtitleStyle) ? settings.secondaryIdleSubtitleStyle : "sans",
     entryMethod: ["touch", "coin", "wristband"].includes(settings?.entryMethod)
       ? settings.entryMethod
       : "touch",
@@ -385,6 +391,16 @@ async function testMemberPlatform() {
             <input v-model.number="draft.secondaryIdleSubtitleFontSize" type="number" min="32" max="200" step="1" required :aria-invalid="Boolean(fieldError('secondaryIdleSubtitleFontSize'))" />
             <small v-if="fieldError('secondaryIdleSubtitleFontSize')" class="application-settings-error">{{ fieldError('secondaryIdleSubtitleFontSize') }}</small>
           </label>
+          <label class="application-settings-field">
+            <span>{{ t("applicationSettings.subtitleStyle.label") }}</span>
+            <select v-model="draft.secondaryIdleSubtitleStyle">
+              <option v-for="style in subtitleStyles" :key="style" :value="style">{{ t(`applicationSettings.subtitleStyle.${style}`) }}</option>
+            </select>
+          </label>
+          <div class="subtitle-preview">
+            <SecondaryIdleSubtitle :text="draft.secondaryIdleSubtitleText || t('applicationSettings.secondaryIdleBottomTitle')"
+              :font-style="draft.secondaryIdleSubtitleStyle" :font-size="28" />
+          </div>
           <div class="application-settings-actions application-settings-idle-media-actions">
             <button class="application-settings-secondary" type="button" @click="chooseSecondaryIdleMedia">
               {{ t("applicationSettings.chooseSecondaryIdleMedia") }}
@@ -483,6 +499,15 @@ async function testMemberPlatform() {
   color: var(--ui-text-secondary);
   background: var(--ui-input);
   font: inherit;
+}
+
+.subtitle-preview {
+  display: grid;
+  align-items: center;
+  min-height: 74px;
+  padding: 12px;
+  border-radius: 6px;
+  background: #101e30;
 }
 
 .application-settings-input-row {

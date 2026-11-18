@@ -149,7 +149,7 @@ async function createGame(family) {
     if (creationMode.value === 'import') {
       const result = await api.importGame(family);
       creationOpen.value = false;
-      if (!result.canceled) await loadGames();
+      if (!result.canceled) await Promise.all([loadGames(), loadCategories()]);
       return;
     }
     if (!api?.newGameDraft) throw new Error(t('gameCreation.unavailable'));

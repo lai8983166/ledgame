@@ -52,7 +52,7 @@ try {
     await total.fill('20');
     await dialog.getByRole('button',{name:'保存',exact:true}).click();
     await dialog.waitFor({state:'hidden'});
-    await page.locator('.editor-save-dialog button').click();
+    await page.locator('.editor-save-toast').waitFor();
     assert.equal(await page.locator('select').filter({has:page.locator('option[value="LIMITED"]')}).count(),0);
     await mount();
     await page.getByRole('button',{name:'全局配置',exact:true}).click();
@@ -61,7 +61,7 @@ try {
     await mode.selectOption('false');
     await dialog.getByRole('button',{name:'保存',exact:true}).click();
     await dialog.waitFor({state:'hidden'});
-    await page.locator('.editor-save-dialog button').click();
+    await page.locator('.editor-save-toast').waitFor();
     await page.locator('select').filter({has:page.locator('option[value="LIMITED"]')}).waitFor();
     assert.equal(await page.evaluate(()=>window.fixture.game.levels[0].option.lifeLimitValue),10);
     await page.screenshot({path:path.join(output,name+'.png')});

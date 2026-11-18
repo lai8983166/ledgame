@@ -33,9 +33,27 @@ const check=async(name,fn)=>{await fn();passed.push(name);console.log('通过：
 try{
   await page.goto(`http://127.0.0.1:${server.httpServer.address().port}/tests/ui/catalog-library-harness.html`,{timeout:60000,waitUntil:'domcontentloaded'});
   await page.waitForFunction(()=>window.mountComponent);await mount({gameId:7});
+  await check('Repeated saves renew a three-second status without taking focus',async()=>{
+    await page.clock.install();
+    const save=button('保存'), toast=page.locator('.editor-save-toast');
+    await save.click();
+    await expect(toast).toHaveAttribute('role','status');
+    const levelsTab=tab('levels');
+    await levelsTab.focus();
+    await expect(levelsTab).toBeFocused();
+    await expect(page.locator('.editor-save-dialog')).toHaveCount(0);
+    await page.clock.fastForward(2000);
+    await save.click();
+    await expect(toast).toBeVisible();
+    await page.clock.fastForward(1500);
+    await expect(toast).toBeVisible();
+    await page.clock.fastForward(1500);
+    await expect(toast).toHaveCount(0);
+    await page.evaluate(()=>window.fixture.calls=[]);
+  });
   await check('未打开全局页直接保存保留原全局数据，仅查看全局页不产生dirty',async()=>{
     const original=await page.evaluate(()=>structuredClone(window.fixture.doc));
-    await button('保存').click();await page.locator('.editor-save-dialog').waitFor();await close();
+    await button('保存').click();await page.locator('.editor-save-toast').waitFor();
     const saved=await page.evaluate(()=>window.fixture.doc);
     for(const key of ['name','palette','audio','gif','commonConfig'])assert.deepEqual(saved[key],original[key]);
     assert.equal(saved.wiringData?.runtimeEnabled===true,false);assert.equal(await dirty(),false);
@@ -68,10 +86,10 @@ try{
     assert.equal(await calls(),1);assert.equal(await dirty(),true);await close();
     await tab('global').click();await expect(field('名称')).toHaveValue('Rank统一保存');
     await tab('wiring').click();await expect(page.locator('.elc408-wiring-panel')).toBeVisible();
-    await page.evaluate(()=>window.fixture.fail=false);await button('保存').click();await page.locator('.editor-save-dialog').waitFor();
+    await page.evaluate(()=>window.fixture.fail=false);await button('保存').click();await page.locator('.editor-save-toast').waitFor();
     assert.equal(await calls(),2);assert.equal(await dirty(),false);
     const saved=await page.evaluate(()=>window.fixture.doc);assert.equal(saved.name,'Rank统一保存');assert.equal(saved.levels[0].rewardPoints,17);
-    assert.deepEqual(saved.wiringData.lines,[[[1,2],[2,2]]]);assert.equal(saved.wiringData.runtimeEnabled,true);await close();
+    assert.deepEqual(saved.wiringData.lines,[[[1,2],[2,2]]]);assert.equal(saved.wiringData.runtimeEnabled,true);
     await mount({gameId:7});await expect(page.locator('[data-rank-field="level.rewardPoints"]')).toHaveValue('17');
     await tab('global').click();await expect(field('名称')).toHaveValue('Rank统一保存');
     await tab('wiring').click();assert.deepEqual(await page.evaluate(()=>window.getComponentSetup().wiringPageRef.getDraft().lines),[[[1,2],[2,2]]]);
@@ -86,7 +104,7 @@ try{
   await check('场地缩小保留布线草稿并阻止超界，尺寸恢复后保存成功',async()=>{
     await tab('global').click();await field('宽度').fill('1');await tab('wiring').click();const before=await calls();
     await button('保存').click();await page.locator('.editor-save-dialog').waitFor();assert.equal(await calls(),before);assert.equal(await dirty(),true);await close();
-    await tab('global').click();await field('宽度').fill('16');await button('保存').click();await page.locator('.editor-save-dialog').waitFor();await close();assert.equal(await calls(),before+1);assert.equal(await dirty(),false);
+    await tab('global').click();await field('宽度').fill('16');await button('保存').click();await page.locator('.editor-save-toast').waitFor();assert.equal(await calls(),before+1);assert.equal(await dirty(),false);
   });
   await check('三页在大小窗口不超界，全局限宽居中，点击关卡直接回关卡页',async()=>{
     for(const width of [1920,1366,1024]){
@@ -110,8 +128,8 @@ try{
     await page.evaluate(()=>{window.fixture.deferCategories=false;window.fixture.resolveCategories();});
     const before=await calls();await field('名称').fill('新建Rank');await tab('levels').click();await page.locator('[data-rank-field="level.rewardPoints"]').fill('29');
     await tab('wiring').click();await page.locator('.elc408-wiring-panel').evaluate(node=>node.__vueParentComponent.setupState.document.lines=[[[0,0],[1,0]]]);
-    await button('保存').click();await page.locator('.editor-save-dialog').waitFor();assert.equal(await calls(),before+1);
-    const saved=await page.evaluate(()=>window.fixture.doc);assert.equal(saved.id,9);assert.equal(saved.name,'新建Rank');assert.equal(saved.levels[0].rewardPoints,29);assert.deepEqual(saved.wiringData.lines,[[[0,0],[1,0]]]);assert.equal(await dirty(),false);await close();
+    await button('保存').click();await page.locator('.editor-save-toast').waitFor();assert.equal(await calls(),before+1);
+    const saved=await page.evaluate(()=>window.fixture.doc);assert.equal(saved.id,9);assert.equal(saved.name,'新建Rank');assert.equal(saved.levels[0].rewardPoints,29);assert.deepEqual(saved.wiringData.lines,[[[0,0],[1,0]]]);assert.equal(await dirty(),false);
   });
   assert.deepEqual(errors,[]);
 }catch(error){await page.screenshot({path:path.join(output,'失败.png')});throw error;}

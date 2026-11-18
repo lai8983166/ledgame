@@ -33,6 +33,7 @@ const BRAND_DEFAULTS = {
   touchPreparationTimeoutSeconds: 20,
   coinCount: 1,
   secondaryIdleSubtitleText: '',
+  secondaryIdleSubtitleStyle: 'sans',
   applicationTitle: "LED Game",
   navigationTitle: "我的游戏",
   applicationIconPath: null,
@@ -223,10 +224,12 @@ test('old subtitle sizes inherit the saved top title; independent sizes and prep
     await writeFile(settingsPath, JSON.stringify({ secondaryIdlePromptFontSize: 96 }));
     const store = createApplicationSettingsStore({ fs, settingsPath });
     assert.equal((await store.get()).secondaryIdleSubtitleFontSize, 96);
-    const saved = await store.update({ secondaryIdlePromptFontSize: 120, secondaryIdleSubtitleFontSize: 48, touchPreparationTimeoutSeconds: 3600 });
+    const saved = await store.update({ secondaryIdlePromptFontSize: 120, secondaryIdleSubtitleFontSize: 48, secondaryIdleSubtitleStyle: "serif", touchPreparationTimeoutSeconds: 3600 });
     const reopened = await createApplicationSettingsStore({ fs, settingsPath }).get();
     assert.equal(reopened.secondaryIdlePromptFontSize, 120);
     assert.equal(reopened.secondaryIdleSubtitleFontSize, 48);
+    assert.equal(reopened.secondaryIdleSubtitleStyle, "serif");
+    await assert.rejects(() => store.update({secondaryIdleSubtitleStyle: "unknown"}), /subtitle style/);
     assert.equal(reopened.touchPreparationTimeoutSeconds, 3600);
     for (const touchPreparationTimeoutSeconds of [0, -1, 1.5, 3601, '20']) await assert.rejects(() => store.update({ touchPreparationTimeoutSeconds }), /between 1 and 3600/);
     for (const secondaryIdleSubtitleFontSize of [31, 200.5, 201, '72']) await assert.rejects(() => store.update({ secondaryIdleSubtitleFontSize }), /subtitle font size/);

@@ -14,6 +14,7 @@ import { editorSnapshot } from '../lib/editorDirtyState.js';
 import { gameFieldDimensionsValid } from '../lib/gameFieldDimensions.js';
 import { deleteLevelAt, moveLevelAt } from '../lib/simpleLevelSequence.js';
 import EditorActionIcon from '../components/EditorActionIcon.vue';
+import EditorSaveToast from '../components/EditorSaveToast.vue';
 import EditorSaveDialog from '../components/EditorSaveDialog.vue';
 import MediaPickerDialog from '../components/MediaPickerDialog.vue';
 import GameGlobalConfigDialog from '../components/GameGlobalConfigDialog.vue';
@@ -135,7 +136,7 @@ async function validatePayload(payload){
   }
 }
 async function save(){
-  if(!canSave.value)return false;busy.value='save';errorMessage.value='';
+  if(!canSave.value)return false;busy.value='save';errorMessage.value='';saveFeedback.value=null;
   try{await withEditorSavingCursor(async()=>{
     syncGlobalPage();
     await nextTick();
@@ -222,7 +223,8 @@ function goBack(){emit('back');}
         <label><span>{{t('rank.refreshSeconds')}}</span><input v-model.number="type1Config.refreshSeconds" type="number" min="1" /></label>
       </template>
     </main>
-    <EditorSaveDialog v-if="saveFeedback" v-bind="saveFeedback" @close="saveFeedback=null" />
+    <EditorSaveToast v-if="saveFeedback && !saveFeedback.failed" :message="saveFeedback.message" @dismiss="saveFeedback = null" />
+    <EditorSaveDialog v-else-if="saveFeedback" v-bind="saveFeedback" @close="saveFeedback=null" />
     <GameGlobalConfigDialog v-if="globalPageMounted" v-show="editorPage==='global'" ref="globalPageRef" embedded rank class="rank-global-config-page" :config="globalConfigDraft" :categories="gameCategories" :saving="busy==='save'" />
     <GameWiringDialog v-if="wiringPageMounted" v-show="editorPage==='wiring'" ref="wiringPageRef" embedded class="rank-wiring-page" :wiring="document?.wiringData" :width="document.siteSizeWidth" :height="document.siteSizeHeight" :saving="busy==='save'" />
     <MediaPickerDialog v-if="mediaPicker" :accept="mediaPicker.accept" :current-value="mediaPicker.level?.[mediaPicker.field]||''" :title="mediaPicker.label" @cancel="mediaPicker=null" @select="applyMedia" />

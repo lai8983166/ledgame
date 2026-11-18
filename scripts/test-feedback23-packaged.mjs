@@ -59,7 +59,7 @@ try{
     await page.locator('.matrix-repeat-field input').fill('3');
     let w=await app.browserWindow(page);await w.evaluate(w=>w.close());await page.locator('.editor-leave-dialog').waitFor();await button('继续编辑').click();
     assert.ok(['IDLE','STOPPED'].includes((await request('/engine/game/state')).data.engineState));assert.equal(page.isClosed(),false);
-    await button('保存').click();await page.locator('.editor-save-dialog button').click();assert.equal((await request(`/game-editor/${id}`)).data.levels[0].frameList[0].repeatTimes,3);
+    await button('保存').click();await page.locator('.editor-save-toast').waitFor();assert.equal((await request(`/game-editor/${id}`)).data.levels[0].frameList[0].repeatTimes,3);
     await page.locator('.matrix-repeat-field input').fill('4');await nav('媒体库').click();await button('继续编辑').click();
     await page.screenshot({path:path.join(data,'打包编辑与品牌.png')});
     await page.evaluate(()=>window.secondaryDisplay.open());await expect.poll(()=>app.windows().some(p=>p.url().includes('window=secondary'))).toBe(true);

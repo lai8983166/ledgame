@@ -71,10 +71,10 @@ try{
       // Previous close approval in this browser fixture does not actually destroy its window.
       await page.evaluate(()=>window.getComponentSetup().activeView='games');await open(type);await mutate();
       await editor(async()=>{const s=document.querySelector('.simple-editor-workspace,.rank-editor').__vueParentComponent.setupState;await s.saveGlobalConfig({name:'仅保存配置'});});
-      await page.locator('.editor-save-dialog button').click();
+      await page.locator('.editor-save-toast').waitFor();
       await page.getByRole('button',{name:'媒体库',exact:true}).click();await page.locator('.editor-leave-dialog').waitFor();
       await page.getByRole('button',{name:'继续编辑',exact:true}).click();
-      await page.locator('.editor-heading-actions,.rank-actions').getByRole('button',{name:'保存',exact:true}).click();await page.locator('.editor-save-dialog button').click();
+      await page.locator('.editor-heading-actions,.rank-actions').getByRole('button',{name:'保存',exact:true}).click();await page.locator('.editor-save-toast').waitFor();
       await page.getByRole('button',{name:'媒体库',exact:true}).click();assert.equal(await page.locator('.editor-leave-dialog').count(),0);
     }
   });

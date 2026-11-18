@@ -3,6 +3,7 @@ const { createApplicationResourcePaths } = require('./application-resource-paths
 
 const ENTRY_METHODS = Object.freeze(['touch', 'coin', 'wristband'])
 const APPLICATION_MODES = Object.freeze(['debug', 'game'])
+const subtitleStyles = require('./secondary-subtitle-styles.json')
 const TOUCH_IDLE_PROMPT_DEFAULTS = Object.freeze({
   'zh-CN': '开始游戏',
   'en-US': 'Start Game',
@@ -45,6 +46,7 @@ const DEFAULT_APPLICATION_SETTINGS = Object.freeze({
   touchPreparationTimeoutSeconds: 20,
   secondaryIdlePromptText: SECONDARY_IDLE_PROMPT_DEFAULT,
   secondaryIdleSubtitleText: '',
+  secondaryIdleSubtitleStyle: 'sans',
   secondaryIdlePromptFontSize: SECONDARY_IDLE_PROMPT_FONT_SIZE_DEFAULT,
   secondaryIdleSubtitleFontSize: SECONDARY_IDLE_PROMPT_FONT_SIZE_DEFAULT,
   applicationTitle: APPLICATION_TITLE_DEFAULT,
@@ -164,6 +166,7 @@ function normalizeApplicationSettings(value) {
       ? source.touchPreparationTimeoutSeconds : 20,
     secondaryIdlePromptText: normalizeSecondaryIdlePromptText(source.secondaryIdlePromptText),
     secondaryIdleSubtitleText: typeof source.secondaryIdleSubtitleText === 'string' && Array.from(source.secondaryIdleSubtitleText.trim()).length <= SECONDARY_IDLE_PROMPT_MAX_LENGTH ? source.secondaryIdleSubtitleText.trim() : '',
+    secondaryIdleSubtitleStyle: subtitleStyles.includes(source.secondaryIdleSubtitleStyle) ? source.secondaryIdleSubtitleStyle : 'sans',
     secondaryIdlePromptFontSize: normalizeSecondaryIdlePromptFontSize(source.secondaryIdlePromptFontSize),
     secondaryIdleSubtitleFontSize: normalizeSecondaryIdlePromptFontSize(source.secondaryIdleSubtitleFontSize ?? source.secondaryIdlePromptFontSize),
     applicationTitle: APPLICATION_TITLE_DEFAULT,
@@ -193,6 +196,7 @@ function validateSettingsPatch(value) {
   }
   if ('coinCount' in patch && (!Number.isInteger(patch.coinCount) || patch.coinCount < 1 || patch.coinCount > 999)) throw new Error('Coin count must be an integer between 1 and 999')
   if ('secondaryIdleSubtitleText' in patch && (typeof patch.secondaryIdleSubtitleText !== 'string' || Array.from(patch.secondaryIdleSubtitleText.trim()).length > SECONDARY_IDLE_PROMPT_MAX_LENGTH)) throw new Error('Secondary idle subtitle must contain at most 64 characters')
+  if ('secondaryIdleSubtitleStyle' in patch && !subtitleStyles.includes(patch.secondaryIdleSubtitleStyle)) throw new Error('Invalid secondary idle subtitle style')
   if ('entryMethod' in patch && !ENTRY_METHODS.includes(patch.entryMethod)) {
     throw new Error(`Unsupported entry method: ${patch.entryMethod}`)
   }

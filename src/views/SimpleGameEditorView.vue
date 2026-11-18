@@ -2,6 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, toRaw, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import EditorActionIcon from "../components/EditorActionIcon.vue";
+import EditorSaveToast from '../components/EditorSaveToast.vue';
 import EditorSaveDialog from '../components/EditorSaveDialog.vue';
 import { requiredEditorFields } from '../lib/editorRequiredFields.js';
 import { withEditorSavingCursor } from '../lib/editorSavingCursor.js';
@@ -1004,6 +1005,7 @@ async function saveEditor() {
   if (!document.value || busyAction.value) {
     return;
   }
+  saveFeedback.value = null;
   return await runEditorAction("save", async () => {
     syncGlobalPage();
     await nextTick();
@@ -3158,7 +3160,7 @@ function canTriggerGlobalShortcut(event) {
 function handleGlobalKeydown(event) {
   if (editorPage.value !== 'levels' || busyAction.value || levelMediaPicker.value ||
       globalConfigOpen.value || gameWiringOpen.value || pixelLightLayoutOpen.value ||
-      effectDialogOpen.value || levelPreviewSnapshot.value || saveFeedback.value ||
+      effectDialogOpen.value || levelPreviewSnapshot.value || saveFeedback.value?.failed ||
       hasVisibleModalDialog(window.document) || isComposingEvent(event)) return;
   const tagName = event.target?.tagName?.toLowerCase();
   if (["input", "textarea", "select", "audio"].includes(tagName) || event.target?.isContentEditable) {
@@ -3990,7 +3992,8 @@ function formatRuntimeSummary(value) {
       :saving="busyAction === 'save'" :error="errorMessage" />
       </section>
     </div>
-    <EditorSaveDialog v-if="saveFeedback" v-bind="saveFeedback" @close="saveFeedback = null" />
+    <EditorSaveToast v-if="saveFeedback && !saveFeedback.failed" :message="saveFeedback.message" @dismiss="saveFeedback = null" />
+    <EditorSaveDialog v-else-if="saveFeedback" v-bind="saveFeedback" @close="saveFeedback = null" />
     <MediaPickerDialog v-if="levelMediaPicker" :accept="levelMediaPicker.field.accept" :current-value="levelMediaPicker.level.option[levelMediaPicker.field.key] || ''" :title="levelMediaPicker.field.label" @cancel="levelMediaPicker = null" @select="selectLevelMedia" />
     <PixelLightLayoutDialog
       v-if="pixelLightLayoutOpen"

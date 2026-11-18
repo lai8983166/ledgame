@@ -87,15 +87,15 @@ try{
     assert.equal(await page.evaluate(()=>JSON.stringify(window.getComponentSetup().activeFrame.matrix)),before);
   });
   await check('配置密码明文、投币输入条件显示与保存、副屏上下标题独立于Touch',async()=>{
-    await mount('ApplicationSettingsView');await page.locator('.application-settings-field select').waitFor();
+    await mount('ApplicationSettingsView');await page.locator('select:has(option[value=coin])').waitFor();
     const field=text=>page.locator('.application-settings-field').filter({has:page.locator('span').filter({hasText:new RegExp('^'+text+'$')})}).locator('input');
     await field('副屏上标题').fill('上标题');await field('副屏下标题').fill('下标题');
     const password=page.locator('input[maxlength="12"]');assert.equal(await password.getAttribute('type'),'text');await password.fill('12345678');
-    assert.equal(await page.locator('input[max="999"]').count(),0);await page.locator('select').selectOption('coin');await page.locator('input[max="999"]').fill('3');await button('保存').click();
+    assert.equal(await page.locator('input[max="999"]').count(),0);await page.locator('select:has(option[value=coin])').selectOption('coin');await page.locator('input[max="999"]').fill('3');await button('保存').click();
     assert.equal(await page.evaluate(()=>window.fixture.settings.coinCount),3);assert.equal(await page.evaluate(()=>window.fixture.settings.touchIdlePromptTexts['zh-CN']),'开始游戏');
     await mount('ApplicationSettingsView');await page.locator('input[max="999"]').waitFor();assert.equal(await page.locator('input[max="999"]').inputValue(),'3');
-    await mount('SecondaryDisplayView');await page.locator('.secondary-idle-action .touch-idle-prompt').nth(1).waitFor();
-    assert.deepEqual(await page.locator('.touch-idle-title-face').allTextContents(),['上标题','下标题']);await page.screenshot({path:path.join(output,'副屏上下标题.png')});
+    await mount('SecondaryDisplayView');await page.locator('.secondary-idle-action .secondary-subtitle').waitFor();
+    assert.deepEqual(await page.locator('.touch-idle-title-face, .secondary-subtitle').allTextContents(),['上标题','下标题']);await page.screenshot({path:path.join(output,'副屏上下标题.png')});
   });
   await check('Touch选择相同或不同语言自动关闭，退出密码空值显示光标，数字仍遮蔽',async()=>{
     await page.evaluate(()=>window.fixture.settings.entryMethod='touch');await mount('LedGameTouchView');await page.locator('.touch-language-trigger').waitFor();

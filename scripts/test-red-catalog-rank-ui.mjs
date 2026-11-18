@@ -135,7 +135,7 @@ try{
     await expect(page.locator('.editor-save-dialog')).toContainText('模拟保存失败');await closeFeedback();
     await expect(range('x')).toHaveValue('4,8');await expect(range('y')).toHaveValue('3,10');
     await page.evaluate(()=>window.fixture.failSave=false);await button('保存').click();
-    await expect(page.locator('.editor-save-dialog')).toBeVisible();await closeFeedback();
+    await page.locator('.editor-save-toast').waitFor();
     const saved=await page.evaluate(()=>window.fixture.doc);
     assert.deepEqual(saved.levels.map(level=>[level.label,level.bounds]),[
       ['B',{minX:1,minY:1,maxX:7,maxY:8}],['C',{minX:3,minY:2,maxX:7,maxY:9}],

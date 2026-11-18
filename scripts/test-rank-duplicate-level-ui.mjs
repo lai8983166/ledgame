@@ -55,7 +55,7 @@ try{
     await field('bounds.x').fill('3,8');await page.locator('.rank-level-tab .sequence-pill').nth(1).click();await expect(field('bounds.x')).toHaveValue('2,');
     await page.getByRole('button',{name:'保存',exact:true}).click();await page.locator('.editor-save-dialog').waitFor();assert.equal(await page.evaluate(()=>window.fixture.calls.length),0);await close();
     await field('bounds.x').fill('2,7');
-    await page.getByRole('button',{name:'保存',exact:true}).click();await page.locator('.editor-save-dialog').waitFor();await close();assert.equal(await page.evaluate(()=>window.fixture.calls.length),1);
+    await page.getByRole('button',{name:'保存',exact:true}).click();await page.locator('.editor-save-toast').waitFor();assert.equal(await page.evaluate(()=>window.fixture.calls.length),1);
     await mount();assert.equal(await page.locator('.rank-level-tab .sequence-pill').count(),4);
     const doc=await page.evaluate(()=>window.fixture.doc);assert.deepEqual(doc.levels[1].bounds,{minX:1,maxX:6,minY:0,maxY:35});assert.deepEqual(doc.levels[2].bounds,{minX:2,maxX:7,minY:0,maxY:35});
   });

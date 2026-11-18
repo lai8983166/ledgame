@@ -96,22 +96,21 @@ try {
     await expect(page.locator('html')).toHaveClass(/editor-saving/);
     assert.equal(await button('保存').evaluate(node=>getComputedStyle(node).cursor),'wait');
     await expect(button('保存')).toBeDisabled();
-    await expect(page.locator('.editor-save-dialog h2')).toHaveText('保存成功');
+    await page.locator('.editor-save-toast').waitFor();
     await expect(page.locator('html')).not.toHaveClass(/editor-saving/);
-    await page.locator('.editor-save-dialog button').click();
     const input=page.locator('.editor-left input').first();await input.fill('10');assert.equal(await input.inputValue(),'10');
-    records.push({action:'保存等待游标、结束恢复及弹窗后输入',passed:true});
+    records.push({action:'保存等待游标、结束恢复及成功提示期间输入',passed:true});
     await button('全局配置').click();
     const globalField=label=>page.locator('.global-config-field').filter({has:page.locator('.global-config-label').filter({hasText:new RegExp('^'+label+'$')})}).locator('input');
     for(const [label,value] of [['描述','全局描述'],['备注','全局备注'],['宽度','18'],['高度','40']])await globalField(label).fill(value);
-    await page.locator('.global-config-actions .primary').click();await expect(page.locator('.editor-save-dialog h2')).toHaveText('保存成功');await page.locator('.editor-save-dialog button').click();
+    await page.locator('.global-config-actions .primary').click();await page.locator('.editor-save-toast').waitFor();
     const updated=(await request(`/game-editor/${id}`)).data;assert.equal(updated.description,'全局描述');assert.equal(updated.remark,'全局备注');assert.equal(updated.siteSizeWidth,18);assert.equal(updated.siteSizeHeight,40);
     assert.equal(await page.locator('.editor-left input[type=text]').count(),0);
     await button('地砖布线').click();await expect(page.locator('.elc408-wiring-controls fieldset').first().locator('input[type=number]')).toHaveCount(1);
-    await button('保存此游戏布线').click();await expect(page.locator('.editor-save-dialog h2')).toHaveText('保存成功');await page.locator('.editor-save-dialog button').click();
+    await button('保存此游戏布线').click();await page.locator('.editor-save-toast').waitFor();
     let wired=(await request(`/game-editor/${id}`)).data;assert.equal(wired.wiringData.width,18);assert.equal(wired.wiringData.height,40);
     await button('全局配置').click();await globalField('宽度').fill('20');await globalField('高度').fill('42');
-    await page.locator('.global-config-actions .primary').click();await expect(page.locator('.editor-save-dialog h2')).toHaveText('保存成功');await page.locator('.editor-save-dialog button').click();
+    await page.locator('.global-config-actions .primary').click();await page.locator('.editor-save-toast').waitFor();
     wired=(await request(`/game-editor/${id}`)).data;assert.equal(wired.wiringData.width,20);assert.equal(wired.wiringData.height,42);
     records.push({action:'真实后端全局元数据/尺寸持久化、布线保存反馈及尺寸同步',passed:true});
     wired.levels[0].frameList=Array.from({length:100},()=>({repeatTimes:1,matrix:[]}));
@@ -150,7 +149,7 @@ try {
     const clickCell=async(x,y)=>{const p=await point(x,y);await page.mouse.click(p.x,p.y);};
     const dragCells=async(a,b)=>{const start=await point(...a),end=await point(...b);await page.mouse.move(start.x,start.y);await page.mouse.down();await page.mouse.move(end.x,end.y);await page.mouse.up();};
     const savedPoints=async()=>{
-      await button('保存').click();await expect(page.locator('.editor-save-dialog h2')).toHaveText('保存成功');await page.locator('.editor-save-dialog button').click();
+      await button('保存').click();await page.locator('.editor-save-toast').waitFor();
       const game=(await request(`/game-editor/${id}`)).data,objects=game.levels[0].frameList[0].matrix;
       return{objects,points:objects.flatMap(object=>object.points.map(([x,y])=>`${object.x+x},${object.y+y}`)).sort()};
     };

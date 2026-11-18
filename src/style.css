@@ -110,24 +110,6 @@ button {
   -webkit-app-region: drag;
 }
 
-.window-titlebar-icon {
-  width: 28px;
-  height: 28px;
-  flex: 0 0 28px;
-  object-fit: contain;
-  border-radius: 6px;
-  -webkit-app-region: drag;
-}
-
-.window-titlebar-icon--fallback {
-  display: inline-grid;
-  place-items: center;
-  color: #252a30;
-  background: linear-gradient(145deg, #f6f9fb, #aeb8c3);
-  font-size: 14px;
-  box-shadow: inset 2px 2px 4px rgba(255, 255, 255, 0.78), inset -2px -2px 4px rgba(31, 38, 47, 0.35);
-}
-
 .window-titlebar-title {
   overflow: hidden;
   text-overflow: ellipsis;

@@ -84,11 +84,11 @@ try {
     await page.locator('.editor-save-dialog').waitFor();assert.equal(await page.evaluate(()=>window.fixture.calls),1);
     assert.equal(await dirty(),true);await close();
     await tab('global').click();assert.equal(await field('名称').inputValue(),'统一保存名称');
-    await page.evaluate(()=>window.fixture.fail=false);await button('保存').click();await page.locator('.editor-save-dialog').waitFor();
+    await page.evaluate(()=>window.fixture.fail=false);await button('保存').click();await page.locator('.editor-save-toast').waitFor();
     assert.equal(await page.evaluate(()=>window.fixture.calls),2);
     const doc=await page.evaluate(()=>window.fixture.doc);
     assert.equal(doc.name,'统一保存名称');assert.equal(doc.levels[0].option.desc,'关卡草稿');
-    assert.deepEqual(doc.wiringData.lines,[[[1,2],[2,2]]]);assert.equal(doc.commonConfig.pixelLightWiring.form.open,0);assert.equal(await dirty(),false);await close();
+    assert.deepEqual(doc.wiringData.lines,[[[1,2],[2,2]]]);assert.equal(doc.commonConfig.pixelLightWiring.form.open,0);assert.equal(await dirty(),false);
     await mount('SimpleGameEditorView');await tab('global').click();assert.equal(await field('名称').inputValue(),'统一保存名称');
     await tab('wiring').click();await page.locator('.elc408-wiring-panel').waitFor();
     assert.deepEqual(await page.evaluate(()=>window.getComponentSetup().wiringPageRef.getDraft().lines),[[[1,2],[2,2]]]);
@@ -97,7 +97,7 @@ try {
     await tab('global').click();await field('宽度').fill('1');await tab('wiring').click();
     const before=await page.evaluate(()=>window.fixture.calls);await button('保存').click();await page.locator('.editor-save-dialog').waitFor();
     assert.equal(await page.evaluate(()=>window.fixture.calls),before);assert.equal(await dirty(),true);await close();
-    await tab('global').click();await field('宽度').fill('16');await button('保存').click();await page.locator('.editor-save-dialog').waitFor();await close();
+    await tab('global').click();await field('宽度').fill('16');await button('保存').click();await page.locator('.editor-save-toast').waitFor();
   });
   await check('三个页面在大小视口完整显示，返回关卡后矩阵可操作',async()=>{
     for(const width of [1920,1366,1024]){

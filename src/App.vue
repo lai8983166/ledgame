@@ -765,7 +765,7 @@ function formatRuntimeValue(value, fallback = "-") {
   <main v-if="!workspaceAccessible" class="app-shell" :class="{ 'app-shell--custom-titlebar': api?.customTitleBarEnabled }" data-testid="activation-gate">
     <p v-if="!activationDialogVisible" class="startup-loading" role="status">{{ t('common.dataLoading') }}</p>
     <div v-if="api?.customTitleBarEnabled" class="window-titlebar" data-testid="window-titlebar">
-      <span class="window-titlebar-drag-region"><span class="window-titlebar-icon window-titlebar-icon--fallback" aria-hidden="true">◆</span><span class="window-titlebar-title">{{ applicationTitle }}</span></span>
+      <span class="window-titlebar-drag-region"><span class="window-titlebar-title">{{ applicationTitle }}</span></span>
       <span class="window-titlebar-controls">
         <button type="button" class="window-titlebar-control" :aria-label="t('windowControls.minimize')" @click="api.minimizeWindow?.()">−</button>
         <button type="button" class="window-titlebar-control" :aria-label="t('windowControls.maximize')" @click="api.toggleMaximizeWindow?.()">□</button>
@@ -808,8 +808,6 @@ function formatRuntimeValue(value, fallback = "-") {
   >
     <div v-if="api?.customTitleBarEnabled" class="window-titlebar" data-testid="window-titlebar">
       <span class="window-titlebar-drag-region">
-        <img v-if="applicationIconData" class="window-titlebar-icon" :src="applicationIconData" alt="" />
-        <span v-else class="window-titlebar-icon window-titlebar-icon--fallback" aria-hidden="true">◆</span>
         <span class="window-titlebar-title">{{ applicationTitle }}</span>
       </span>
       <span class="window-titlebar-controls">

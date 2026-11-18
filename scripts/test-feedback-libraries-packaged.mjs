@@ -44,7 +44,7 @@ try{
   await button('特效').click();const effect=page.locator('.game-effect-dialog');await effect.locator('select').first().selectOption('overwrite');
   const step=effect.locator('label').filter({has:page.locator('span').filter({hasText:/^步长$/})}).locator('input');await step.press('ArrowUp');await expect(step).toHaveValue('2');await step.press('ArrowDown');await expect(step).toHaveValue('1');
   await effect.locator('label').filter({has:page.locator('span').filter({hasText:/^终点 X/})}).locator('input').fill('3');await effect.locator('.game-effect-actions .primary').click();await effect.waitFor({state:'hidden'});
-  await button('保存').click();await expect(page.locator('.editor-save-dialog h2')).toHaveText('保存成功');await page.locator('.editor-save-dialog button').click();
+  await button('保存').click();await page.locator('.editor-save-toast').waitFor();
   const saved=(await request(`/game-editor/${id}`)).data.levels[0].frameList;assert.equal(saved.length,3);assert.deepEqual(saved.map(frame=>frame.matrix.map(item=>[item.x,item.y])),[[[0,0]],[[1,0]],[[2,0]]]);
   records.push({action:'真实EXE自定义精灵颜色筛选与特效覆盖/补帧，保存后后端回读精确帧',passed:true});await button('返回列表').click();
   await tab('媒体库').click();await page.setViewportSize({width:1024,height:600});

@@ -7,6 +7,7 @@ import {
   SECONDARY_DISPLAY_MODES,
 } from "../lib/secondaryDisplayPresentation.js";
 import IdlePromptDisplay from "../components/IdlePromptDisplay.vue";
+import SecondaryIdleSubtitle from "../components/SecondaryIdleSubtitle.vue";
 import GameplayIntroVideo from '../components/GameplayIntroVideo.vue';
 import stageSuccessImage from "../assets/secondary-display/stage-success.png";
 import stageFailureImage from "../assets/secondary-display/stage-failure.png";
@@ -32,6 +33,7 @@ const secondaryIdlePromptText = ref("LED FLOOR GAME");
 const secondaryIdleSubtitleText = ref('');
 const secondaryIdlePromptFontSize = ref(72);
 const secondaryIdleSubtitleFontSize = ref(72);
+const secondaryIdleSubtitleStyle = ref("sans");
 const stateObservedAt = ref(Date.now());
 const clockNow = ref(Date.now());
 let removeStateListener = null;
@@ -122,6 +124,7 @@ function applyApplicationSettings(settings) {
     : "";
   secondaryIdlePromptText.value = text || "LED FLOOR GAME";
   secondaryIdleSubtitleText.value = typeof settings?.secondaryIdleSubtitleText === 'string' ? settings.secondaryIdleSubtitleText.trim() : '';
+  secondaryIdleSubtitleStyle.value = settings?.secondaryIdleSubtitleStyle || "sans";
   const fontSize = Number(settings?.secondaryIdlePromptFontSize);
   secondaryIdlePromptFontSize.value = Number.isInteger(fontSize) && fontSize >= 32 && fontSize <= 200
     ? fontSize
@@ -302,7 +305,8 @@ function displayValue(value) {
           :fading="idlePromptFading"
           @animation-end="idlePromptFading = false"
         />
-        <IdlePromptDisplay v-if="secondaryIdleSubtitleText" :text="secondaryIdleSubtitleText" :font-size="secondaryIdleSubtitleFontSize" :allow-wrap="true" :fading="idlePromptFading" @animation-end="idlePromptFading = false" />
+        <SecondaryIdleSubtitle v-if="secondaryIdleSubtitleText" :text="secondaryIdleSubtitleText"
+          :font-style="secondaryIdleSubtitleStyle" :font-size="secondaryIdleSubtitleFontSize" :fading="idlePromptFading" />
       </div>
     </section>
 
@@ -410,7 +414,7 @@ function displayValue(value) {
 .secondary-runtime-content, .secondary-runtime-center { position: relative; z-index: 1; }
 .secondary-idle { position: relative; z-index: 1; width: 100%; height: 100%; overflow: hidden; }
 .secondary-idle-image, .secondary-idle-video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; background: #071018; }
-.secondary-idle-action { position: relative; z-index: 1; display: flex; flex-direction:column; gap:3vh; align-items: center; justify-content: center; width: 100%; height: 100%; background: rgba(7, 16, 24, 0.34); }
+.secondary-idle-action { position: relative; z-index: 1; display: flex; flex-direction:column; gap:4.5vh; align-items: center; justify-content: center; width: 100%; height: 100%; background: rgba(7, 16, 24, 0.34); }
 .secondary-runtime-center { height: 100%; display: grid; place-content: center; gap: 12px; padding: 6vh 7vw; text-align: center; }
 .secondary-runtime-center span, .game-heading > span { color: #63cde1; font-weight: 850; text-transform: uppercase; }
 .secondary-runtime-center h1, .secondary-runtime-center p { margin: 0; }

@@ -143,7 +143,9 @@ try {
     }, file);
     await card.hover(); await card.getByRole('button', { name: '导出', exact: true }).click();
     await expect.poll(() => readFile(file, 'utf8').then(() => true).catch(() => false)).toBe(true);
-    assert.deepEqual(JSON.parse(await readFile(file, 'utf8')), original);
+    assert.deepEqual(JSON.parse(await readFile(file, 'utf8')), {
+      ...original, category: { name: category.name, cover: category.cover },
+    });
     await select('游戏列表'); const before = (await request('/game')).data.length;
     await app.evaluate(({ dialog }) => { dialog.showOpenDialog = async () => ({ canceled: true, filePaths: [] }); });
     await button('导入游戏').click(); await page.locator('.game-creation-dialog footer .primary').click();
@@ -156,7 +158,7 @@ try {
     await expect(page.locator('.game-creation-dialog')).toHaveCount(0);
     const imported = (await request('/game')).data.find(g => g.name === '维护验收-Normal（导入）');
     importedId = imported?.id;
-    assert.ok(imported && imported.id !== simple); assert.equal(imported.firstCatalog, '');
+    assert.ok(imported && imported.id !== simple); assert.equal(imported.firstCatalog, String(category.id));
     for (const field of ['id', 'name', 'remark', 'firstCatalog', 'displayOrder', 'createTime', 'updateTime']) delete original[field];
     const comparable = { ...imported }; for (const field of ['id', 'name', 'remark', 'firstCatalog', 'displayOrder', 'createTime', 'updateTime']) delete comparable[field];
     assert.deepEqual(comparable, original);
@@ -167,7 +169,7 @@ try {
     card = page.locator(`.game-card[data-id="${simple}"]`);
     await expect(page.locator(`.game-card[data-id="${importedId}"]`)).toBeVisible();
     const imported = (await request(`/game/${importedId}`)).data;
-    assert.equal(imported.firstCatalog, ''); assert.equal(JSON.parse(imported.levels)[0].option.rewardPoints, 10);
+    assert.equal(imported.firstCatalog, String(category.id)); assert.equal(JSON.parse(imported.levels)[0].option.rewardPoints, 10);
   });
   await check('分类删除保留游戏，取消不写入，重试与卡片焦点正常', async () => {
     await select('首页'); const categoryCard = page.locator(`.game-category-card[data-id="${category.id}"]`); await categoryCard.hover();
@@ -191,7 +193,7 @@ try {
     await page.locator('.global-config-field').filter({ has: page.locator('.global-config-label').filter({ hasText: /^一级菜单$/ }) }).locator('select').selectOption(String(replacement.id));
     const visibility = page.locator('.global-config-field').filter({ hasText: '触屏显示' }).locator('input'); await visibility.uncheck();
     await page.locator('.global-config-actions .primary').click(); await expect(page.locator('.global-config-dialog')).toHaveCount(0);
-    await page.locator('.editor-save-dialog button').click();
+    await page.locator('.editor-save-toast').waitFor();
     assert.equal((await request(`/game/${simple}`)).data.childModeVisible, false);
     const rewardInput = page.locator('.editor-left input').first();
     const savedReward = await rewardInput.inputValue();
@@ -200,8 +202,7 @@ try {
     assert.equal(JSON.parse((await request(`/game/${simple}`)).data.levels)[0].option.rewardPoints, Number(savedReward));
     await page.locator('.editor-save-dialog button').click();
     await rewardInput.fill(savedReward); await button('保存').click();
-    await expect(page.locator('.editor-save-dialog h2')).toHaveText('保存成功');
-    await page.locator('.editor-save-dialog button').click();
+    await page.locator('.editor-save-toast').waitFor();
     await button('符号灯布局').click();
     await expect(page.locator('.pixel-layout-fields')).toBeHidden(); await expect(page.locator('.pixel-layout-preview-section')).toBeVisible();
     await expect(page.locator('.pixel-layout-floor-grid line')).toHaveCount(54);
@@ -220,15 +221,14 @@ try {
     assert.equal((await request(`/game/${rank}`)).data.name, originalName);
     await page.locator('.editor-save-dialog button').click();
     await rankName.fill(originalName);await page.locator('.global-config-actions .primary').click();
-    await expect(page.locator('.editor-save-dialog h2')).toHaveText('保存成功');
-    await page.locator('.editor-save-dialog button').click();
+    await page.locator('.editor-save-toast').waitFor();
     await button('添加关卡').click();await page.locator('[data-rank-field="level.type"]').selectOption('3');
     await page.locator('[data-rank-field="level.bounds.x"]').fill('2,15'); await page.locator('[data-rank-field="level.bounds.y"]').fill('3,34');
     await page.locator('[data-rank-field="level.label"]').fill('第二关验收');await page.locator('[data-rank-field="level.durationSeconds"]').fill('1');await page.locator('[data-rank-field="level.rewardPoints"]').fill('11');
     const explosion=page.locator('[data-rank-field="level.bombExplosionAudio"]');
     await explosion.getByRole('button',{name:'选择',exact:true}).click();
     await page.locator('.media-picker-row[data-path="危险来袭.mp3"]').click();await page.locator('.media-picker-actions .primary').click();
-    await page.locator('.rank-actions .primary').click();await expect(page.locator('.editor-save-dialog h2')).toHaveText('保存成功');await page.locator('.editor-save-dialog button').click();
+    await page.locator('.rank-actions .primary').click();await page.locator('.editor-save-toast').waitFor();
     const persisted=(await request(`/rank-game-editor/${rank}`)).data;assert.equal(persisted.levels.length,2);assert.equal(persisted.levels[1].label,'第二关验收');assert.equal(persisted.levels[1].rewardPoints,11);assert.deepEqual(persisted.levels[1].bounds,{minX:1,maxX:14,minY:2,maxY:33});
     assert.deepEqual(persisted.levels.map(level=>level.type),[2,3]);
     assert.equal(persisted.levels[0].bombWarningAudio,'危险来袭.mp3');assert.equal(persisted.levels[0].bombExplosionAudio,'Ranking/bomb.mp3');assert.equal(persisted.levels[1].bombExplosionAudio,'危险来袭.mp3');

@@ -306,8 +306,7 @@ try{
     assert.equal(await page.evaluate(()=>window.fixture.simple.siteSizeWidth),16);
     await page.locator('.editor-save-dialog button').click();
     await page.evaluate(()=>window.getComponentSetup().document.siteSizeWidth=16);
-    await button('保存').click();await page.locator('.editor-save-dialog').waitFor();
-    await page.locator('.editor-save-dialog button').click();
+    await button('保存').click();await page.locator('.editor-save-toast').waitFor();
     assert.equal(await page.evaluate(()=>window.fixture.simple.wiringData.runtimeEnabled),true);
     await mount('RankGameEditorView',{gameId:4});await button('地砖布线').click();await page.locator('.elc408-wiring-panel').waitFor();await page.locator('.rank-level-tab .sequence-pill').first().click();
     assert.equal(await page.evaluate(()=>window.fixture.rank.wiringData),undefined);

@@ -79,6 +79,13 @@ test('hidden modals do not disable ordinary editor keyboard commands', () => {
   assert.ok(fixture.calls.some(([action]) => action === 'redo'));
 });
 
+test('a successful save notification keeps editor shortcuts available', () => {
+  const fixture = editorFixture();
+  fixture.context.saveFeedback.value = { message: 'Saved successfully' };
+  fixture.press(keyboardEvent('ArrowRight'));
+  assert.equal(fixture.calls.length, 1);
+});
+
 test('native editable controls and composition keep their keyboard events', () => {
   const fixture = editorFixture();
   for (const target of [{ tagName: 'INPUT' }, { tagName: 'TEXTAREA' }, { tagName: 'SELECT' },

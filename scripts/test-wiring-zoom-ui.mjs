@@ -45,15 +45,18 @@ try {
     const canvas=page.locator('.elc408-wiring-canvas canvas');await canvas.waitFor();await page.waitForTimeout(150);
     const baseline=await canvas.evaluate(c=>({width:parseFloat(c.style.width),height:parseFloat(c.style.height)}));
     const box=await canvas.boundingBox();await page.mouse.move(box.x+box.width/2,box.y+box.height/2);
+    // The upper gutter must be outside the editable grid.
+    await page.mouse.click(box.x + box.width / 2, box.y + 4);
+    assert.deepEqual(await page.evaluate(()=>window.getComponentSetup().wiringPageRef.getDraft().lines.flat()), []);
     const scrollBefore=await page.evaluate(()=>document.querySelector('#app').scrollTop);
     for(let i=0;i<5;i++){await page.mouse.wheel(0,-100);await page.waitForTimeout(30);}
     const enlarged=await canvas.evaluate(c=>({width:parseFloat(c.style.width),height:parseFloat(c.style.height),canScroll:c.parentElement.scrollHeight>c.parentElement.clientHeight}));
     assert.ok(enlarged.height>baseline.height*1.5);assert.ok(enlarged.canScroll);
     assert.equal(await page.evaluate(()=>document.querySelector('#app').scrollTop),scrollBefore);
     assert.equal(await page.evaluate(()=>window.getComponentSetup().wiringPageRef.hasChanges()),false);
-    const geometry=async()=>canvas.evaluate(c=>{const r=c.getBoundingClientRect(),w=parseFloat(c.style.width),h=parseFloat(c.style.height),cell=h/36;return {left:r.left,top:r.top,sx:r.width/w,sy:r.height/h,cell,ox:(w-cell*16)/2};});
+    const geometry=async()=>canvas.evaluate(c=>{const r=c.getBoundingClientRect(),w=parseFloat(c.style.width),h=parseFloat(c.style.height),cell=(h-24)/36;return {left:r.left,top:r.top,sx:r.width/w,sy:r.height/h,cell,ox:(w-cell*16)/2,oy:(h-cell*36)/2};});
     let g=await geometry();
-    const point=(x,y)=>({x:g.left+(g.ox+(x+.5)*g.cell)*g.sx,y:g.top+(y+.5)*g.cell*g.sy});
+    const point=(x,y)=>({x:g.left+(g.ox+(x+.5)*g.cell)*g.sx,y:g.top+(g.oy+(y+.5)*g.cell)*g.sy});
     const draft=()=>page.evaluate(()=>window.getComponentSetup().wiringPageRef.getDraft().lines.flat());
     // Native scrollbars make the far edge accessible after enlargement.
     await canvas.evaluate(c=>{c.parentElement.scrollLeft=c.parentElement.scrollWidth;c.parentElement.scrollTop=c.parentElement.scrollHeight;});g=await geometry();

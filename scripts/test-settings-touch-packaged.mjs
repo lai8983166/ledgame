@@ -76,7 +76,7 @@ try {
   await page.locator('input[maxlength="12"]').fill('12345678');
   await page.locator('input[min="32"]').nth(1).fill('120');await page.locator('input[min="32"]').nth(2).fill('48');
   await page.locator('input[max="3600"]').fill('37');
-  await page.locator('select').selectOption('coin');await page.locator('input[max="999"]').fill('3');
+  await page.locator('select:has(option[value=coin])').selectOption('coin');await page.locator('input[max="999"]').fill('3');
   assert.equal(await page.locator('input[max="65535"]').count(), 0);
   assert.equal(await page.locator('.application-settings-panel small').count(),0);
   assert.equal(await page.locator('select').filter({has:page.locator('option[value="debug"]')}).count(),0);
@@ -110,8 +110,9 @@ try {
     assert.equal(reopened.touchExitPassword,'12345678');assert.equal(reopened.secondaryIdlePromptFontSize,120);assert.equal(reopened.secondaryIdleSubtitleFontSize,48);assert.equal(reopened.touchPreparationTimeoutSeconds,37);
     passed.push('重启后副屏上下标题和投币数量持久化');
     await page.evaluate(()=>window.secondaryDisplay.open());const secondary=await findWindow('secondary');
-    await secondary.locator('.touch-idle-title-face').nth(1).waitFor();assert.deepEqual(await secondary.locator('.touch-idle-title-face').allTextContents(),['上标题验收','下标题验收']);
-    assert.deepEqual(await secondary.locator('.touch-idle-prompt').evaluateAll(nodes=>nodes.map(node=>node.style.getPropertyValue('--idle-prompt-font-size'))),['120px','48px']);
+    await secondary.locator('.secondary-subtitle').waitFor();assert.deepEqual(await secondary.locator('.touch-idle-title-face, .secondary-subtitle').allTextContents(),['上标题验收','下标题验收']);
+    assert.equal(await secondary.locator('.touch-idle-prompt').evaluate(node => node.style.getPropertyValue('--idle-prompt-font-size')), '120px');
+    assert.equal(await secondary.locator('.secondary-subtitle').evaluate(node => node.style.getPropertyValue('--subtitle-size')), '48px');
     await page.evaluate(()=>window.ledGame.enterGameFlow({mode:'game'}));const touch=await findWindow('touch');
     await touch.locator('.touch-language-trigger').waitFor();
     for(const language of ['zh-CN','en-US']){await touch.locator('.touch-language-trigger').click();await touch.locator(`.touch-language-dialog input[value="${language}"]`).click();await touch.locator('.touch-language-dialog').waitFor({state:'hidden'});}

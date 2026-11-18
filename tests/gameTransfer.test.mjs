@@ -14,11 +14,18 @@ test('export preserves complete raw row, is atomic, and never writes on cancel',
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'game-transfer-'));
   try {
     const file = path.join(dir, 'game.json');
-    const row = { id: 5, type: 'default', levels: '[{"frameList":[]}]', wiringDataBak: 'raw', cover: null };
+    const row = { id: 5, type: 'default', levels: '[{"frameList":[]}]', wiringDataBak: 'raw', cover: null,
+      category: { name: 'Lights', cover: 'media/lights.png' } };
     await transfer.exportGameRecord({ id: 5, request: async () => ({ data: row }), chooseFile: async () => ({ canceled: true }) });
     assert.deepEqual(await fs.readdir(dir), []);
     await transfer.exportGameRecord({ id: 5, request: async () => ({ data: row }), chooseFile: async () => ({ filePath: file }) });
     assert.deepEqual(JSON.parse(await fs.readFile(file, 'utf8')), row);
+    await transfer.importGameRecord({ family: 'entertainment', chooseFile: async () => ({ filePaths: [file] }),
+      request: async (url, options) => {
+        assert.equal(url, '/games/import');
+        assert.deepEqual(JSON.parse(options.body).game, row);
+        return { data: { id: 6 } };
+      } });
     assert.deepEqual(await fs.readdir(dir), ['game.json']);
     await assert.rejects(transfer.exportGameRecord({ id: 5, request: async () => ({ data: row }), chooseFile: async () => ({ filePath: file }), io: { ...fs, rename: async () => { throw new Error('disk'); } } }));
     assert.deepEqual(JSON.parse(await fs.readFile(file, 'utf8')), row);

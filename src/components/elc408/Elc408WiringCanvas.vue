@@ -72,9 +72,11 @@ function render() {
   const viewportHeight = Math.max(64, container ? container.offsetHeight - 2 * container.clientTop : 240);
   const { width, height } = props.document;
   if (width <= 0 || height <= 0) return;
-  const cell = Math.max(8, Math.min(viewportWidth / width, viewportHeight / height)) * viewZoom;
-  const cssWidth = Math.max(viewportWidth, Math.ceil(cell * width));
-  const cssHeight = Math.max(viewportHeight, Math.ceil(cell * height));
+  const margin = 12;
+  const fitCell = Math.min((viewportWidth - margin * 2) / width, (viewportHeight - margin * 2) / height);
+  const cell = Math.max(8, fitCell) * viewZoom;
+  const cssWidth = Math.max(viewportWidth, Math.ceil(cell * width + margin * 2));
+  const cssHeight = Math.max(viewportHeight, Math.ceil(cell * height + margin * 2));
   if (canvas.width !== Math.floor(cssWidth * dpr) || canvas.height !== Math.floor(cssHeight * dpr)) {
     canvas.width = Math.floor(cssWidth * dpr);
     canvas.height = Math.floor(cssHeight * dpr);

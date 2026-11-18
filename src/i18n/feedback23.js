@@ -15,10 +15,28 @@ const copy = {
   'ro-RO': ['Mărimea titlului de sus','Mărimea titlului de jos','Revenire la pagina principală (secunde)','Acest câmp este obligatoriu','Introduceți un întreg de la {min} la {max}','Introduceți între {min} și {max} caractere','Parola trebuie să conțină între 4 și 12 cifre','Niveluri','{count} niveluri · selectat: {selected}','Configurarea nivelului selectat','Modificări nesalvate','Salvați modificările curente?','Salvează și ieși','Ieși fără salvare','Continuă editarea','Durată (secunde)','Pasul trebuie să fie un întreg pozitiv','Lățimea și înălțimea trebuie să fie întregi de la 1 la 50'],
   'ar-SA': ['حجم خط العنوان العلوي','حجم خط العنوان السفلي','مهلة العودة للرئيسية (ثوانٍ)','هذا الحقل مطلوب','أدخل عددًا صحيحًا من {min} إلى {max}','أدخل من {min} إلى {max} حرفًا','يجب أن تتكون كلمة المرور من 4 إلى 12 رقمًا','المستويات','{count} مستويات · المستوى المحدد {selected}','إعدادات المستوى المحدد','تغييرات غير محفوظة','هل تريد حفظ التغييرات الحالية؟','حفظ ومغادرة','مغادرة دون حفظ','متابعة التحرير','المدة (ثوانٍ)','يجب أن تكون الخطوة عددًا صحيحًا موجبًا','يجب أن يكون العرض والارتفاع عددين صحيحين من 1 إلى 50'],
 };
+const subtitleStyleLabels = {
+  'zh-CN': ['下标题样式', '简约黑体', '暖金衬线', '薄荷等宽'],
+  'en-US': ['Bottom title style', 'Clean sans serif', 'Warm gold serif', 'Mint monospace'],
+  'es-ES': ['Estilo del título inferior', 'Palo seco', 'Serifa dorada', 'Monoespaciada menta'],
+  'pt-PT': ['Estilo do título inferior', 'Sem serifa', 'Serifa dourada', 'Monoespaçada menta'],
+  'fr-FR': ['Style du titre inférieur', 'Sans empattement', 'Empattements dorés', 'Monospace menthe'],
+  'de-DE': ['Stil des unteren Titels', 'Schlichte Grotesk', 'Goldene Serifenschrift', 'Mintfarbene Festbreitenschrift'],
+  'pl-PL': ['Styl dolnego tytułu', 'Prosty bezszeryfowy', 'Złoty szeryfowy', 'Miętowy o stałej szerokości'],
+  'ru-RU': ['Стиль нижнего заголовка', 'Простой без засечек', 'Золотой с засечками', 'Мятный моноширинный'],
+  'vi-VN': ['Kiểu tiêu đề dưới', 'Chữ không chân', 'Chữ có chân màu vàng', 'Chữ đơn cách màu bạc hà'],
+  'it-IT': ['Stile del titolo inferiore', 'Senza grazie', 'Con grazie dorato', 'Monospaziato menta'],
+  'cs-CZ': ['Styl dolního nadpisu', 'Jednoduché bezpatkové', 'Zlaté patkové', 'Mátové neproporcionální'],
+  'ko-KR': ['아래 제목 스타일', '심플 고딕', '골드 명조', '민트 고정폭'],
+  'ro-RO': ['Stilul titlului de jos', 'Simplu fără serife', 'Serife aurii', 'Monospațiat mentă'],
+  'ar-SA': ['نمط العنوان السفلي', 'خط بسيط', 'خط ذهبي مزخرف', 'خط نعناعي ثابت العرض'],
+};
+
 export function feedback23Catalog(locale) {
+  const [label, sans, serif, mono] = subtitleStyleLabels[locale];
   const [top, bottom, timeout, required, integer, text, password, levelList, levelSelection, levelConfiguration, title, message, save, discard, stay, seconds, step, dimensions] = copy[locale];
   return {
-    applicationSettings: { secondaryIdleTopTitleFontSize: top, secondaryIdleSubtitleFontSize: bottom, preparationTimeoutSeconds: timeout, validation: { required, integer, text, password } },
+    applicationSettings: { subtitleStyle: { label, sans, serif, mono }, secondaryIdleTopTitleFontSize: top, secondaryIdleSubtitleFontSize: bottom, preparationTimeoutSeconds: timeout, validation: { required, integer, text, password } },
     editorDebug: { levelList, levelSelection, levelConfiguration },
     editorLeave: { title, message, save, discard, stay },
     simple: { levelTimeSecondsValue: seconds },

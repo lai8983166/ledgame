@@ -388,7 +388,7 @@ try {
     assert.deepEqual(imported.document.levels[1],before.document.levels[1]);assert.deepEqual(imported.document.commonConfig,before.document.commonConfig);
     assert.equal(imported.frame,0);assert.equal(imported.selected,'');assert.equal(imported.undo,0);assert.match((await read()).status,/请保存/);
     assert.notEqual(await page.evaluate(()=>window.fixture.game.levels[0].option?.rewardPoints),10,'import must not auto-save');
-    await button('保存').click();await page.locator('.editor-save-dialog h2').getByText('保存成功',{exact:true}).waitFor();await mount();
+    await button('保存').click();await page.locator('.editor-save-toast').waitFor();await mount();
     assert.deepEqual(await page.evaluate(()=>JSON.parse(JSON.stringify(window.getComponentSetup().createEditorPayload().levels.at(-1)))),exported);
     await page.evaluate(value=>{Object.assign(window.fixture.game,value);window.fixture.confirmResult=false;},backup);await mount();
   });

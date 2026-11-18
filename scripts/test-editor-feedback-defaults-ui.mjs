@@ -97,7 +97,7 @@ try {
     await globalName().fill('本地草稿');
     await page.locator('.global-config-actions .primary').click();
     await page.locator('.global-config-dialog').waitFor({ state: 'hidden' });
-    await page.locator('.editor-save-dialog button').click();
+    await page.locator('.editor-save-toast').waitFor();
     assert.deepEqual(await page.evaluate(() => window.fixture.writes), []);
     assert.deepEqual(await page.evaluate(() => window.fixture.reads), [1]);
     await page.getByRole('button', { name: '全局配置', exact: true }).click();

@@ -150,7 +150,7 @@ try {
     await page.locator('.media-picker-row[data-path="A/B/same.png"]').dblclick();
     await page.locator('.media-picker-dialog').waitFor({state:'hidden'});
     assert.match(await coverField.locator('input').inputValue(),/A\/B\/same.png/);
-    await page.locator('.global-config-actions .primary').click();await page.locator('.editor-save-dialog button').click();
+    await page.locator('.global-config-actions .primary').click();await page.locator('.editor-save-toast').waitFor();
     await page.getByRole('button',{name:'全局配置',exact:true}).click();await coverField.getByRole('button',{name:'选择',exact:true}).click();
     assert.equal(await page.locator('.media-picker-row[data-path="A/B/same.png"]').count(),1);
     await page.locator('.media-picker-actions .soft-button').click();

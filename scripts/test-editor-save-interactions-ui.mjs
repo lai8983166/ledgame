@@ -38,12 +38,12 @@ try {
     await page.waitForFunction(()=>window.finishSave);
     assert.equal(await save.evaluate(node=>getComputedStyle(node).cursor),'wait');assert.equal(await save.isDisabled(),true);
     await page.evaluate(()=>window.getComponentSetup().saveEditor());assert.equal(await page.evaluate(()=>window.saveCalls),1);
-    await page.evaluate(()=>{window.deferSave=false;window.finishSave();});await page.locator('.editor-save-dialog').waitFor();await close();
+    await page.evaluate(()=>{window.deferSave=false;window.finishSave();});await page.locator('.editor-save-toast').waitFor();
     assert.equal(await page.locator('html').evaluate(node=>node.classList.contains('editor-saving')),false);
     await page.evaluate(()=>{window.saves=[];window.saveCalls=0;});
   });
-  await check('Simple 保存成功弹窗、失败弹窗及关闭后的输入恢复',async()=>{
-    await save.click();await page.locator('.editor-save-dialog').getByRole('heading',{name:'保存成功'}).waitFor();await close();
+  await check('Simple 保存成功浮窗、失败弹窗及关闭后的输入恢复',async()=>{
+    await save.click();await page.locator('.editor-save-toast').waitFor();
     await page.evaluate(()=>window.failSave=true);await save.click();await page.locator('.editor-save-dialog').getByText('模拟磁盘写入失败').waitFor();await close();
     const input=page.locator('.editor-left input').first();await input.fill('');await save.click();await page.locator('.editor-save-dialog').getByText(/请填写以下必填项/).waitFor();
     assert.equal(await page.evaluate(()=>window.saves.length),1);await close();await input.fill('0');await page.evaluate(()=>window.failSave=false);
@@ -53,7 +53,7 @@ try {
     const pills=page.locator('.level-sequence-row .sequence-pill');await pills.nth(1).click();
     await pills.nth(0).dragTo(pills.nth(2));assert.deepEqual(await pills.allTextContents(),['B','C','A']);
     assert.equal((await page.locator('.level-sequence-row .sequence-pill.active').innerText()).trim(),'B');assert.equal(await page.locator('.level-reorder-actions').count(),0);
-    await save.click();await page.locator('.editor-save-dialog').waitFor();await close();
+    await save.click();await page.locator('.editor-save-toast').waitFor();
     assert.deepEqual(await page.evaluate(()=>window.saves.at(-1).levels.map(level=>level.option.rewardPoints)),[1,2,0]);
   });
   await check('关卡叉号悬停和聚焦可见，取消不切关，删除其他关保留当前帧草稿',async()=>{
@@ -80,7 +80,7 @@ try {
     const gap=await dialog.locator('.global-config-media').nth(2).evaluate(row=>{const input=row.querySelector('input'),button=row.querySelector('button');return button.getBoundingClientRect().left-input.getBoundingClientRect().right;});assert.ok(gap>=0&&gap<=8,gap);
     const field=dialog.locator('.global-config-field').filter({has:page.locator('.global-config-label').filter({hasText:/^名称$/})}).locator('input');await field.fill('');
     await dialog.locator('footer .primary').click();await page.locator('.editor-save-dialog').getByText(/请填写以下必填项/).waitFor();await close();assert.equal(await dialog.count(),1);
-    await field.fill('设置保存');await dialog.locator('footer .primary').click();await page.locator('.editor-save-dialog').waitFor();await close();
+    await field.fill('设置保存');await dialog.locator('footer .primary').click();await page.locator('.editor-save-toast').waitFor();
     assert.equal(await page.evaluate(()=>window.saves.at(-1).type),'default');assert.equal(await page.evaluate(()=>window.saves.at(-1).mode),'[2]');
   });
   await check('选择/添加游标、对象拖动及Delete删除后的即时更新',async()=>{
@@ -100,11 +100,11 @@ try {
     assert.equal(await page.evaluate(()=>window.focusCalls),0);
     await page.screenshot({path:path.join(output,'编辑器交互.png')});
   });
-  await check('Rank 保存成功、失败及必填项缺失均弹窗且失败不提交',async()=>{
+  await check('Rank 保存成功显示浮窗，失败或缺少必填项时显示错误弹窗',async()=>{
     const rankDoc={...doc,type:'rank',levels:[{type:1,durationSeconds:60,bounds:{minX:0,maxX:15,minY:0,maxY:35},targetsPerPlayerMin:1,targetsPerPlayerMax:2,refreshSeconds:6,bombMin:0,bombMax:1,bombWarningDelaySeconds:3,bombWarningDurationSeconds:1}]};
     await page.evaluate(doc=>{window.ledGame.getRankGameEditor=async()=>({data:structuredClone(doc)});},rankDoc);
     await mount('RankGameEditorView',rankDoc);
-    const button=page.locator('.rank-actions .primary');await button.click();await page.locator('.editor-save-dialog').getByRole('heading',{name:'保存成功'}).waitFor();await close();
+    const button=page.locator('.rank-actions .primary');await button.click();await page.locator('.editor-save-toast').waitFor();
     const count=await page.evaluate(()=>window.saves.length);await page.evaluate(()=>window.getComponentSetup().document.name='');await button.click();await page.locator('.editor-save-dialog').getByText(/请填写以下必填项/).waitFor();assert.equal(await page.evaluate(()=>window.saves.length),count);await close();
     await page.evaluate(()=>{window.getComponentSetup().document.name='Rank';window.failSave=true;});await button.click();await page.locator('.editor-save-dialog').getByText('模拟磁盘写入失败').waitFor();await close();
   });

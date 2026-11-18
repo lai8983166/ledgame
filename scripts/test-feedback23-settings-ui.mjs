@@ -100,12 +100,22 @@ try {
   });
   await check('旧上下标题继承原字号，独立设置后只改变对应标题并响应广播', async () => {
     assert.equal(await font(1).inputValue(), '96'); assert.equal(await font(2).inputValue(), '96');
+    const style = page.getByRole('combobox', { name: '下标题样式' });
+    for (const value of ['sans', 'serif', 'mono']) {
+      await style.selectOption(value);
+      await page.locator(`.subtitle-preview .secondary-subtitle--${value}`).waitFor();
+    }
     await font(1).fill('120'); await font(2).fill('48'); await save().click();
-    await mount('SecondaryDisplayView'); await page.locator('.touch-idle-prompt').nth(1).waitFor();
-    assert.deepEqual(await page.locator('.touch-idle-prompt').evaluateAll(nodes => nodes.map(node => node.style.getPropertyValue('--idle-prompt-font-size'))), ['120px', '48px']);
-    await page.evaluate(() => window.fixture.set({ secondaryIdleSubtitleFontSize: 64 }));
-    await page.waitForFunction(() => document.querySelectorAll('.touch-idle-prompt')[1].style.getPropertyValue('--idle-prompt-font-size') === '64px');
-    assert.equal(await page.locator('.touch-idle-prompt').first().evaluate(node => node.style.getPropertyValue('--idle-prompt-font-size')), '120px');
+    assert.equal(await page.evaluate(() => window.fixture.persisted().secondaryIdleSubtitleStyle), 'mono');
+    await mount('SecondaryDisplayView');
+    const subtitle = page.locator('.secondary-idle-action .secondary-subtitle');
+    await subtitle.waitFor();
+    assert.equal(await subtitle.evaluate(node => node.style.getPropertyValue('--subtitle-size')), '48px');
+    assert.ok(await subtitle.evaluate(node => node.classList.contains('secondary-subtitle--mono')));
+    assert.ok(await page.locator('.secondary-idle-action').evaluate(node => Math.abs(parseFloat(getComputedStyle(node).rowGap) - innerHeight * 0.045) < 0.1));
+    await page.evaluate(() => window.fixture.set({ secondaryIdleSubtitleFontSize: 64, secondaryIdleSubtitleStyle: 'serif' }));
+    await page.waitForFunction(() => document.querySelector('.secondary-subtitle--serif')?.style.getPropertyValue('--subtitle-size') === '64px');
+    assert.equal(await page.locator('.touch-idle-prompt').evaluate(node => node.style.getPropertyValue('--idle-prompt-font-size')), '120px');
     await page.screenshot({ path: path.join(output, 'secondary-independent-fonts.png') });
   });
   await check('配置桌面布局紧凑，小屏无水平溢出，必填标记和错误紧邻输入', async () => {
@@ -151,6 +161,7 @@ try {
     await page.evaluate(() => window.fixture.set({ navigationTitle: undefined }));
     await mount('App');
     await page.locator('.app-brand-title').waitFor();
+    assert.equal(await page.locator('.window-titlebar-drag-region > :not(.window-titlebar-title)').count(), 0);
     assert.equal(await page.locator('.app-brand-title').innerText(), '我的游戏');
     assert.equal(await page.locator('#app .window-titlebar-title').innerText(), 'LED Game');
     await page.evaluate(() => window.fixture.set({ navigationTitle: '测试游戏馆', applicationTitle: '旧标题不能改应用' }));

@@ -118,14 +118,14 @@ try {
       await page.getByRole('button',{name:'全局配置',exact:true}).click();
       await page.locator('.global-config-field').filter({has:page.locator('.global-config-label').filter({hasText:/^名称$/})}).locator('input').fill('配置草稿');
       await page.locator('.global-config-actions .primary').click();await page.locator('.global-config-dialog').waitFor({state:'hidden'});
-      await page.locator('.editor-save-dialog button').click();
+      await page.locator('.editor-save-toast').waitFor();
       assert.equal(await page.evaluate(()=>window.getComponentSetup().document.name),'配置草稿');
       await page.getByRole('button',{name:'符号灯布局',exact:true}).click();
       await page.locator('.pixel-layout-actions .primary').click();await page.locator('.pixel-layout-dialog').waitFor({state:'hidden'});
     }
     await page.getByRole('button',{name:'地砖布线',exact:true}).click();
     await page.locator('.game-wiring-dialog .elc408-actions .primary').click();await page.locator('.game-wiring-dialog').waitFor({state:'hidden'});
-    await page.locator('.editor-save-dialog button').click();
+    await page.locator('.editor-save-toast').waitFor();
     assert.equal(await page.evaluate(()=>window.fixture.firstSaves.length),previousCount,'configuration saving must remain local');
     assert.deepEqual(await page.evaluate(()=>window.fixture.reads),[]);
     const save=rank?page.locator('.rank-actions .primary'):page.locator('.editor-heading-actions').getByRole('button',{name:'保存',exact:true});
@@ -136,14 +136,14 @@ try {
     const previous=await page.evaluate(()=>window.fixture.firstSaves.length);
     await page.evaluate(()=>window.fixture.failSave=false);await save.click();
     await page.waitForFunction(previous=>window.fixture.firstSaves.length===previous+1,previous);
-    await page.locator('.editor-save-dialog button').click();
+    await page.locator('.editor-save-toast').waitFor();
     const id=await page.evaluate(()=>window.fixture.firstSaves.at(-1));
     const payload=await page.evaluate(()=>window.fixture.firstPayloads.at(-1));
     assert.equal(payload.id,null);assert.equal(payload.wiringData.runtimeEnabled,true);
     if(rank)assert.equal(payload.levels[0].bounds.maxY,35);
     await rename(`更新-${family}`);await save.click();
     await page.waitForFunction(id=>window.fixture.updates.includes(id),id);
-    await page.locator('.editor-save-dialog button').click();
+    await page.locator('.editor-save-toast').waitFor();
     assert.equal(await page.evaluate(()=>window.fixture.firstSaves.length),previous+1);
     assert.equal(await debug.count(),0);
     await page.screenshot({path:path.join(output,`首次保存-${family}.png`)});
