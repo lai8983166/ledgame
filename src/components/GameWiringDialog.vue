@@ -3,13 +3,13 @@ import { ref, watch, onMounted, onBeforeUnmount, nextTick } from 'vue';
 import { useI18n } from 'vue-i18n';
 import Elc408WiringPanel from './elc408/Elc408WiringPanel.vue';
 import EditorSaveDialog from './EditorSaveDialog.vue';
-import { createGameWiringDraft } from '../lib/gameWiring.js';
+import { GAME_WIRING_CONTROL_CHANNELS, createGameWiringDraft } from '../lib/gameWiring.js';
 
 const props=defineProps({wiring:{type:Object,default:null},width:{type:Number,required:true},height:{type:Number,required:true},saving:Boolean,error:String,embedded:Boolean});
 const emit=defineEmits(['cancel','save']);
 const {t}=useI18n({useScope:'global'});
 const dialog=ref(null), draft=ref(null), fallback=ref(false);
-const defaultControlChannel = ref(null);
+const defaultControlChannel = ref(8);
 const validationError=ref('');
 const panel=ref(null);
 function getDraft() {
@@ -25,10 +25,10 @@ watch(() => [props.width, props.height], ([width,height]) => { if (props.embedde
 const previousFocus=document.activeElement;
 let mounted=true;
 onMounted(async()=>{
-  const controllerChannels = window.elc408Tools?.readControllerChannels?.();
-  void controllerChannels?.then((value) => {
-    if (mounted) defaultControlChannel.value = value;
-  }).catch(() => { /* Inherited wiring remains selectable when the package config is unavailable. */ });
+  try {
+    const channels = await window.elc408Tools?.readControllerChannels?.();
+    if (GAME_WIRING_CONTROL_CHANNELS.includes(channels)) defaultControlChannel.value = channels;
+  } catch { /* Use the default eight-channel model. */ }
   let global=null;
   if(props.wiring?.runtimeEnabled !== true) {
     try {global=await window.elc408Tools?.readWiring?.();} catch { /* Missing global file does not prevent editing. */ }

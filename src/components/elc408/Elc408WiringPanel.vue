@@ -24,7 +24,7 @@ import { GAME_WIRING_CONTROL_CHANNELS, parseWiringFile, serializeGameWiring } fr
 
 const props = defineProps({
   initialDocument: { type: Object, default: null },
-  defaultControlChannel: { type: Number, default: null },
+  defaultControlChannel: { type: Number, default: 8 },
   gameScoped: Boolean,
   saving: Boolean,
   embedded: Boolean,
@@ -35,6 +35,7 @@ const { t } = useI18n({ useScope: "global" });
 const api = window.elc408Tools;
 
 const document = reactive(props.initialDocument ? JSON.parse(JSON.stringify(props.initialDocument)) : createWiringDocument());
+if (props.gameScoped) document.controlChannel ??= props.defaultControlChannel;
 const snapshot = () => JSON.stringify({
   width: document.width,
   height: document.height,
@@ -66,7 +67,7 @@ async function transferWiring(importing) {
       const result = await window.ledGame.importFrameJson({ title: t('gameWiring.import') });
       if (result?.canceled) return;
       const imported = parseWiringFile(result?.content, document, props.gameScoped);
-      delete document.controlChannel;
+      if (props.gameScoped) imported.controlChannel ??= props.defaultControlChannel;
       Object.assign(document, imported);
       emit('import');
     } else {
@@ -80,12 +81,7 @@ async function transferWiring(importing) {
 }
 
 const channelSummaries = computed(() => summarizeChannels(document));
-const effectiveControlChannel = computed(() => document.controlChannel ?? props.defaultControlChannel);
 
-function onControlChannelChange(event) {
-  if (event.target.value === "") delete document.controlChannel;
-  else document.controlChannel = Number(event.target.value);
-}
 
 function onModeChange(mode) {
   const result = setMode(document, mode);
@@ -250,10 +246,7 @@ async function download() {
       <fieldset v-if="gameScoped">
         <label class="elc408-controller-channel">
           <span>{{ t("gameWiring.controlChannel") }}</span>
-          <select :value="document.controlChannel ?? ''" :disabled="saving || transferring" @change="onControlChannelChange">
-            <option value="">{{ defaultControlChannel
-              ? t("gameWiring.inheritControlChannelDetail", { count: defaultControlChannel })
-              : t("gameWiring.inheritControlChannel") }}</option>
+          <select v-model.number="document.controlChannel" :disabled="saving || transferring">
             <option v-for="count in GAME_WIRING_CONTROL_CHANNELS" :key="count" :value="count">
               {{ t("gameWiring.controlChannelOption", { count }) }}
             </option>
@@ -289,9 +282,9 @@ async function download() {
             <span class="elc408-channel-no">{{ channel.index + 1 }}</span>
             <div class="elc408-channel-details">
               <span class="elc408-channel-count">{{ t("elc408.wiring.pointCount") }}: {{ channel.pointCount }}</span>
-              <small v-if="gameScoped && effectiveControlChannel">{{ t("gameWiring.controllerPort", {
-                controller: Math.floor(channel.index / effectiveControlChannel) + 1,
-                port: channel.index % effectiveControlChannel + 1,
+              <small v-if="gameScoped">{{ t("gameWiring.controllerPort", {
+                controller: Math.floor(channel.index / document.controlChannel) + 1,
+                port: channel.index % document.controlChannel + 1,
               }) }}</small>
             </div>
           </li>
