@@ -1,15 +1,22 @@
 import { createWiringDocument, WIRING_MODES } from './elc408/elc408Wiring.js';
 
+export const GAME_WIRING_CONTROL_CHANNELS = [1, 2, 4, 8];
+
 export function createGameWiringDraft(saved, width, height, global) {
-  const source = saved?.runtimeEnabled === true ? saved
-    : global?.width === width && global?.height === height ? global : null;
+  const savedWiring = saved?.runtimeEnabled === true ? saved : null;
+  const source = savedWiring ?? (global?.width === width && global?.height === height ? global : null);
+  const controlChannel = savedWiring?.controlChannel;
   return {
     ...createWiringDocument({width,height,mode:source?.mode || 'TURN_BACK_ROW_PRIORITY',maxPointsPerChannel:source?.maxPointsPerChannel || 64}),
     lines: source?.lines?.length ? JSON.parse(JSON.stringify(source.lines)) : [[]],
+    ...(controlChannel === undefined ? {} : { controlChannel }),
   };
 }
 
 export function serializeGameWiring(draft) {
+  if (draft.controlChannel != null && !GAME_WIRING_CONTROL_CHANNELS.includes(draft.controlChannel)) {
+    throw new Error('gameWiring.invalidControlChannel');
+  }
   if (!Number.isInteger(draft.width) || draft.width < 1 || !Number.isInteger(draft.height) || draft.height < 1
     || !WIRING_MODES.includes(draft.mode) || !Number.isInteger(draft.maxPointsPerChannel)
     || draft.maxPointsPerChannel < 1 || draft.maxPointsPerChannel > 170 || !Array.isArray(draft.lines) || !draft.lines.length) {
@@ -26,7 +33,8 @@ export function serializeGameWiring(draft) {
     }
   }
   return {runtimeEnabled:true,width:draft.width,height:draft.height,mode:draft.mode,
-    maxPointsPerChannel:draft.maxPointsPerChannel,cellSize:20,lines:JSON.parse(JSON.stringify(draft.lines))};
+    maxPointsPerChannel:draft.maxPointsPerChannel,cellSize:20,lines:JSON.parse(JSON.stringify(draft.lines)),
+    ...(draft.controlChannel === undefined ? {} : { controlChannel: draft.controlChannel })};
 }
 
 export function parseWiringFile(content, current, gameScoped = true) {
@@ -34,7 +42,8 @@ export function parseWiringFile(content, current, gameScoped = true) {
   try { source = JSON.parse(content.replace(/^\uFEFF/, '')); }
   catch { throw new Error('gameWiring.invalid'); }
   if (!source || typeof source !== 'object' || Array.isArray(source)) throw new Error('gameWiring.invalid');
-  const wiring = serializeGameWiring({ ...source, mode: source.mode ?? current.mode });
+  const wiring = serializeGameWiring({ ...source, mode: source.mode ?? current.mode,
+    controlChannel: gameScoped ? source.controlChannel : undefined });
   if (gameScoped && (wiring.width !== current.width || wiring.height !== current.height)) {
     throw new Error('gameWiring.importSizeMismatch');
   }

@@ -130,7 +130,7 @@ onMounted(async()=>{
   window.addEventListener('keydown',scanKey);
   await action(async()=>{
     apply(await api.gameState());if(!isDebugRuntimeAvailable(state.value))throw new Error('editorDebug.busy');
-    try{await api.prepareEditorDebugHardware();}
+    try{await api.prepareEditorDebugHardware(props.game.id);}
     catch(e){
       if(!alive)return;
       entryHardwareWarning.value=hardwareMessage(e);

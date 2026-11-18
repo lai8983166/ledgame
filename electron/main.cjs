@@ -2165,9 +2165,10 @@ ipcMain.handle('game:queue:cancel', async (_event, itemId) => {
   await backendRequest(request.pathname, request.options)
   return requestCurrentGameState()
 })
-ipcMain.handle('editor-debug:hardware', async (event) => {
+ipcMain.handle('editor-debug:hardware', async (event, gameId) => {
   if (event.sender !== mainWindow?.webContents) throw new Error('Editor debugging requires the main window');
-  return backendRequest('/hardware/elc408/debug/prepare', { method: 'POST' });
+  const query = gameId == null ? '' : `?gameId=${normalizeGameRecordId(gameId)}`;
+  return backendRequest(`/hardware/elc408/debug/prepare${query}`, { method: 'POST' });
 })
 ipcMain.handle('editor-debug:prepare', async (event, payload) => {
   if (!mainWindow || event.sender !== mainWindow.webContents) throw new Error('EDITOR_DEBUG_MAIN_WINDOW_REQUIRED')
@@ -2433,6 +2434,11 @@ ipcMain.handle('elc408:generate-config', (_event, draft) =>
 )
 ipcMain.handle('elc408:read-wiring', async () => {
   return JSON.parse(await fs.readFile(path.join(getElc408ConfigDirectory(), 'wiring.json'), 'utf8'))
+})
+ipcMain.handle('elc408:read-controller-channels', async () => {
+  const config = JSON.parse(await fs.readFile(path.join(getElc408ConfigDirectory(), 'conf.json'), 'utf8'))
+  const match = /^HC0([1248])$/.exec(config.controllerModel === undefined ? 'HC08' : config.controllerModel)
+  return match ? Number(match[1]) : null
 })
 ipcMain.handle('elc408:generate-wiring', (_event, document) =>
   backendRequest('/hardware/elc408/files/wiring', {

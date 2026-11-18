@@ -9,6 +9,7 @@ const props=defineProps({wiring:{type:Object,default:null},width:{type:Number,re
 const emit=defineEmits(['cancel','save']);
 const {t}=useI18n({useScope:'global'});
 const dialog=ref(null), draft=ref(null), fallback=ref(false);
+const defaultControlChannel = ref(null);
 const validationError=ref('');
 const panel=ref(null);
 function getDraft() {
@@ -24,6 +25,10 @@ watch(() => [props.width, props.height], ([width,height]) => { if (props.embedde
 const previousFocus=document.activeElement;
 let mounted=true;
 onMounted(async()=>{
+  const controllerChannels = window.elc408Tools?.readControllerChannels?.();
+  void controllerChannels?.then((value) => {
+    if (mounted) defaultControlChannel.value = value;
+  }).catch(() => { /* Inherited wiring remains selectable when the package config is unavailable. */ });
   let global=null;
   if(props.wiring?.runtimeEnabled !== true) {
     try {global=await window.elc408Tools?.readWiring?.();} catch { /* Missing global file does not prevent editing. */ }
@@ -43,7 +48,7 @@ onBeforeUnmount(()=>{mounted=false;if (!props.embedded) previousFocus?.focus?.()
       <p v-if="fallback">{{ t('gameWiring.newDraft') }}</p>
       <p v-if="error" class="error-line" role="alert">{{ error }}</p>
       <div class="game-wiring-content" :class="{saving}">
-        <Elc408WiringPanel v-if="draft" ref="panel" :initial-document="draft" :embedded="embedded" game-scoped :saving="saving" @save="emit('save',$event)" @save-error="validationError = $event" @import="fallback = false" />
+        <Elc408WiringPanel v-if="draft" ref="panel" :initial-document="draft" :embedded="embedded" game-scoped :default-control-channel="defaultControlChannel" :saving="saving" @save="emit('save',$event)" @save-error="validationError = $event" @import="fallback = false" />
         <p v-else>{{ t('common.loading') }}</p>
       </div>
     </section>

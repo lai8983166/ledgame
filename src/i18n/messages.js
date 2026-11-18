@@ -1590,10 +1590,29 @@ for (const [locale, overwrite] of Object.entries(effectOverwriteCopy)) {
   mergedMessages[locale] = mergeCatalog(mergedMessages[locale] || {}, { effect: { overwrite } });
 }
 
+const gameWiringControllerLabels = {
+  'zh-CN': ['每台分控的通道数', '沿用包配置', '沿用包配置（每台 {count} 路）', '{count} 条线路 1 个分控', '分控 {controller} · 端口 {port}', '每台分控的通道数必须是 1、2、4 或 8。'],
+  'en-US': ['Channels per controller', 'Use package configuration', 'Use package configuration ({count} per controller)', '{count} lines per controller', 'Controller {controller} · Port {port}', 'Channels per controller must be 1, 2, 4 or 8.'],
+  'es-ES': ['Canales por controlador', 'Usar la configuración del paquete', 'Usar la configuración del paquete ({count} por controlador)', '{count} líneas por controlador', 'Controlador {controller} · Puerto {port}', 'Los canales por controlador deben ser 1, 2, 4 u 8.'],
+  'pt-PT': ['Canais por controlador', 'Usar a configuração do pacote', 'Usar a configuração do pacote ({count} por controlador)', '{count} linhas por controlador', 'Controlador {controller} · Porta {port}', 'Os canais por controlador devem ser 1, 2, 4 ou 8.'],
+  'fr-FR': ['Canaux par contrôleur', 'Utiliser la configuration du paquet', 'Utiliser la configuration du paquet ({count} par contrôleur)', '{count} lignes par contrôleur', 'Contrôleur {controller} · Port {port}', 'Le nombre de canaux par contrôleur doit être 1, 2, 4 ou 8.'],
+  'de-DE': ['Kanäle pro Controller', 'Paketkonfiguration verwenden', 'Paketkonfiguration verwenden ({count} pro Controller)', '{count} Leitungen pro Controller', 'Controller {controller} · Anschluss {port}', 'Pro Controller sind 1, 2, 4 oder 8 Kanäle zulässig.'],
+  'pl-PL': ['Kanały na kontroler', 'Użyj konfiguracji pakietu', 'Użyj konfiguracji pakietu ({count} na kontroler)', '{count} linii na kontroler', 'Kontroler {controller} · Port {port}', 'Liczba kanałów na kontroler musi wynosić 1, 2, 4 lub 8.'],
+  'ru-RU': ['Каналов на контроллер', 'Использовать конфигурацию пакета', 'Использовать конфигурацию пакета ({count} на контроллер)', '{count} линий на контроллер', 'Контроллер {controller} · Порт {port}', 'Допустимо 1, 2, 4 или 8 каналов на контроллер.'],
+  'vi-VN': ['Số kênh trên mỗi bộ điều khiển', 'Dùng cấu hình gói', 'Dùng cấu hình gói ({count} kênh mỗi bộ điều khiển)', '{count} đường dây mỗi bộ điều khiển', 'Bộ điều khiển {controller} · Cổng {port}', 'Mỗi bộ điều khiển phải có 1, 2, 4 hoặc 8 kênh.'],
+  'it-IT': ['Canali per controller', 'Usa la configurazione del pacchetto', 'Usa la configurazione del pacchetto ({count} per controller)', '{count} linee per controller', 'Controller {controller} · Porta {port}', 'I canali per controller devono essere 1, 2, 4 oppure 8.'],
+  'cs-CZ': ['Kanály na řadič', 'Použít nastavení balíčku', 'Použít nastavení balíčku ({count} na řadič)', '{count} linek na řadič', 'Řadič {controller} · Port {port}', 'Na jeden řadič lze použít 1, 2, 4 nebo 8 kanálů.'],
+  'ko-KR': ['컨트롤러당 채널 수', '패키지 설정 사용', '패키지 설정 사용(컨트롤러당 {count}채널)', '컨트롤러당 {count}개 배선', '컨트롤러 {controller} · 포트 {port}', '컨트롤러당 채널 수는 1, 2, 4 또는 8이어야 합니다.'],
+  'ro-RO': ['Canale per controler', 'Folosește configurația pachetului', 'Folosește configurația pachetului ({count} per controler)', '{count} linii per controler', 'Controler {controller} · Port {port}', 'Un controler trebuie să aibă 1, 2, 4 sau 8 canale.'],
+  'ar-SA': ['القنوات لكل وحدة تحكم', 'استخدام إعدادات الحزمة', 'استخدام إعدادات الحزمة ({count} لكل وحدة تحكم)', '{count} خطوط لكل وحدة تحكم', 'وحدة التحكم {controller} · المنفذ {port}', 'يجب أن يكون عدد القنوات لكل وحدة تحكم 1 أو 2 أو 4 أو 8.'],
+};
+
 for (const locale of canonicalLocales) {
   mergedMessages[locale] = mergeCatalog(mergedMessages[locale], feedback23Catalog(locale));
   const [exportLabel, importLabel, importSizeMismatch] = wiringFileLabels[locale];
-  mergedMessages[locale].gameWiring = { ...mergedMessages[locale].gameWiring, export: exportLabel, import: importLabel, importSizeMismatch };
+  const [controlChannel, inheritControlChannel, inheritControlChannelDetail, controlChannelOption, controllerPort, invalidControlChannel] = gameWiringControllerLabels[locale];
+  mergedMessages[locale].gameWiring = { ...mergedMessages[locale].gameWiring, export: exportLabel, import: importLabel, importSizeMismatch,
+    controlChannel, inheritControlChannel, inheritControlChannelDetail, controlChannelOption, controllerPort, invalidControlChannel };
   mergedMessages[locale] = mergeCatalog(mergedMessages[locale], { effect: effectImpactCatalog(locale) });
   mergedMessages[locale] = mergeCatalog(mergedMessages[locale], { activation: activationCatalog(locale) });
   mergedMessages[locale] = mergeCatalog(mergedMessages[locale], { gameIntro: gameIntroCatalog(locale) });

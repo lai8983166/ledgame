@@ -35,6 +35,36 @@ test('legacy examples are not runtime defaults, a compatible global draft is cop
   assert.equal(global.lines[0][0][0], 1);
   assert.deepEqual(createGameWiringDraft(null, 8, 8, global).lines, [[]]);
 });
+test('game controller overrides round trip all four options without changing wiring slots', () => {
+  const lines = [[[1,0]],[],[[0,0]]];
+  const base = { ...createGameWiringDraft(null,2,1), lines };
+  for (const controlChannel of [1, 2, 4, 8]) {
+    const saved = serializeGameWiring({ ...base, controlChannel });
+    const reopened = createGameWiringDraft(saved,2,1);
+    assert.equal(reopened.controlChannel,controlChannel);
+    const imported = parseWiringFile(JSON.stringify(saved),base);
+    assert.equal(imported.controlChannel,controlChannel);
+    assert.deepEqual(imported.lines,lines);
+    assert.deepEqual(serializeGameWiring(reopened),saved);
+    assert.equal(parseWiringFile(JSON.stringify(saved),base,false).controlChannel,undefined);
+  }
+});
+
+test('game wiring inherits when its controller override is missing or null and rejects other values', () => {
+  const draft = createGameWiringDraft(null,2,1);
+  const inherited = serializeGameWiring(draft);
+  assert.equal(Object.hasOwn(inherited,'controlChannel'),false);
+  const imported = parseWiringFile(JSON.stringify(inherited),{ ...draft,controlChannel:2 });
+  assert.equal(Object.hasOwn(imported,'controlChannel'),false);
+  const explicitNull = serializeGameWiring({ ...draft,controlChannel:null });
+  assert.equal(createGameWiringDraft(explicitNull,2,1).controlChannel,null);
+  for (const controlChannel of [0, 3, 5, 16, '8', false]) {
+    assert.throws(() => parseWiringFile(JSON.stringify({ ...inherited,controlChannel }),draft), {
+      message: 'gameWiring.invalidControlChannel',
+    });
+  }
+});
+
 test('explicit saved mappings keep channel slots, modes, and reject duplicates/out of bounds/capacity', () => {
   const saved = {runtimeEnabled:true,width:2,height:1,mode:'TURN_BACK_COL_PRIORITY',maxPointsPerChannel:64,lines:[[[1,0]],[]]};
   const draft = createGameWiringDraft(saved,2,1);

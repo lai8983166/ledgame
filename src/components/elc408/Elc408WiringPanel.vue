@@ -20,16 +20,29 @@ import {
   extractBackendError,
 } from "../../lib/elc408/elc408ToolsState.js";
 import Elc408WiringCanvas from "./Elc408WiringCanvas.vue";
-import { parseWiringFile, serializeGameWiring } from "../../lib/gameWiring.js";
+import { GAME_WIRING_CONTROL_CHANNELS, parseWiringFile, serializeGameWiring } from "../../lib/gameWiring.js";
 
-const props = defineProps({ initialDocument: {type:Object, default:null}, gameScoped:Boolean, saving:Boolean, embedded:Boolean });
+const props = defineProps({
+  initialDocument: { type: Object, default: null },
+  defaultControlChannel: { type: Number, default: null },
+  gameScoped: Boolean,
+  saving: Boolean,
+  embedded: Boolean,
+});
 const emit = defineEmits(["save", "save-error", "import"]);
 
 const { t } = useI18n({ useScope: "global" });
 const api = window.elc408Tools;
 
 const document = reactive(props.initialDocument ? JSON.parse(JSON.stringify(props.initialDocument)) : createWiringDocument());
-const snapshot = () => JSON.stringify({ width:document.width, height:document.height, mode:document.mode, maxPointsPerChannel:document.maxPointsPerChannel, lines:document.lines });
+const snapshot = () => JSON.stringify({
+  width: document.width,
+  height: document.height,
+  mode: document.mode,
+  maxPointsPerChannel: document.maxPointsPerChannel,
+  lines: document.lines,
+  controlChannel: document.controlChannel,
+});
 let savedDraft = snapshot();
 function getDraft() { return serializeGameWiring(document); }
 function hasChanges() { return savedDraft !== snapshot(); }
@@ -53,6 +66,7 @@ async function transferWiring(importing) {
       const result = await window.ledGame.importFrameJson({ title: t('gameWiring.import') });
       if (result?.canceled) return;
       const imported = parseWiringFile(result?.content, document, props.gameScoped);
+      delete document.controlChannel;
       Object.assign(document, imported);
       emit('import');
     } else {
@@ -66,6 +80,12 @@ async function transferWiring(importing) {
 }
 
 const channelSummaries = computed(() => summarizeChannels(document));
+const effectiveControlChannel = computed(() => document.controlChannel ?? props.defaultControlChannel);
+
+function onControlChannelChange(event) {
+  if (event.target.value === "") delete document.controlChannel;
+  else document.controlChannel = Number(event.target.value);
+}
 
 function onModeChange(mode) {
   const result = setMode(document, mode);
@@ -227,6 +247,19 @@ async function download() {
           />
         </label>
       </fieldset>
+      <fieldset v-if="gameScoped">
+        <label class="elc408-controller-channel">
+          <span>{{ t("gameWiring.controlChannel") }}</span>
+          <select :value="document.controlChannel ?? ''" :disabled="saving || transferring" @change="onControlChannelChange">
+            <option value="">{{ defaultControlChannel
+              ? t("gameWiring.inheritControlChannelDetail", { count: defaultControlChannel })
+              : t("gameWiring.inheritControlChannel") }}</option>
+            <option v-for="count in GAME_WIRING_CONTROL_CHANNELS" :key="count" :value="count">
+              {{ t("gameWiring.controlChannelOption", { count }) }}
+            </option>
+          </select>
+        </label>
+      </fieldset>
       <fieldset>
         <legend>{{ t("elc408.wiring.wiringMode") }}</legend>
         <div class="elc408-mode-grid">
@@ -254,9 +287,13 @@ async function download() {
             @click="selectChannel(channel.index)"
           >
             <span class="elc408-channel-no">{{ channel.index + 1 }}</span>
-            <span class="elc408-channel-count">
-              {{ t("elc408.wiring.pointCount") }}: {{ channel.pointCount }}
-            </span>
+            <div class="elc408-channel-details">
+              <span class="elc408-channel-count">{{ t("elc408.wiring.pointCount") }}: {{ channel.pointCount }}</span>
+              <small v-if="gameScoped && effectiveControlChannel">{{ t("gameWiring.controllerPort", {
+                controller: Math.floor(channel.index / effectiveControlChannel) + 1,
+                port: channel.index % effectiveControlChannel + 1,
+              }) }}</small>
+            </div>
           </li>
         </ul>
       </fieldset>
@@ -327,6 +364,19 @@ async function download() {
   color: var(--ui-text-secondary);
   font-size: 0.81rem;
   font-weight: 570;
+}
+.elc408-wiring-controls .elc408-controller-channel {
+  align-items: stretch;
+  flex-direction: column;
+}
+.elc408-controller-channel select {
+  width: 100%;
+  min-height: 34px;
+  padding: 0 8px;
+  border: 1px solid var(--ui-border);
+  border-radius: 6px;
+  color: var(--ui-text);
+  background: var(--ui-input);
 }
 .elc408-wiring-controls input[type="number"] {
   width: 86px;
@@ -420,8 +470,12 @@ async function download() {
 .elc408-channel-list li:nth-child(8) .elc408-channel-no { background: var(--ui-surface); }
 .elc408-channel-list li:nth-child(9) .elc408-channel-no { background: var(--ui-surface); }
 .elc408-channel-list li:nth-child(10) .elc408-channel-no { background: var(--ui-surface); }
-.elc408-channel-count {
+.elc408-channel-details {
+  display: grid;
+  gap: 2px;
   min-width: 0;
+}
+.elc408-channel-count {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

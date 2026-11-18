@@ -159,7 +159,7 @@ const fullLedGameApi = {
   stopTouchGame: () => ipcRenderer.invoke('game:stop'),
   createPreparation: () => ipcRenderer.invoke('game:preparation:create'),
   createEditorPreparation: (payload) => ipcRenderer.invoke('editor-debug:prepare', payload),
-  prepareEditorDebugHardware: () => ipcRenderer.invoke('editor-debug:hardware'),
+  prepareEditorDebugHardware: (gameId) => ipcRenderer.invoke('editor-debug:hardware', gameId),
   createWristbandPreparation: (sessionId, wristbandId) =>
     ipcRenderer.invoke('game:preparation:create-wristband', sessionId, wristbandId),
   selectPreparationGame: (sessionId, gameId) =>
@@ -300,6 +300,7 @@ exposeApi('spiritLibrary', {
 exposeApi('elc408Tools', {
   networkInterfaces: () => ipcRenderer.invoke('elc408:network-interfaces'),
   readWiring: () => ipcRenderer.invoke('elc408:read-wiring'),
+  readControllerChannels: () => ipcRenderer.invoke('elc408:read-controller-channels'),
   generateConfig: (draft) => ipcRenderer.invoke('elc408:generate-config', draft),
   generateWiring: (document) => ipcRenderer.invoke('elc408:generate-wiring', document),
   reload: () => ipcRenderer.invoke('elc408:reload'),

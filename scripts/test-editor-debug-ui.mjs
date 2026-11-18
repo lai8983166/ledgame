@@ -27,7 +27,7 @@ await context.addInitScript(()=>{
     activationStatus: async () => ({ data: { activated: true, machineCode: 'UI-FIXTURE' } }),
     importFrameJson: async payload => { window.fixture.fileRequests.push(['import',payload]);return structuredClone(window.fixture.wiringImport); },
     exportFrameJson: async payload => { window.fixture.fileRequests.push(['export',payload]);return {canceled:false,filePath:'isolated/wiring.json'}; },
-    prepareEditorDebugHardware:async()=>{window.fixture.requests.push(['hardware']);if(window.fixture.deferHardware)await new Promise(resolve=>window.fixture.resolveHardware=resolve);if(state.engineState==='STOPPED'){state={engineState:'IDLE',queueSummary:{waiting:[]}};stateListeners.forEach(f=>f(clone(state)));}if(window.fixture.hardwareError)throw Error(window.fixture.hardwareError);return {data:{controllerCount:1}};},
+    prepareEditorDebugHardware:async gameId=>{window.fixture.requests.push(['hardware',gameId]);if(window.fixture.deferHardware)await new Promise(resolve=>window.fixture.resolveHardware=resolve);if(state.engineState==='STOPPED'){state={engineState:'IDLE',queueSummary:{waiting:[]}};stateListeners.forEach(f=>f(clone(state)));}if(window.fixture.hardwareError)throw Error(window.fixture.hardwareError);return {data:{controllerCount:1}};},
     latestFrame:async()=>clone(lastFrame),
     gameState:async()=>ret(),onEngineState:f=>{stateListeners.push(f);return()=>{stateListeners=stateListeners.filter(x=>x!==f);};},
     state:async()=>ret(),customTitleBarEnabled:true,
@@ -382,7 +382,7 @@ try{
     const before=await page.evaluate(()=>window.fixture.requests.length);
     await mount('EditorDebugWorkspace',{game});await page.locator('.debug-hardware-dialog').waitFor();
     assert.equal(await page.locator('.debug-hardware-dialog p').innerText(),'未连接设备');
-    assert.equal((await page.evaluate(()=>window.fixture.requests.slice(-1)))[0][0],'hardware');
+    assert.deepEqual(await page.evaluate(()=>window.fixture.requests.at(-1)),['hardware',game.id]);
     assert.equal(await page.evaluate(()=>window.fixture.requests.length),before+1);
     await page.waitForTimeout(850);assert.equal(await page.locator('.debug-hardware-dialog').count(),1);
     await page.locator('.debug-hardware-dialog').waitFor({state:'hidden',timeout:1800});
