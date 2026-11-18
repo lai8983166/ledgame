@@ -22,7 +22,7 @@ let renderRAF = 0;
 
 const dragState = ref(null);
 const DRAG_THRESHOLD = 4;
-let viewZoom = 1;
+let viewZoom = 0.75;
 let drawnLayout = null;
 
 onMounted(() => {

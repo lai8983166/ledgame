@@ -46,10 +46,10 @@ try {
     const baseline=await canvas.evaluate(c=>({width:parseFloat(c.style.width),height:parseFloat(c.style.height)}));
     const box=await canvas.boundingBox();await page.mouse.move(box.x+box.width/2,box.y+box.height/2);
     // The upper gutter must be outside the editable grid.
-    await page.mouse.click(box.x + box.width / 2, box.y + 4);
+    await page.mouse.click(box.x + box.width / 2, box.y + box.height * 0.10);
     assert.deepEqual(await page.evaluate(()=>window.getComponentSetup().wiringPageRef.getDraft().lines.flat()), []);
     const scrollBefore=await page.evaluate(()=>document.querySelector('#app').scrollTop);
-    for(let i=0;i<5;i++){await page.mouse.wheel(0,-100);await page.waitForTimeout(30);}
+    for(let i=0;i<8;i++){await page.mouse.wheel(0,-100);await page.waitForTimeout(30);}
     const enlarged=await canvas.evaluate(c=>({width:parseFloat(c.style.width),height:parseFloat(c.style.height),canScroll:c.parentElement.scrollHeight>c.parentElement.clientHeight}));
     assert.ok(enlarged.height>baseline.height*1.5);assert.ok(enlarged.canScroll);
     assert.equal(await page.evaluate(()=>document.querySelector('#app').scrollTop),scrollBefore);
@@ -67,7 +67,7 @@ try {
     assert.equal((await draft()).length,9);
     await page.screenshot({path:path.join(output,'zoom-'+viewport.width+'-dpr'+(process.env.TEST_DPR||1)+'.png')});
     await page.mouse.move(end.x,end.y);await page.mouse.down({button:'right'});await page.mouse.move(start.x,start.y,{steps:5});await page.mouse.up({button:'right'});assert.deepEqual(await draft(),[]);
-    for(let i=0;i<5;i++){await page.mouse.wheel(0,100);await page.waitForTimeout(30);}
+    for(let i=0;i<8;i++){await page.mouse.wheel(0,100);await page.waitForTimeout(30);}
     const restored=await canvas.evaluate(c=>({width:parseFloat(c.style.width),height:parseFloat(c.style.height)}));
     assert.ok(Math.abs(restored.height-baseline.height)<2);
     assert.equal(await page.evaluate(()=>window.getComponentSetup().wiringPageRef.hasChanges()),false);
