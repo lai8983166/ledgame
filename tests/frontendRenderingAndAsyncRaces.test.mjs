@@ -104,13 +104,13 @@ test("SimpleMatrixCanvas keeps outside interaction padding stable across editor 
   );
 });
 
-test("Simple editor can toggle overlap count indicators without changing occupancy", () => {
+test("Simple editor hides overlap indicators and the former toggle without changing occupancy", () => {
   assert.match(matrixCanvasSource, /showOverlapIndicator:\s*\{/);
   assert.match(matrixCanvasSource, /overlapCell && props\.showOverlapIndicator/);
   assert.match(matrixCanvasSource, /props\.showOverlapIndicator && cell\.overlapCount > 1/);
-  assert.match(editorSource, /const showOverlapIndicators = ref\(true\)/);
+  assert.match(editorSource, /const showOverlapIndicators = ref\(false\)/);
   assert.match(editorSource, /:show-overlap-indicator="showOverlapIndicators"/);
-  assert.match(editorSource, /showOverlapIndicators = !showOverlapIndicators/);
+  assert.doesNotMatch(editorSource.replace(/<!--[\s\S]*?-->/g, ""), /showOverlapIndicators = !showOverlapIndicators/);
 });
 
 test("debug simulation controls are gated by authoritative runtime mode", async () => {

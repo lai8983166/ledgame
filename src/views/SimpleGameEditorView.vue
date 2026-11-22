@@ -59,6 +59,7 @@ import { hasVisibleModalDialog, isComposingEvent } from "../lib/dialogInput.js";
 const { t } = useI18n({ useScope: "global" });
 const { confirmation, confirmAction, resolveConfirmation, isConfirmationCurrent } = useConfirmationDialog();
 const saveFeedback = ref(null);
+let toastSequence = 0;
 const draggingLevelIndex = ref(null);
 const levelDropIndex = ref(null);
 
@@ -164,7 +165,7 @@ const spriteSearchText = ref("");
 const spriteFilterColors = ref([]);
 const selectedSpriteId = ref("");
 const matrixZoom = ref(1);
-const showOverlapIndicators = ref(true);
+const showOverlapIndicators = ref(false);
 const draggingFrameProgress = ref(false);
 const previewFrameIndex = ref(null);
 const selectedObjectId = ref("");
@@ -1320,7 +1321,7 @@ async function runEditorAction(name, action, shouldCommit = () => true) {
     }
     if (name === 'save') await withEditorSavingCursor(action);
     else await action();
-    if (name === 'save' && shouldCommit()) saveFeedback.value = { message: statusMessage.value || t('simple.saveSuccess') };
+    if (name === 'save' && shouldCommit()) saveFeedback.value = { id: ++toastSequence, message: statusMessage.value || t('simple.saveSuccess') };
     return true;
   } catch (error) {
     if (shouldCommit()) {
@@ -2018,29 +2019,27 @@ function selectEditingMode(mode) {
   }
 }
 
-function deletePointAtCell(frame, existing, x, y) {
-  const topObjectId = getTopOccupancyEntry(existing?.occupants)?.object?.id;
-  const object = frame.matrix.find(entry => entry.id === topObjectId);
-  if (!object) return;
-  runRgbEdit(currentFrameRgbHistoryTargets(), "delete-point", () => {
-    object.points = getObjectPoints(object).filter(([dx, dy]) =>
-      toInteger(object.x, 0) + dx !== x || toInteger(object.y, 0) + dy !== y);
-    if (!object.points.length) {
-      frame.matrix = frame.matrix.filter(entry => entry.id !== object.id);
+function deleteTopPointsInCells(frame, cells) {
+  // Snapshot all visible points before changing any object in this gesture.
+  const removedByObject = new Map();
+  for (const { x, y } of cells) {
+    const object = getExpandedCellAt(x, y)?.object;
+    if (!object) continue;
+    if (!removedByObject.has(object.id)) removedByObject.set(object.id, new Set());
+    removedByObject.get(object.id).add(createPointKey(x, y));
+  }
+  if (!removedByObject.size) return;
+  runRgbEdit(currentFrameRgbHistoryTargets(), "delete-top-points", () => {
+    frame.matrix = frame.matrix.filter(object => {
+      const removed = removedByObject.get(object.id);
+      if (!removed) return true;
+      const x = toInteger(object.x, 0);
+      const y = toInteger(object.y, 0);
+      object.points = getObjectPoints(object).filter(([dx, dy]) => !removed.has(createPointKey(x + dx, y + dy)));
+      if (object.points.length) return true;
       if (selectedObjectId.value === object.id) selectedObjectId.value = "";
-    }
-  }, { recenter: false });
-}
-
-function deleteObjectsInCells(frame, cells) {
-  const keys = new Set(cells.map(cell => createPointKey(cell.x, cell.y)));
-  const removedIds = new Set(frame.matrix
-    .filter(object => getObjectCells(object).some(cell => keys.has(createPointKey(cell.x, cell.y))))
-    .map(object => object.id));
-  if (!removedIds.size) return;
-  runRgbEdit(currentFrameRgbHistoryTargets(), "delete-region-objects", () => {
-    frame.matrix = frame.matrix.filter(object => !removedIds.has(object.id));
-    if (removedIds.has(selectedObjectId.value)) selectedObjectId.value = "";
+      return false;
+    });
   }, { recenter: false });
 }
 
@@ -2067,8 +2066,7 @@ function handleCellClick(x, y) {
     return;
   }
   if (drawingTool.value === "delete") {
-    if (editingMode.value === "region") deleteObjectsInCells(frame, [{ x, y }]);
-    else deletePointAtCell(frame, existing, x, y);
+    deleteTopPointsInCells(frame, [{ x, y }]);
     return;
   }
   if (drawingTool.value !== "add") return;
@@ -2115,7 +2113,7 @@ function handleCellRangeCreate(payload) {
   }
   const frame = activeFrame.value || ensureActiveFrame();
   if (drawingTool.value === "delete") {
-    deleteObjectsInCells(frame, dedupeCells(payload?.cells || []));
+    deleteTopPointsInCells(frame, dedupeCells(payload?.cells || []));
     return;
   }
   const cells = filterUnoccupiedColorCells(frame.matrix, dedupeCells(payload?.cells || []), selectedColor.value);
@@ -2432,6 +2430,7 @@ function copyColorObjectsToAllFrames(colorIndex) {
       copiedFrames += 1;
     }
   })) return;
+  if (copiedFrames) saveFeedback.value = { id: ++toastSequence, message: t("simple.operationSuccess") };
   statusMessage.value = copiedFrames
     ? t("simple.colorCopied", {
       objects: sourceObjects.length,
@@ -2913,7 +2912,7 @@ function createCellTitle(x, y, occupants) {
     return `x ${x}, y ${y}`;
   }
   const topObjectId = getTopOccupancyEntry(occupants)?.object?.id || "";
-  const overlapText = occupants.length > 1
+  const overlapText = showOverlapIndicators.value && occupants.length > 1
     ? t("simple.overlapLayers", { count: occupants.length })
     : "";
   return `x ${x}, y ${y}, ${topObjectId}${overlapText}`;
@@ -3789,6 +3788,7 @@ function formatRuntimeSummary(value) {
                 ↷
               </button>
             </div>
+            <!--
             <button
               class="soft-button compact-button overlap-indicator-toggle"
               type="button"
@@ -3797,6 +3797,7 @@ function formatRuntimeSummary(value) {
             >
               {{ t(showOverlapIndicators ? "simple.hideOverlapCount" : "simple.showOverlapCount") }}
             </button>
+            -->
             <button class="soft-button compact-button" type="button" @click="togglePanoramaMode">
               {{ t(panoramaMode ? "simple.exitPanorama" : "simple.panorama") }}
             </button>
@@ -3992,7 +3993,7 @@ function formatRuntimeSummary(value) {
       :saving="busyAction === 'save'" :error="errorMessage" />
       </section>
     </div>
-    <EditorSaveToast v-if="saveFeedback && !saveFeedback.failed" :message="saveFeedback.message" @dismiss="saveFeedback = null" />
+    <EditorSaveToast v-if="saveFeedback && !saveFeedback.failed" :key="saveFeedback.id" :message="saveFeedback.message" @dismiss="saveFeedback = null" />
     <EditorSaveDialog v-else-if="saveFeedback" v-bind="saveFeedback" @close="saveFeedback = null" />
     <MediaPickerDialog v-if="levelMediaPicker" :accept="levelMediaPicker.field.accept" :current-value="levelMediaPicker.level.option[levelMediaPicker.field.key] || ''" :title="levelMediaPicker.field.label" @cancel="levelMediaPicker = null" @select="selectLevelMedia" />
     <PixelLightLayoutDialog

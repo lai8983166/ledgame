@@ -10,4 +10,5 @@ test('Electron launch normalization forwards the optional debug start-voice flag
   assert.equal(normalize({gameId:1,userCount:2,runtimeMode:'SIMULATION',skipGameStartAudio:true}).skipGameStartAudio,true);
   for(const value of [undefined,false,'true',1])assert.equal(normalize({gameId:1,skipGameStartAudio:value}).skipGameStartAudio,false);
   assert.equal(normalize({gameId:1,userCount:2}).userCount,2);
+  assert.equal(normalize({gameId:1,runtimeMode:'SIMULATION',stageFailurePolicy:'NEXT_STAGE'}).stageFailurePolicy,'NEXT_STAGE');
 });

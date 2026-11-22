@@ -12,7 +12,7 @@ export function debugLaunchPayload(game, options) {
   if (!debugPlayerCounts(game).includes(count) || !Number.isInteger(level) || level<1 || level>(game.levels?.length || 1))
     throw new Error('editorDebug.invalidOptions');
   return {gameId:Number(game.id),userCount:count,startLevelIndex:level-1,
-    launchMethod:options.launchMethod==='wristband'?'wristband':'debug',runtimeMode:'SIMULATION',stageFailurePolicy:options.stageFailurePolicy || 'END_GAME',
+    launchMethod:options.launchMethod==='wristband'?'wristband':'debug',runtimeMode:'SIMULATION',stageFailurePolicy:options.stageFailurePolicy || 'NEXT_STAGE',
     ...(options.skipGameStartAudio===true?{skipGameStartAudio:true}:{})};
 }
 export function appendDebugWristband(state, sessionId, uid) {

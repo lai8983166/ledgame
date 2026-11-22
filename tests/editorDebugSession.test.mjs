@@ -7,7 +7,7 @@ test('debug uses saved game, zero-based stage and fixed simulation without hijac
   assert.equal(isDebugRuntimeAvailable({engineState:'STOPPED'}),true);
   const game={id:1,type:'rank',minPlayers:1,maxPlayers:3,levels:[{},{}]};
   assert.deepEqual(debugLaunchPayload(game,{userCount:2,startLevel:2,launchMethod:'wristband',runtimeMode:'PRODUCTION'}),
-    {gameId:1,userCount:2,startLevelIndex:1,launchMethod:'wristband',runtimeMode:'SIMULATION',stageFailurePolicy:'END_GAME'});
+    {gameId:1,userCount:2,startLevelIndex:1,launchMethod:'wristband',runtimeMode:'SIMULATION',stageFailurePolicy:'NEXT_STAGE'});
   assert.throws(()=>debugLaunchPayload(game,{userCount:4,startLevel:1}));
   assert.equal(debugLaunchPayload(game,{userCount:2,startLevel:1,skipGameStartAudio:true}).skipGameStartAudio,true);
 });

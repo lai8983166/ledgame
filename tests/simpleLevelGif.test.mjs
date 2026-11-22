@@ -13,10 +13,14 @@ function pixelAt(rgba, width, x, y) {
   return [...rgba.slice(offset, offset + 4)];
 }
 
-test("selectSimpleTopItem uses last green object, otherwise last object", () => {
+test("selectSimpleTopItem uses green then red ahead of blue and purple regardless of insertion order", () => {
   const objects = [{ id: "green-a", color: 0 }, { id: "blue", color: 1 }, { id: "green-b", color: 0 }];
   assert.equal(selectSimpleTopItem(objects).id, "green-b");
-  assert.equal(selectSimpleTopItem([{ id: "pink", color: 2 }, { id: "blue", color: 1 }]).id, "blue");
+  for (const colors of [[2, 1, 3], [3, 2, 1], [1, 3, 2]]) {
+    assert.equal(selectSimpleTopItem(colors.map(color => ({color}))).color, 2);
+  }
+  assert.equal(selectSimpleTopItem([{color: 2}, {color: 0}, {color: 3}]).color, 0);
+  assert.equal(selectSimpleTopItem([{color: 3}, {color: 1}]).color, 1);
 });
 
 test("rasterizeSimpleFrame maps matrix coordinates, colors and black background", () => {

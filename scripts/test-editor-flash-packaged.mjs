@@ -164,11 +164,11 @@ try {
     await mode('point').click();await clickCell(2,2);
     saved=await savedPoints();assert.equal(saved.objects.length,2);assert.deepEqual(saved.points,['1,1','2,3','3,2','3,3']);
     await mode('region').click();await dragCells([3,2],[3,3]);
-    saved=await savedPoints();assert.equal(saved.objects.length,1);assert.deepEqual(saved.points,['1,1']);
+    saved=await savedPoints();assert.equal(saved.objects.length,2);assert.deepEqual(saved.points,['1,1','2,3']);
     await page.keyboard.press('Control+z');saved=await savedPoints();assert.deepEqual(saved.points,['1,1','2,3','3,2','3,3']);
-    await page.keyboard.press('Control+y');saved=await savedPoints();assert.deepEqual(saved.points,['1,1']);
+    await page.keyboard.press('Control+y');saved=await savedPoints();assert.deepEqual(saved.points,['1,1','2,3']);
     await page.locator('.editor-toolbar').screenshot({path:path.join(data,'对象编辑工具.png')});
-    records.push({action:'真实EXE新工具互斥与提示、Alt+A/D、单点禁止拖画、区域添加、逐点删除、相交整对象删除及撤销重做持久化',passed:true});
+    records.push({action:'真实EXE新工具互斥与提示、Alt+A/D、单点禁止拖画、区域添加、逐点删除、区域逐格顶层删除及撤销重做持久化',passed:true});
     await page.locator('.repeat-times-control input').fill('7');
     await button('在当前帧后添加帧').click();
     await expect(page.locator('.repeat-times-control input')).toHaveValue('7');

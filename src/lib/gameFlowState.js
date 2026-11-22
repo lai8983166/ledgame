@@ -227,7 +227,8 @@ function normalizeLifecycleState(value) {
 }
 
 function normalizeFailurePolicy(value) {
-  return String(value || "END_GAME").toUpperCase() === "RETRY" ? "RETRY" : "END_GAME";
+  const policy = String(value || "END_GAME").toUpperCase();
+  return ["RETRY", "NEXT_STAGE"].includes(policy) ? policy : "END_GAME";
 }
 
 function nullableNumber(value) {

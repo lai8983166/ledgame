@@ -43,7 +43,9 @@ await context.addInitScript(()=>{
     confirmPreparation:async id=>{window.fixture.requests.push(['confirm',id]);state={...state,engineState:'RUNNING',preparation:null,gameTime:{mode:'LIMITED',remainingMillis:60000},gameplay:{score:2,life:3,memberPoints:10}};return ret();},
     cancelPreparation:async id=>{window.fixture.requests.push(['cancel',id]);state={engineState:'IDLE',queueSummary:{waiting:[]}};return ret();},
     sendDebugCommand:async request=>{window.fixture.requests.push(['command',clone(request)]);if(request.command==='endgame'){if(window.fixture.failStop)throw Error('停止失败');state={engineState:'STOPPED',sessionId:state.sessionId,terminationReason:'MANUAL_STOP',queueSummary:{waiting:[]}};}
-      else if(request.command==='pause')state.engineState='PAUSED';else if(request.command==='resume')state.engineState='RUNNING';return ret();},
+      else if(request.command==='idleaftercompletion' && request.sessionId===state.sessionId && state.engineState==='STOPPED'){
+        window.fixture.update({engineState:'IDLE',queueSummary:{waiting:[]}});
+      }else if(request.command==='pause')state.engineState='PAUSED';else if(request.command==='resume')state.engineState='RUNNING';return ret();},
     enterGameFlow:async()=>{window.fixture.requests.push(['game-flow']);return ret();},
   };
   window.mediaLibrary={list:async()=>({items:[]}),getPreviewUrl:async()=>({url:''})};
@@ -120,12 +122,36 @@ try{
     assert.equal((await page.evaluate(()=>window.fixture.requests)).filter(r=>r[0]==='prepare').at(-1)[1].launchMethod,'debug');
     assert.equal(await button('启动游戏').isDisabled(),true);
     assert.equal(await button('启动游戏').evaluate(node=>getComputedStyle(node).cursor),'not-allowed');
-    for(const terminationReason of ['NATURAL_SUCCESS','MANUAL_STOP']){
+    for(const terminationReason of ['MANUAL_STOP','NATURAL_SUCCESS']){
       await page.evaluate(async reason=>window.fixture.update({...((await window.ledGame.gameState()).data),engineState:'STOPPED',terminationReason:reason}),terminationReason);
       await page.getByText('本局已结束',{exact:true}).waitFor();
       assert.equal(await page.getByText(terminationReason,{exact:false}).count(),0);
     }
     await page.screenshot({path:path.join(output,'调试结束提示.png')});
+    await button('退出调试，返回编辑').click();
+  });
+  await check('自动高亮下一关、显示本关剩余生命和零值、末关失败后恢复16×36待机动画',async()=>{
+    await page.evaluate(()=>window.fixture.update({engineState:'IDLE',queueSummary:{waiting:[]}}));
+    const game=await page.evaluate(()=>window.fixture.simple);
+    game.siteSizeWidth=8;game.siteSizeHeight=8;
+    game.levels=[{label:'第一关',option:{lifeLimit:true,lifeLimitValue:3}},
+      {label:'第二关',option:{lifeLimitMode:'LIMITED',lifeLimitValue:5}}];
+    await mount('EditorDebugWorkspace',{game});
+    await button('启动游戏').click();
+    const life=page.locator('.debug-workspace-controls > dl dt').filter({hasText:'生命值'}).locator('xpath=following-sibling::dd[1]');
+    for(const [levelIndex,stageLife] of [[0,2],[1,5],[1,0]]){
+      await page.evaluate(async({levelIndex,stageLife})=>{
+        window.fixture.update({...(await window.ledGame.gameState()).data,currentStageIndex:levelIndex,
+          gameplay:{levelIndex,stageLife,globalLife:18,life:18}});
+      },{levelIndex,stageLife});
+      assert.equal(await page.locator('[data-debug-level="'+levelIndex+'"]').getAttribute('aria-pressed'),'true');
+      assert.equal(await life.innerText(),String(stageLife));
+    }
+    await page.evaluate(async()=>window.fixture.update({...(await window.ledGame.gameState()).data,
+      engineState:'STOPPED',terminationReason:'NATURAL_FAILURE'}));
+    await page.waitForFunction(async()=>(await window.ledGame.gameState()).data.engineState==='IDLE');
+    await page.evaluate(()=>window.fixture.frame({width:16,height:36,rgb:Array(16*36*3).fill(77)}));
+    await page.waitForFunction(()=>window.getComponentSetup().pixels.length===36 && window.getComponentSetup().pixels[0][0].r===77);
     await button('退出调试，返回编辑').click();
   });
   await check('待机/准备/开始说明显示16x36动画，交接后恢复游戏尺寸且拒绝迟到待机帧',async()=>{

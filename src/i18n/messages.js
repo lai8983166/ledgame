@@ -1693,6 +1693,17 @@ for (const [locale, [importLevel, levelAppended, importDocumentChanged]] of Obje
   mergedMessages[locale].simple = { ...mergedMessages[locale].simple, importLevel, importLevelJson: `${importLevel} (JSON)`, levelAppended, importDocumentChanged };
 }
 
+const operationSuccessLabels = {
+  'zh-CN': '操作成功', 'en-US': 'Operation successful', 'es-ES': 'Operación completada',
+  'pt-PT': 'Operação concluída', 'fr-FR': 'Opération réussie', 'de-DE': 'Vorgang erfolgreich',
+  'pl-PL': 'Operacja zakończona pomyślnie', 'ru-RU': 'Операция выполнена', 'vi-VN': 'Thao tác thành công',
+  'it-IT': 'Operazione riuscita', 'cs-CZ': 'Operace proběhla úspěšně', 'ko-KR': '작업을 완료했습니다',
+  'ro-RO': 'Operațiune reușită', 'ar-SA': 'تمت العملية بنجاح',
+};
+for (const [locale, operationSuccess] of Object.entries(operationSuccessLabels)) {
+  mergedMessages[locale].simple.operationSuccess = operationSuccess;
+}
+
 export const authoredMessages = Object.fromEntries(
   canonicalLocales.map((locale) => [locale, mergedMessages[locale] || {}]),
 );

@@ -1704,6 +1704,7 @@ function normalizeGameStartRequest(request) {
     id,
     icList: Array.isArray(source.icList) ? source.icList : [],
     userCount: source.userCount ?? null,
+    ...(source.stageFailurePolicy ? { stageFailurePolicy: source.stageFailurePolicy } : {}),
     skipGameStartAudio: source.skipGameStartAudio === true,
     startLevelIndex: Number.isFinite(startLevelIndex) ? startLevelIndex : 0,
     tokenList: Array.isArray(source.tokenList) ? source.tokenList : [],

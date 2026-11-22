@@ -89,9 +89,9 @@ try {
     const search = page.locator('.sprite-dimension-search');
     await search.focus(); await page.keyboard.press('Alt+a'); assert.equal((await read()).tool, 'delete');
     await search.blur();
-    await page.evaluate(() => window.getComponentSetup().globalConfigOpen = true);
+    await page.evaluate(() => window.getComponentSetup().openEffectDialog());
     await page.keyboard.press('Alt+a'); assert.equal((await read()).tool, 'delete');
-    await page.locator('.global-config-dialog').getByRole('button', { name: '取消', exact: true }).click();
+    await page.evaluate(() => window.getComponentSetup().closeEffectDialog());
     await page.evaluate(() => {
       const dialog = document.createElement('div');
       dialog.id = 'parent-modal-fixture'; dialog.setAttribute('role', 'dialog'); dialog.setAttribute('aria-modal', 'true');
@@ -117,6 +117,13 @@ try {
     assert.match(await page.locator('.matrix-overlay-canvas').evaluate(el => el.style.cursor), /data:image\/svg/);
     await page.keyboard.press('Control+z'); assert.equal((await read()).matrix.length, 1);
     await click(2, 2); assert.equal((await read()).matrix.length, 2);
+  });
+  await check('复制颜色成功后显示保存样式的操作成功提示，层次数量开关已隐藏', async () => {
+    await setup([{ id: 'copy-red', x: 2, y: 2, color: 2, points: [[0, 0]] }]);
+    assert.equal(await page.locator('.overlap-indicator-toggle').count(), 0);
+    await page.locator('.color-copy-red').click();
+    assert.equal(await page.locator('.editor-save-toast').innerText(), '操作成功');
+    assert.equal(await page.evaluate(() => window.getComponentSetup().frames[1].matrix[0].id), 'copy-red');
   });
   await check('单点可连续点击添加精灵，精灵拖动不创建也不移动对象', async () => {
     await setup([]); await tool('add'); await mode('point');
@@ -155,7 +162,7 @@ try {
     await page.keyboard.press('Control+z'); assert.deepEqual((await read()).matrix, original);
     await click(10, 10); assert.equal((await read()).redo, 1, '空操作保留重做');
     await page.keyboard.press('Control+y'); assert.deepEqual((await read()).matrix, after);
-    await click(3, 3); assert.deepEqual((await read()).matrix, after.slice(0, 2));
+    await click(3, 3); assert.deepEqual((await read()).matrix, [after[1], after[2]]);
     await click(3, 3); assert.deepEqual((await read()).matrix, [after[1]]);
     await click(5, 3); assert.deepEqual((await read()).matrix, []);
     await page.keyboard.press('Control+z'); assert.deepEqual((await read()).matrix, [after[1]]);
@@ -171,7 +178,7 @@ try {
     assert.equal((await read()).matrix[0].points.length, 1);
     await page.keyboard.press('Control+z'); assert.deepEqual((await read()).matrix, original);
   });
-  await check('删除区域移除所有相交整对象含下层和框外点，未相交对象保留，一次撤销重做', async () => {
+  await check('删除区域只移除每格顶层，保留下层、框外点和未相交对象，一次撤销重做', async () => {
     const original = [
       { id: 'under', x: 3, y: 3, color: 1, points: [[0, 0], [5, 0]], metadata: 'outside-point' },
       { id: 'green-top', x: 3, y: 3, color: 0, points: [[0, 0], [0, 5]] },
@@ -181,9 +188,10 @@ try {
     await setup(original); await tool('delete'); await mode('region');
     await drag([3, 3], [4, 4], { release: false });
     assert.deepEqual((await read()).matrix, original); assert.equal((await read()).undo, 0);
-    await page.mouse.up(); assert.deepEqual((await read()).matrix, original.slice(2)); assert.equal((await read()).undo, 1);
+    const after = [original[0], { ...original[1], points: [[0, 5]] }, ...original.slice(2)];
+    await page.mouse.up(); assert.deepEqual((await read()).matrix, after); assert.equal((await read()).undo, 1);
     await page.keyboard.press('Control+z'); assert.deepEqual((await read()).matrix, original);
-    await page.keyboard.press('Control+Shift+z'); assert.deepEqual((await read()).matrix, original.slice(2));
+    await page.keyboard.press('Control+Shift+z'); assert.deepEqual((await read()).matrix, after);
     await click(10, 10); assert.equal((await read()).undo, 1);
     await page.screenshot({ path: path.join(output, '删除区域.png') });
   });

@@ -32,12 +32,20 @@ const subtitleStyleLabels = {
   'ar-SA': ['نمط العنوان السفلي', 'خلل نيون', 'تيتانيوم ذهبي', 'طرفية الفوسفور الأخضر'],
 };
 
+const nextLevel = {
+  'zh-CN':'进入下一关', 'en-US':'Advance to next level', 'es-ES':'Pasar al siguiente nivel',
+  'pt-PT':'Avançar para o nível seguinte', 'fr-FR':'Passer au niveau suivant', 'de-DE':'Zum nächsten Level',
+  'pl-PL':'Przejdź do następnego poziomu', 'ru-RU':'Перейти к следующему уровню', 'vi-VN':'Chuyển sang màn tiếp theo',
+  'it-IT':'Passa al livello successivo', 'cs-CZ':'Přejít na další úroveň', 'ko-KR':'다음 레벨로 이동',
+  'ro-RO':'Treci la nivelul următor', 'ar-SA':'الانتقال إلى المستوى التالي',
+};
+
 export function feedback23Catalog(locale) {
   const [label, sans, serif, mono] = subtitleStyleLabels[locale];
   const [top, bottom, timeout, required, integer, text, password, levelList, levelSelection, levelConfiguration, title, message, save, discard, stay, seconds, step, dimensions] = copy[locale];
   return {
     applicationSettings: { subtitleStyle: { label, sans, serif, mono }, secondaryIdleTopTitleFontSize: top, secondaryIdleSubtitleFontSize: bottom, preparationTimeoutSeconds: timeout, validation: { required, integer, text, password } },
-    editorDebug: { levelList, levelSelection, levelConfiguration },
+    editorDebug: { levelList, levelSelection, levelConfiguration, nextLevel: nextLevel[locale] },
     editorLeave: { title, message, save, discard, stay },
     simple: { levelTimeSecondsValue: seconds },
     effect: { errors: { step } },

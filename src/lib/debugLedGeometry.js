@@ -4,7 +4,7 @@ export function debugLedGrid(columns, rows, pitch) {
   const width = Math.max(1, Math.trunc(columns) || 1);
   const height = Math.max(1, Math.trunc(rows) || 1);
   const cellPitch = Number.isFinite(pitch) ? Math.max(0, pitch) : 0;
-  const gap = Math.min(4, cellPitch / 4);
+  const gap = Math.min(1, cellPitch / 4);
   return { columns: width, rows: height, width: width * cellPitch,
     height: height * cellPitch, pitch: cellPitch, padding: gap / 2,
     gap, cellSize: cellPitch - gap };

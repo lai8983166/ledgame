@@ -6,12 +6,13 @@ export function selectSimpleTopItem(items, colorOf = (item) => item?.color) {
   if (!Array.isArray(items) || items.length === 0) {
     return null;
   }
+  let topRed = null;
   for (let index = items.length - 1; index >= 0; index -= 1) {
-    if (Number(colorOf(items[index])) === 0) {
-      return items[index];
-    }
+    const color = Number(colorOf(items[index]));
+    if (color === 0) return items[index];
+    if (color === 2 && !topRed) topRed = items[index];
   }
-  return items[items.length - 1];
+  return topRed || items[items.length - 1];
 }
 
 export function simpleFrameDelayMs(repeatTimes) {

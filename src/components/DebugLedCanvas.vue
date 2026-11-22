@@ -21,6 +21,7 @@ let animationFrame = 0;
 let resizeObserver = null;
 let lastHoverKey = "";
 let unmounted = false;
+let releasedPointer = null;
 
 onMounted(() => {
   resizeObserver = new ResizeObserver(resizeCanvas);
@@ -115,9 +116,16 @@ function handlePointerLeave() {
   lastHoverKey = "";
   emit("clear-hover");
 }
+function rememberPointerRelease(event) {
+  releasedPointer = { pointerId: event.pointerId, clientX: event.clientX, clientY: event.clientY };
+}
 function handleClick(event) {
+  // Chromium rounds click coordinates to whole CSS pixels. Pointerup retains
+  // the subpixel position needed to distinguish a 1px separator from its cell.
+  const point = releasedPointer && event.pointerId === releasedPointer.pointerId ? releasedPointer : event;
+  releasedPointer = null;
   if (props.disabled) return;
-  const cell = cellFromPointer(event);
+  const cell = cellFromPointer(point);
   if (cell) emit("cell-click", cell.x, cell.y);
 }
 const boardStyle = computed(() => ({
@@ -129,7 +137,8 @@ const boardStyle = computed(() => ({
 <template>
   <div ref="canvasHost" class="debug-led-canvas-host">
     <canvas ref="canvas" class="debug-led-canvas" :class="{ disabled }" :style="boardStyle"
-      :aria-label="t('debug.canvasLabel')" @click="handleClick" @pointerleave="handlePointerLeave"
+      :aria-label="t('debug.canvasLabel')" @pointerdown="releasedPointer = null" @pointerup="rememberPointerRelease" @pointercancel="releasedPointer = null"
+      @click="handleClick" @pointerleave="handlePointerLeave"
       @pointermove="handlePointerMove"></canvas>
   </div>
 </template>
