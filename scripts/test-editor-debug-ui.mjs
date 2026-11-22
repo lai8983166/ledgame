@@ -9,7 +9,11 @@ const {chromium}=createRequire(path.join(root,'../ledGame-platform/package.json'
 const cache=path.join(process.env.LOCALAPPDATA,'ms-playwright');
 const chrome=(await readdir(cache)).filter(n=>/^chromium-\d+$/.test(n)).sort().at(-1);
 const output=path.join(root,'.build/editor-debug-ui');await mkdir(output,{recursive:true});
-const server=await createServer({root,server:{host:'127.0.0.1',port:20000+Math.floor(Math.random()*30000),hmr:false}});await server.listen();
+const server=await createServer({
+  root,
+  optimizeDeps:{entries:['tests/ui/catalog-library-harness.html']},
+  server:{host:'127.0.0.1',port:20000+Math.floor(Math.random()*30000),hmr:false,watch:null},
+});await server.listen();
 const browser=await chromium.launch({executablePath:path.join(cache,chrome,'chrome-win64/chrome.exe')});
 const context=await browser.newContext({viewport:{width:1366,height:768}});
 await context.addInitScript(()=>{
@@ -43,7 +47,10 @@ await context.addInitScript(()=>{
     confirmPreparation:async id=>{window.fixture.requests.push(['confirm',id]);state={...state,engineState:'RUNNING',preparation:null,gameTime:{mode:'LIMITED',remainingMillis:60000},gameplay:{score:2,life:3,memberPoints:10}};return ret();},
     cancelPreparation:async id=>{window.fixture.requests.push(['cancel',id]);state={engineState:'IDLE',queueSummary:{waiting:[]}};return ret();},
     sendDebugCommand:async request=>{window.fixture.requests.push(['command',clone(request)]);if(request.command==='endgame'){if(window.fixture.failStop)throw Error('停止失败');state={engineState:'STOPPED',sessionId:state.sessionId,terminationReason:'MANUAL_STOP',queueSummary:{waiting:[]}};}
-      else if(request.command==='idleaftercompletion' && request.sessionId===state.sessionId && state.engineState==='STOPPED'){
+      else if(request.command==='endgameandidle' && request.sessionId===state.sessionId){
+        if(window.fixture.failStop)throw Error('停止失败');
+        window.fixture.update({engineState:'IDLE',queueSummary:{waiting:[]}});
+      }else if(request.command==='idleaftercompletion' && request.sessionId===state.sessionId && state.engineState==='STOPPED'){
         window.fixture.update({engineState:'IDLE',queueSummary:{waiting:[]}});
       }else if(request.command==='pause')state.engineState='PAUSED';else if(request.command==='resume')state.engineState='RUNNING';return ret();},
     enterGameFlow:async()=>{window.fixture.requests.push(['game-flow']);return ret();},
@@ -57,7 +64,7 @@ const mount=async(name,props)=>page.evaluate(([name,props])=>window.mountCompone
 const button=(name)=>page.getByRole('button',{name,exact:true});
 async function check(name,fn){await fn();passed.push(name);console.log('通过：'+name);}
 try{
-  await page.goto(`http://127.0.0.1:${server.httpServer.address().port}/tests/ui/catalog-library-harness.html`);await page.waitForFunction(()=>window.mountComponent);
+  await page.goto(`http://127.0.0.1:${server.httpServer.address().port}/tests/ui/catalog-library-harness.html`,{timeout:120000});await page.waitForFunction(()=>window.mountComponent);
   await check('复用布线组件：四种模式、移除手动通道按钮、保存隔离、取消、场地尺寸锁定',async()=>{
     await mount('GameWiringDialog',{width:16,height:36});await button('保存此游戏布线').waitFor();
     assert.equal(await page.locator('.elc408-wiring-controls fieldset').first().locator('input[type=number]').count(),1);
@@ -113,15 +120,31 @@ try{
     assert.equal(await page.getByTestId('debug-player-count').inputValue(),'2');
     await button('启动游戏').click();await button('退出调试，返回编辑').click();
   });
-  await check('调试隐藏启动方式，默认直接启动，结束只显示客户可读文本',async()=>{
+  await check('主按钮从启动切换到结束，手动结束可重试、恢复待机动画并再次启动',async()=>{
     await page.evaluate(()=>window.fixture.update({engineState:'IDLE',queueSummary:{waiting:[]}}));
     const game=await page.evaluate(()=>window.fixture.simple);await mount('EditorDebugWorkspace',{game});
     assert.equal(await page.getByText('启动方式',{exact:true}).count(),0);
     assert.equal(await page.locator('.debug-workspace-controls select').count(),2);
     await button('启动游戏').click();
     assert.equal((await page.evaluate(()=>window.fixture.requests)).filter(r=>r[0]==='prepare').at(-1)[1].launchMethod,'debug');
-    assert.equal(await button('启动游戏').isDisabled(),true);
-    assert.equal(await button('启动游戏').evaluate(node=>getComputedStyle(node).cursor),'not-allowed');
+    assert.equal(await button('启动游戏').count(),0);
+    assert.equal(await button('结束游戏').isEnabled(),true);
+    const running=await page.evaluate(async()=>(await window.ledGame.gameState()).data);
+    for(const engineState of ['STARTING','SETTLING','PAUSED']){
+      await page.evaluate(s=>window.fixture.update(s),{...running,engineState});
+      assert.equal(await button('结束游戏').isEnabled(),true);
+    }
+    await page.evaluate(()=>window.fixture.failStop=true);
+    await button('结束游戏').click();
+    await page.getByRole('alert').filter({hasText:'停止失败'}).waitFor();
+    await page.evaluate(()=>window.fixture.failStop=false);
+    await button('结束游戏').click();
+    assert.equal((await page.evaluate(()=>window.fixture.requests.filter(r=>r[0]==='command').at(-1)))[1].sessionId,running.sessionId);
+    await button('启动游戏').waitFor();
+    assert.equal((await page.evaluate(async()=>(await window.ledGame.gameState()).data)).engineState,'IDLE');
+    await page.evaluate(()=>window.fixture.frame({width:16,height:36,rgb:Array(16*36*3).fill(38)}));
+    await page.waitForFunction(()=>window.getComponentSetup().pixels[0][0].r===38);
+    await button('启动游戏').click();
     for(const terminationReason of ['MANUAL_STOP','NATURAL_SUCCESS']){
       await page.evaluate(async reason=>window.fixture.update({...((await window.ledGame.gameState()).data),engineState:'STOPPED',terminationReason:reason}),terminationReason);
       await page.getByText('本局已结束',{exact:true}).waitFor();

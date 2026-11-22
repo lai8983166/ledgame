@@ -77,8 +77,7 @@ let removeState,removeFrame,balanceTimer,alive=true,scanBuffer='';
 function apply(result){
   const data=result?.data || result;
   if(!alive || !data || (sessionId.value && data.sessionId!==sessionId.value && !isDebugRuntimeAvailable(data)))return;
-  if(state.value.engineState==='IDLE' && data.engineState==='STOPPED' && data.sessionId
-      && completedSession.value?.sessionId===data.sessionId)return;
+  if(state.value.engineState==='IDLE' && data.sessionId && completedSession.value?.sessionId===data.sessionId)return;
   state.value=data;
   if(data.gameTime)lastGameTime.value=data.gameTime;
   if(active.value && !startingStandby.value && (pixels.value.length!==props.game.siteSizeHeight || pixels.value[0]?.length!==props.game.siteSizeWidth))pixels.value=blank();
@@ -111,6 +110,15 @@ async function start(){const needsScan=await action(async()=>{
   if(options.launchMethod==='wristband'&&!enough.value)return true;
   apply(await api.confirmPreparation(sessionId.value));startedOnce.value=true;
 });if(needsScan)await openScan();}
+async function endGame(){
+  await action(async()=>{
+    const ending=state.value;
+    const result=await api.sendDebugCommand({command:'endgameandidle',sessionId:sessionId.value});
+    completedSession.value=ending;
+    sessionId.value=null;
+    apply(result);
+  });
+}
 async function openScan(){scanBuffer='';scanOpen.value=true;await nextTick();scanPrompt.value?.focus();}
 async function scanKey(event){
   if(!scanOpen.value||busy.value||event.ctrlKey||event.metaKey||event.altKey)return;
@@ -191,7 +199,7 @@ onBeforeUnmount(()=>{alive=false;clearTimeout(hardwareNoticeTimer);clearInterval
         </section>
         <label><span>{{t('editorDebug.failurePolicy')}}</span><select v-model="options.stageFailurePolicy" :disabled="busy || active || !!preparation"><option value="NEXT_STAGE">{{t('editorDebug.nextLevel')}}</option><option value="END_GAME">{{t('rank.endGame')}}</option><option value="RETRY">{{t('rank.retry')}}</option></select></label>
         <div v-if="options.launchMethod==='wristband'" class="debug-participants"><button class="soft-button" :disabled="busy || active || enough" @click="scan">{{t('editorDebug.scan')}}</button><p>{{participants.length}} / {{options.userCount}}</p><p v-for="player in participants" :key="player.access.uid">{{player.member?.name}} · {{player.access.uid}}<br/>{{t('editorDebug.balance')}} {{playerAccessRemainingSeconds(player,balanceNow) ?? '—'}}s</p><small>{{t('editorDebug.balanceHint')}}</small></div>
-        <div class="debug-workspace-actions"><button class="action-button primary" :disabled="busy || active" @click="start">{{t('editorDebug.start')}}</button><button class="soft-button" :disabled="busy || !active" @click="command(state.engineState==='PAUSED'?'resume':'pause')">{{t(state.engineState==='PAUSED'?'editorDebug.resume':'editorDebug.pause')}}</button><button class="soft-button" :disabled="busy || !sessionId" @click="restart">{{t('editorDebug.restart')}}</button></div>
+        <div class="debug-workspace-actions"><button class="action-button primary" :disabled="busy" @click="active ? endGame() : start()">{{t(active ? 'rank.endGame' : 'editorDebug.start')}}</button><button class="soft-button" :disabled="busy || !active" @click="command(state.engineState==='PAUSED'?'resume':'pause')">{{t(state.engineState==='PAUSED'?'editorDebug.resume':'editorDebug.pause')}}</button><button class="soft-button" :disabled="busy || !sessionId" @click="restart">{{t('editorDebug.restart')}}</button></div>
         <p v-if="error" class="error-line" role="alert">{{error}}</p><p v-if="hardwareWarning" class="error-line">{{hardwareWarning}}</p>
         <dl><dt>{{t('editorDebug.score')}}</dt><dd>{{gameplay.score ?? '—'}}</dd><dt>{{t('editorDebug.life')}}</dt><dd>{{stageLife}}</dd><dt>{{t('editorDebug.points')}}</dt><dd>{{gameplay.memberPoints ?? '—'}}</dd><dt>{{t('editorDebug.time')}}</dt><dd>{{countdown}}</dd></dl>
         <article v-for="player in gameplay.players || []" :key="player.playerNumber" class="debug-player"><i :style="{background:player.color || '#888'}"></i><span>{{player.playerNumber}} · {{player.totalScore ?? player.score}} / {{t('editorDebug.points')}} {{player.memberPoints ?? 0}}</span></article>

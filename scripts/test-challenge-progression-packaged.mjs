@@ -115,6 +115,26 @@ try{
   assert.match(backendLog,/media cue started cue=SCORE_SFX/);
   assert.match(backendLog,/media cue started cue=DOUBLE_SFX/);
   passed.push('蓝紫对象逐格踩踏，紫格触发得分和 double 音效；两关生命值从 2 切换至 4，末关结束后恢复真实待机 GIF');
+  await button('启动游戏').click();
+  await expect(button('结束游戏')).toBeEnabled();
+  await expect.poll(async () => (await state()).engineState).toBe('RUNNING');
+  const logBeforeStop = await readFile(path.join(data,'logs/backend.log'),'utf8');
+  await button('结束游戏').click();
+  await expect.poll(async () => (await state()).engineState).toBe('IDLE');
+  await expect(button('启动游戏')).toBeEnabled();
+  await expect.poll(async () => {
+    const frame = await page.evaluate(() => window.ledGame.latestFrame());
+    return frame?.width === 16 && frame?.height === 36 && gifHashes.has(frameHash(frame));
+  }).toBe(true);
+  await expect.poll(async () => {
+    const log = await readFile(path.join(data,'logs/backend.log'),'utf8');
+    return log.slice(logBeforeStop.length).includes('media cue started cue=SYSTEM_IDLE_BGM');
+  }).toBe(true);
+  await button('启动游戏').click();
+  await expect(button('结束游戏')).toBeEnabled();
+  await button('结束游戏').click();
+  await expect.poll(async () => (await state()).engineState).toBe('IDLE');
+  passed.push('手动结束回到系统待机并恢复 GIF，主按钮可再次启动和结束游戏');
   await page.evaluate(()=>{void window.ledGame.closeWindow();});
   await expect.poll(async()=>{try{await state();return false;}catch{return true;}},{timeout:15000}).toBe(true);
   passed.push('退出真实 EXE 后内嵌后端释放');
