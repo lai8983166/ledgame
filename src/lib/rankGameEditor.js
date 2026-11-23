@@ -27,7 +27,7 @@ export function createRankEditorPayload(value, gameId) {
 
 export function createRankLevel(width = 16, height = 36, index = 0) {
   return { label: index === 0 ? 'Ranking' : `Level ${index + 1}`, type: null,
-    rewardPoints: 0, durationSeconds: 60, description: '', startGif: '', gameplayIntro: '', backgroundVoice: '',
+    rewardPoints: 0, durationSeconds: 60, description: '', startGif: '', playIntroVideo: '', gameplayIntro: '', backgroundVoice: '',
     bombWarningAudio: '', bombExplosionAudio: '',
     bounds: { minX: 1, minY: 1, maxX: width, maxY: height },
     targetsPerPlayerMin: 3, targetsPerPlayerMax: 4, bombMin: 0, bombMax: 1,

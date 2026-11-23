@@ -158,7 +158,7 @@ try{
    passed.push('真实后端冻结布局接受(35,15)且保留原字段，四对外围灯与实际像素格中心对齐，Canvas填满floor且末行无额外留白');
   }
   await resetTrace();await command('nextstage');await waitForOpening(game.name+'-第二关');
-  await button('退出调试，返回游戏列表').click();
+  await button('返回游戏列表').click();
  }
  const owners=async()=>{const log=await readFile(path.join(data,'logs/backend.log'),'utf8');return new Set([...log.matchAll(/cue=READY_GO_VOICE asset=ReadyGo\.mp3 owner=(\S+)/g)].map(m=>m[1]));};
  await expect.poll(async()=>(await owners()).size).toBe(3);
@@ -168,13 +168,13 @@ try{
  assert.equal((await trace()).some(f=>[two,one,marker].includes(f.hash)),false);
  passed.push('非首关直接启动不触发ReadyGo，321中停止后无迟到换帧或开始玩法');
  passed.push('三游戏首关各触发一个ReadyGo媒体owner，第二关无新增语音');
- await button('退出调试，返回游戏列表').click();await open(simple);await button('启动游戏').click();
+ await button('返回游戏列表').click();await open(simple);await button('启动游戏').click();
  await expect.poll(async()=>(await state()).startingStandby).toBe(true);
  await command('endgame');const stoppedAt=Date.now();await page.waitForTimeout(4000);
  assert.equal((await state()).engineState,'STOPPED');assert.equal((await owners()).size,3);
  assert.equal((await trace()).some(f=>f.time>stoppedAt+200),false);
  passed.push('开始说明中停止后彩虹与语音清理，无迟到321或玩法复活');
- await button('退出调试，返回游戏列表').click();
+ await button('返回游戏列表').click();
  const rank=(await request('/games/manageable')).find(g=>g.type==='rank');assert.ok(rank);
  const rankDoc=await request(`/rank-game-editor/${rank.gameId}`);
  rankDoc.siteSizeWidth=8;rankDoc.siteSizeHeight=8;rankDoc.globalTimeLimit=false;rankDoc.minPlayers=1;
@@ -191,7 +191,7 @@ try{
  const rankCanvas=await page.locator('.editor-debug-workspace canvas').boundingBox();assert.ok(Math.abs(rankCanvas.width-rankCanvas.height)<1);
  assert.equal((await trace()).some(f=>hashes.includes(f.hash)),false);
  await page.screenshot({path:path.join(data,'Rank8x8-说明后游戏矩阵.png')});
- await button('退出调试，返回游戏列表').click();
+ await button('返回游戏列表').click();
  passed.push('无公共321的Rank8x8说明期间显示16x36彩虹，完成后切8x8玩法，原尺寸隔离保持');
  assert.deepEqual(errors,[]);
  const closed=app.waitForEvent('close',{timeout:30000});

@@ -21,7 +21,7 @@ import {
   shouldIgnoreStalePreparationState,
   touchViewForState,
 } from "../lib/gameFlowState.js";
-import { loadSupportedGames } from "../lib/gameCatalog.js";
+import { loadSupportedGames, supportsPlayerCount } from "../lib/gameCatalog.js";
 import { normalizeGameCategoryList, gamesInCategory } from "../lib/gameCategories.js";
 import {
   playerAccessRemainingSeconds,
@@ -254,6 +254,7 @@ const categoryGames = computed(() => {
   return gamesInCategory(categorizedGames.value, selectedCategoryId.value);
 });
 const categorizedGames = computed(() => games.value.filter(game =>
+  (!isGamePresentation.value || supportsPlayerCount(game, draft.userCount)) &&
   categories.value.some(category => String(category.id) === String(game.firstCatalog))));
 const touchCategories = computed(() => categories.value.map(category => ({
   ...category, gameIds: gamesInCategory(categorizedGames.value, category.id).map(game => game.id),
@@ -924,10 +925,10 @@ async function loadCategories() {
     }));
     categories.value = result;
     categoryCoverUrls.value = Object.fromEntries(covers);
-    if (!touchCategories.value.some(category => category.id === selectedCategoryId.value)) {
-      const current = games.value.find(game => game.id === selectedGameId.value);
+    if (!touchCategories.value.some(category => category.id === selectedCategoryId.value && category.gameIds.length)) {
+      const current = categorizedGames.value.find(game => game.id === selectedGameId.value);
       selectedCategoryId.value = result.find(category => String(category.id) === current?.firstCatalog)?.id
-        ?? result.find(category => gamesInCategory(games.value, category.id).length)?.id ?? null;
+        ?? touchCategories.value.find(category => category.gameIds.length)?.id ?? null;
     }
   } catch (error) {
     categoryError.value = extractErrorMessage(error, t('gameCategories.loadFailed'));
@@ -983,6 +984,10 @@ async function selectPlayerCount(count) {
   if (busyAction.value || !canChangePlayerCount.value) return;
   const sessionId = preparation.value?.sessionId;
   draft.userCount = normalizeTouchPlayerCount(count, draft.userCount);
+  gameCarouselIndex.value = 0;
+  if (!touchCategories.value.some(category => category.id === selectedCategoryId.value && category.gameIds.length)) {
+    selectedCategoryId.value = touchCategories.value.find(category => category.gameIds.length)?.id ?? null;
+  }
   const saved = await syncPlayerCount();
   if (isGamePresentation.value && view.value === 'PREPARING'
       && preparation.value?.sessionId === sessionId && gamePreparationStep.value === 'players') {
@@ -1073,10 +1078,8 @@ async function showLevelSelection() {
   const game = carouselGame.value;
   const sessionId = preparation.value?.sessionId;
   if (!game || !sessionId || busyAction.value) return;
-  const selectedPlayers = Math.min(
-    Math.max(normalizeTouchPlayerCount(draft.userCount, 1), game.minPlayers || 1),
-    game.maxPlayers || 6,
-  );
+  const selectedPlayers = normalizeTouchPlayerCount(draft.userCount, 1);
+  if (!supportsPlayerCount(game, selectedPlayers)) return;
   busyAction.value = "wizard-game";
   errorMessage.value = "";
   try {

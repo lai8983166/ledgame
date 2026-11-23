@@ -11,7 +11,7 @@ const {chromium}=require('playwright');
 const cache=path.join(process.env.LOCALAPPDATA,'ms-playwright');
 const chrome=(await readdir(cache)).filter(n=>/^chromium-\d+$/.test(n)).sort().at(-1);
 const output=path.join(root,'.build/touch-preparation-ui');await mkdir(output,{recursive:true});
-const server=await createServer({root,server:{host:'127.0.0.1',port:0,hmr:false}});await server.listen();
+const server=await createServer({root,optimizeDeps:{entries:['tests/ui/catalog-library-harness.html']},server:{watch:null,host:'127.0.0.1',port:0,hmr:false}});await server.listen();
 const browser=await chromium.launch({executablePath:path.join(cache,chrome,'chrome-win64/chrome.exe')});
 const context=await browser.newContext({viewport:{width:1366,height:768}});
 await context.addInitScript(()=>{
@@ -54,8 +54,47 @@ async function step(value){await page.locator(`.touch-shell[data-preparation-ste
 async function check(name,fn){await fn();passed.push(name);console.log('通过：'+name);}
 async function shot(name){await page.screenshot({path:path.join(output,name+'.png')});}
 try{
-  await page.goto(`http://127.0.0.1:${server.httpServer.address().port}/tests/ui/catalog-library-harness.html`);
+  await page.goto(`http://127.0.0.1:${server.httpServer.address().port}/tests/ui/catalog-library-harness.html`,{waitUntil:'domcontentloaded',timeout:120000});
   await page.waitForFunction(()=>window.mountComponent);await page.addStyleTag({content:'#app{padding:0!important;overflow:hidden!important;}'});
+  await check('选人数后按独立上下限过滤普通与 Rank 游戏，空分类可返回重新选人数', async () => {
+    await page.evaluate(() => {
+      window.fixture.entryMethod = 'touch';
+      for (const game of window.fixture.games.slice(0, 3)) {
+        game.minPlayers = 3;
+        game.maxPlayers = null;
+      }
+      window.fixture.games[3].minPlayers = null;
+      window.fixture.games[3].maxPlayers = 1;
+      window.fixture.reset();
+    });
+    await mount();
+    const pick = async count => {
+      await page.getByTestId('game-player-count-' + count).click();
+      await step('game');
+      await page.locator('.touch-game-panel .touch-wizard-empty:has(strong), .touch-game-panel .touch-game-carousel').first().waitFor();
+    };
+    const back = async () => {
+      await page.locator('.touch-game-panel .touch-wizard-back').click();
+      await step('players');
+    };
+    await pick(1);
+    assert.equal(await page.getByTestId('game-category-12').getAttribute('aria-pressed'), 'true');
+    assert.equal(await page.getByTestId('game-carousel').getAttribute('data-selected-game-id'), '4');
+    await back();
+    await pick(2);
+    assert.equal(await page.locator('.touch-carousel-card').count(), 0);
+    assert.equal(await page.getByTestId('game-game-next').isDisabled(), true);
+    await back();
+    await pick(3);
+    assert.equal(await page.getByTestId('game-category-11').getAttribute('aria-pressed'), 'true');
+    assert.equal(await page.getByTestId('game-category-11').getAttribute('data-game-ids'), '1 2 3');
+    assert.equal(await page.getByTestId('game-category-12').getAttribute('data-game-ids'), '');
+    await page.evaluate(() => {
+      for (const game of window.fixture.games.slice(0, 4)) Object.assign(game, {minPlayers:1,maxPlayers:6});
+      window.fixture.entryMethod = 'wristband';
+      window.fixture.reset();
+    });
+  });
   await check('人数点击自动进入刷卡；失败留原页；多人不足及重复不会前进',async()=>{
     await mount();assert.equal(await page.getByTestId('game-player-next').count(),0);
     await page.evaluate(()=>window.fixture.scan('101'));assert.equal(await page.getByTestId('game-player-access').count(),0);

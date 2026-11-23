@@ -67,24 +67,45 @@ try{
   doc.siteSizeHeight = 36;
   // Two finite-life levels exercise progression and the transition back to the actual standby media.
   const template = doc.levels[0];
+  const introAsset = 'dashboard/idle.mp4';
+  doc.commonConfig = {...doc.commonConfig, playIntroVideo: '', minPlayers: null, maxPlayers: 3};
   doc.globalLifeLimit = false;
   doc.levels = [2, 4].map((life, index) => ({
     ...template,
     label: `Debug ${index + 1}`,
     option: {...template.option, lifeLimitMode: 'LIMITED', lifeLimit: true, lifeLimitValue: life,
-      timeLimitMode: 'UNLIMITED', timeLimit: false, pixelLightType: 0},
+      timeLimitMode: 'UNLIMITED', timeLimit: false, pixelLightType: 0, playIntroVideo: introAsset},
     frameList: [{repeatTimes: 1, matrix: [
       {id: 'target', x: 1, y: 1, color: index===0 ? 1 : 3, points: [[0, 0],[1, 0]]},
     ]}],
   }));
   await request(`/game-editor/${simple.gameId}`, 'PUT', doc);
+  const catalog = await request('/games/manageable');
+  const savedSimple = catalog.find(game => game.gameId === simple.gameId);
+  assert.deepEqual([savedSimple.minPlayers,savedSimple.maxPlayers],[null,3]);
   await page.reload();
   await page.getByTestId('game-menu-button').click();
   await page.getByRole('menuitem', {name: '游戏列表', exact: true}).click();
   const card = page.locator(`.game-card[data-id="${simple.gameId}"]`);
   await card.hover();
   await card.getByRole('button', {name: '调试游戏', exact: true}).click();
+  const header = page.locator('.editor-debug-workspace > header');
+  await expect(header.getByRole('button', {name: '返回游戏列表', exact: true})).toBeVisible();
+  await expect(header.locator('h1')).toHaveText(doc.displayName || doc.name);
+  await expect(header.getByText('游戏调试', {exact: true})).toHaveCount(0);
+  await page.evaluate(() => window.secondaryDisplay.open());
+  let secondary;
+  await expect.poll(() => {
+    secondary = browser.contexts()[0].pages().find(p => p.url().includes('window=secondary'));
+    return Boolean(secondary);
+  }).toBe(true);
+  await page.bringToFront();
   await button('启动游戏').click();
+  const intro = secondary.locator('video[data-asset="dashboard/idle.mp4"]');
+  await expect(intro).toBeVisible();
+  await expect.poll(() => intro.evaluate(video => video.muted && !video.paused && video.currentTime > 0)).toBe(true);
+  assert.equal((await state()).engineState,'STARTING');
+  passed.push('游戏开场说明语音期间，副屏窗口播放起始关卡配置的 MP4');
   const lifeReadout = page.locator('.debug-workspace-controls dt').filter({hasText: '生命'}).locator('xpath=following-sibling::dd[1]');
   for (const [index, life] of [2, 4].entries()) {
     await expect.poll(async () => {
@@ -135,6 +156,30 @@ try{
   await button('结束游戏').click();
   await expect.poll(async () => (await state()).engineState).toBe('IDLE');
   passed.push('手动结束回到系统待机并恢复 GIF，主按钮可再次启动和结束游戏');
+  await button('返回游戏列表').click();
+  const rank = catalog.find(game => game.type === 'rank');
+  assert.ok(rank);
+  const rankRoute = '/rank-game-editor/' + rank.gameId;
+  const rankDoc = await request(rankRoute);
+  rankDoc.minPlayers = 2;
+  rankDoc.maxPlayers = null;
+  rankDoc.levels[0].playIntroVideo = introAsset;
+  await request(rankRoute, 'PUT', rankDoc);
+  const reopened = await request(rankRoute);
+  assert.equal(reopened.levels[0].playIntroVideo,introAsset);
+  assert.equal(reopened.levels[0].startGif,rankDoc.levels[0].startGif);
+  assert.deepEqual([reopened.minPlayers,reopened.maxPlayers],[2,null]);
+  const rankCard = page.locator(`.game-card[data-id="${rank.gameId}"]`);
+  await rankCard.hover();
+  await rankCard.getByRole('button',{name:'编辑',exact:true}).click();
+  await page.locator('.rank-level-tab .sequence-pill').first().click();
+  await expect(page.locator('video.rank-intro-preview')).toBeVisible();
+  await page.locator('[data-editor-page="global"]').click();
+  const rankConfig = page.locator('.rank-global-config-page');
+  await expect(rankConfig.getByRole('spinbutton',{name:/最少玩家/})).toHaveValue('2');
+  await expect(rankConfig.getByRole('spinbutton',{name:/最多玩家/})).toHaveValue('');
+  await expect(rankConfig.getByText(/double\s*音效/i)).toHaveCount(0);
+  passed.push('Rank 视频介绍和可空人数范围已随游戏保存，编辑器显示视频预览及人数设置并隐藏 double 音效');
   await page.evaluate(()=>{void window.ledGame.closeWindow();});
   await expect.poll(async()=>{try{await state();return false;}catch{return true;}},{timeout:15000}).toBe(true);
   passed.push('退出真实 EXE 后内嵌后端释放');

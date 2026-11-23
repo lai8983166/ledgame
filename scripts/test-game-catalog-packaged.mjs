@@ -114,7 +114,7 @@ try {
     assert.ok(switched.gameplay.globalElapsedTime < 3000); assert.ok(switched.gameTime.remainingMillis > 110000);
     await page.locator('[data-debug-field=startLevel]').fill('1'); await button('切换关卡').click();
     await expect.poll(async () => { const state = (await request('/engine/game/state')).data; return state.engineState === 'RUNNING' ? state.currentStageIndex : null; }).toBe(0);
-    await button('退出调试，返回游戏列表').click();
+    await button('返回游戏列表').click();
     await expect(page.locator('.page-heading h1')).toHaveText('维护验收分类'); await expect(card).toBeVisible();
   });
   await check('真实PNG封面按自身比例收窄卡片，无容器黑边且不裁切', async () => {
@@ -212,7 +212,7 @@ try {
   });
   await check('Rank 卡片进入同一调试页，编辑器保留触屏显示配置', async () => {
     const rankCard = page.locator(`.game-card[data-id="${rank}"]`); await rankCard.hover(); await rankCard.getByRole('button', { name: '调试游戏', exact: true }).click();
-    await button('启动游戏').click(); await expect.poll(async () => (await request('/engine/game/state')).data.engineState).toBe('RUNNING'); await button('退出调试，返回游戏列表').click();
+    await button('启动游戏').click(); await expect.poll(async () => (await request('/engine/game/state')).data.engineState).toBe('RUNNING'); await button('返回游戏列表').click();
     await rankCard.hover(); await rankCard.getByRole('button', { name: '编辑', exact: true }).click();
     await button('全局配置').click();await expect(page.locator('.global-config-dialog').getByText('触屏显示', { exact: true })).toBeVisible();assert.equal(await button('启动游戏').count(), 0);
     const rankName=page.locator('.global-config-field').filter({has:page.locator('.global-config-label').filter({hasText:/^名称$/})}).locator('input');
@@ -238,7 +238,7 @@ try {
     await expect.poll(async()=>{const state=(await request('/engine/game/state')).data;return state.engineState==='RUNNING'?state.currentStageIndex:null;}).toBe(1);
     await expect.poll(async()=>(await request('/engine/game/state')).data.engineState,{timeout:15000}).toBe('STOPPED');
     assert.equal((await request('/engine/game/state')).data.success,true);
-    await button('退出调试，返回游戏列表').click();
+    await button('返回游戏列表').click();
   });
   await check('删除游戏取消保留、确认删除，删空后刷新与重启不补回', async () => {
     await card.hover(); await card.getByRole('button', { name: '删除', exact: true }).click(); await button('取消').click();

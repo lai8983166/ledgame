@@ -4,7 +4,9 @@ export function filterMediaTree(nodes, accept = 'any') {
       const children = filterMediaTree(node.children, accept);
       return children.length ? [{...node, children}] : [];
     }
-    const matches = accept === 'any' ? ['image', 'audio', 'video'].includes(node.mediaType) : node.mediaType === accept;
+    const matches = node.mediaType === accept
+      || (accept === 'visual' && ['image', 'video'].includes(node.mediaType))
+      || (accept === 'any' && ['image', 'audio', 'video'].includes(node.mediaType));
     return node.kind === 'file' && matches ? [node] : [];
   });
 }

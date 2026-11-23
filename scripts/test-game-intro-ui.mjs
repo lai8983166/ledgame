@@ -13,7 +13,7 @@ const output=path.join(root,'.build/game-intro-ui');await mkdir(output,{recursiv
 // Prefer the small existing video fixture, otherwise use the packaged idle video.
 const bytes=await readFile(path.join(root,'.build/intro-media-fixtures/intro.mp4')).catch(()=>readFile(path.join(root,'build-resources/media/dashboard/idle.mp4')));
 const videoUrl='data:video/mp4;base64,'+bytes.toString('base64');
-const server=await createServer({root,server:{host:'127.0.0.1',port:0,hmr:false}});await server.listen();
+const server=await createServer({root,optimizeDeps:{entries:['tests/ui/catalog-library-harness.html']},server:{watch:null,host:'127.0.0.1',port:0,hmr:false}});await server.listen();
 const browser=await chromium.launch({executablePath:path.join(cache,chrome,'chrome-win64/chrome.exe')});
 const page=await browser.newPage({viewport:{width:1366,height:768}}),passed=[],errors=[];
 page.setDefaultTimeout(15000);page.on('pageerror',error=>errors.push(error.message));
@@ -42,7 +42,7 @@ const broadcast=value=>page.evaluate(value=>window.fixture.broadcast(value),valu
 const check=async(name,action)=>{await action();passed.push(name);console.log('PASS '+name);};
 const intro=(id,assetReference='intro/level.mp4',positionMillis=0,paused=false)=>({id,assetReference,positionMillis,paused});
 try{
- await page.goto(`http://127.0.0.1:${server.httpServer.address().port}/tests/ui/catalog-library-harness.html`);await page.waitForFunction(()=>window.mountComponent);
+ await page.goto(`http://127.0.0.1:${server.httpServer.address().port}/tests/ui/catalog-library-harness.html`,{timeout:120000});await page.waitForFunction(()=>window.mountComponent);
  await check('玩家选关可手动观看全局和关卡静音循环视频，关闭保留选择且不播放音频',async()=>{
   await mount('LedGameTouchView');await page.getByTestId('game-player-count-1').click();await page.getByTestId('game-carousel-1').click();
   await page.getByTestId('game-intro-open').click();
@@ -83,6 +83,19 @@ try{
   await expect.poll(()=>video.evaluate(v=>v.paused)).toBe(true);assert.equal(await page.locator('audio').count(),0);
   await page.screenshot({path:path.join(output,'副屏介绍视频.png')});
   await broadcast({engineState:'RUNNING',gameId:1,introVideo:null});await expect(video).toHaveCount(0);
+ });
+ await check('副屏在开场说明期间播放所选关卡的视频或旧 Rank 图片，说明结束恢复 HUD',async()=>{
+  await broadcast({engineState:'STARTING',gameId:1,secondaryOpeningIntro:intro('fallback')});
+  const overlay=page.locator('.secondary-intro-video');
+  await expect(overlay).toHaveAttribute('data-playback-id','fallback');
+  await expect.poll(()=>overlay.evaluate(v=>v.currentTime)).toBeGreaterThan(0.05);
+  await broadcast({engineState:'PAUSED',gameId:1,secondaryOpeningIntro:intro('fallback','intro/level.mp4',500,true)});
+  await expect.poll(()=>overlay.evaluate(v=>v.paused)).toBe(true);
+  await broadcast({engineState:'STARTING',gameId:2,secondaryOpeningIntro:intro('rank-image','rank/start.gif')});
+  await expect(page.locator('img.secondary-intro-video')).toHaveAttribute('data-asset','rank/start.gif');
+  await broadcast({engineState:'RUNNING',gameId:2});
+  await expect(overlay).toHaveCount(0);
+  await expect(page.locator('.secondary-runtime-content')).toBeVisible();
  });
  assert.deepEqual(errors,[]);await writeFile(path.join(output,'验证记录.json'),JSON.stringify({passed,errors},null,2));
 }finally{await browser.close();await server.close();}

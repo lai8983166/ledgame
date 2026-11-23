@@ -6,7 +6,7 @@ import { createLatestAsyncValueLoader } from "../lib/latestAsyncTask.js";
 import { filterMediaTree, visibleMediaRows } from "../lib/mediaSelectionTree.js";
 
 const props = defineProps({
-  accept: { type: String, default: "any" }, // 'image' | 'audio' | 'video' | 'any'
+  accept: { type: String, default: "any" }, // 'image' | 'audio' | 'video' | 'visual' | 'any'
   currentValue: { type: String, default: "" },
   title: { type: String, default: "" },
 });
@@ -50,6 +50,7 @@ const acceptLabel = computed(() => {
   if (props.accept === "audio") return t("mediaPicker.audio");
   if (props.accept === "image") return t("mediaPicker.images");
   if (props.accept === 'video') return t('gameIntro.video');
+  if (props.accept === 'visual') return [t('mediaPicker.images'), t('gameIntro.video')].join(' / ');
   return t("mediaPicker.allMedia");
 });
 const dialogTitle = computed(() => props.title || t("mediaPicker.title"));
@@ -93,9 +94,8 @@ function selectFile(node) {
 }
 
 function confirm() {
-  if (canConfirm.value) {
-    emit("select", selected.value);
-  }
+  const file = selectableFiles.value.find(node => node.relativePath === selected.value);
+  if (file) emit("select", file.relativePath, file.mediaType);
 }
 
 function handleKeydown(event) {

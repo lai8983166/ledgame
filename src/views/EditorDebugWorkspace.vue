@@ -182,7 +182,7 @@ onBeforeUnmount(()=>{alive=false;clearTimeout(hardwareNoticeTimer);clearInterval
 </script>
 <template>
   <section class="workspace editor-debug-workspace">
-    <header><button class="soft-button" :disabled="busy" @click="exit">{{exitLabel || t('editorDebug.exit')}}</button><h1>{{game.displayName || game.name}}</h1><span>{{t('editorDebug.title')}}</span></header>
+    <header><button class="soft-button" :disabled="busy" @click="exit">{{exitLabel || t('editorDebug.exit')}}</button><h1>{{game.displayName || game.name}}</h1></header>
     <div class="debug-workspace-columns">
       <aside class="debug-workspace-controls">
         <!-- <label><span>{{t('editorDebug.method')}}</span><select v-model="options.launchMethod" :disabled="busy || active || !!preparation"><option value="debug">{{t('editorDebug.direct')}}</option><option value="wristband">{{t('editorDebug.wristband')}}</option></select></label> -->

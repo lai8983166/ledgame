@@ -109,8 +109,8 @@ try {
     await button('启动游戏').click(); await button('暂停').click(); await button('继续').click();
     await page.locator('.editor-debug-workspace canvas').click({ position: { x: 20, y: 20 } });
     await button('重新开始').click();
-    await page.evaluate(() => window.fixture.failStop = true); await button('退出调试，返回游戏列表').click(); await expect(page.getByRole('alert')).toContainText('停止失败');
-    await page.evaluate(() => window.fixture.failStop = false); await button('退出调试，返回游戏列表').click();
+    await page.evaluate(() => window.fixture.failStop = true); await button('返回游戏列表').click(); await expect(page.getByRole('alert')).toContainText('停止失败');
+    await page.evaluate(() => window.fixture.failStop = false); await button('返回游戏列表').click();
     await expect(page.locator('.game-card')).toHaveCount(3); assert.deepEqual(await page.evaluate(() => window.fixture.listeners()), before);
     assert.ok(await page.evaluate(() => window.fixture.requests.some(r => r[0] === 'command' && r[1].command === 'tileinput')));
   });

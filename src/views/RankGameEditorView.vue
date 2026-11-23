@@ -118,7 +118,23 @@ function setRange(kind,text){
 function rangeInvalid(kind){return !parseRankEditorRange(kind,rangeText(kind),document.value);}
 function mediaValue(field){return type1Config.value?.[field]||'';}
 function chooseMedia(field,accept,label){mediaPicker.value={level:type1Config.value,field,accept,label};}
-function applyMedia(path){if(mediaPicker.value&&levels.value.includes(mediaPicker.value.level))mediaPicker.value.level[mediaPicker.value.field]=path;mediaPicker.value=null;}
+function pickerValue(picker) {
+  return picker.accept === 'visual'
+    ? picker.level.playIntroVideo || picker.level.startGif || ''
+    : picker.level[picker.field] || '';
+}
+function applyMedia(path, mediaType) {
+  const picker = mediaPicker.value;
+  if (picker && levels.value.includes(picker.level)) {
+    if (picker.accept === 'visual' && mediaType === 'image') {
+      picker.level.startGif = path;
+      picker.level.playIntroVideo = '';
+    } else {
+      picker.level[picker.field] = path;
+    }
+  }
+  mediaPicker.value = null;
+}
 
 async function validatePayload(payload){
   if(!gameFieldDimensionsValid(document.value))throw Error(t('editorSave.invalid')+'\n'+t('editorSave.fieldDimensions'));
@@ -193,8 +209,9 @@ function goBack(){emit('back');}
     <main v-else-if="type1Config" v-show="editorPage==='levels'" class="rank-config-editor" data-rank-field="levels">
       <label><span>{{t('rank.levelName')}}</span><input v-model="type1Config.label" data-rank-field="level.label" /></label>
       <label class="rank-level-media"><span>{{t('rank.gameplayIntro')}}</span><div>
-        <div class="rank-media-control"><input :value="mediaValue('startGif')" :placeholder="t('globalConfig.notSelected')" readonly /><button class="soft-button compact-button" type="button" @click="chooseMedia('startGif','image',t('rank.gameplayIntro'))">{{t('globalConfig.choose')}}</button></div>
-        <img v-if="mediaValue('startGif')" class="rank-intro-preview" :src="buildMediaPreviewUrl(mediaValue('startGif'))" :alt="t('rank.gameplayIntro')" />
+        <div class="rank-media-control"><input :value="mediaValue('playIntroVideo') || mediaValue('startGif')" :placeholder="t('globalConfig.notSelected')" readonly /><button class="soft-button compact-button" type="button" @click="chooseMedia('playIntroVideo','visual',t('rank.gameplayIntro'))">{{t('globalConfig.choose')}}</button></div>
+        <video v-if="mediaValue('playIntroVideo')" class="rank-intro-preview" :src="buildMediaPreviewUrl(mediaValue('playIntroVideo'))" controls playsinline preload="metadata" />
+        <img v-else-if="mediaValue('startGif')" class="rank-intro-preview" :src="buildMediaPreviewUrl(mediaValue('startGif'))" :alt="t('rank.gameplayIntro')" />
       </div></label>
       <label><span>{{t('management.rankReward')}}</span><input v-model.number="type1Config.rewardPoints" data-rank-field="level.rewardPoints" type="number" min="0" max="1000000" /></label>
       <label><span>{{t('rank.timeLimit')}}</span><input v-model.number="type1Config.durationSeconds" data-rank-field="level.durationSeconds" type="number" min="1" /></label>
@@ -227,7 +244,7 @@ function goBack(){emit('back');}
     <EditorSaveDialog v-else-if="saveFeedback" v-bind="saveFeedback" @close="saveFeedback=null" />
     <GameGlobalConfigDialog v-if="globalPageMounted" v-show="editorPage==='global'" ref="globalPageRef" embedded rank class="rank-global-config-page" :config="globalConfigDraft" :categories="gameCategories" :saving="busy==='save'" />
     <GameWiringDialog v-if="wiringPageMounted" v-show="editorPage==='wiring'" ref="wiringPageRef" embedded class="rank-wiring-page" :wiring="document?.wiringData" :width="document.siteSizeWidth" :height="document.siteSizeHeight" :saving="busy==='save'" />
-    <MediaPickerDialog v-if="mediaPicker" :accept="mediaPicker.accept" :current-value="mediaPicker.level?.[mediaPicker.field]||''" :title="mediaPicker.label" @cancel="mediaPicker=null" @select="applyMedia" />
+    <MediaPickerDialog v-if="mediaPicker" :accept="mediaPicker.accept" :current-value="pickerValue(mediaPicker)" :title="mediaPicker.label" @cancel="mediaPicker=null" @select="applyMedia" />
   </section>
   <ConfirmationDialog v-if="confirmation" :key="confirmation.id" :request-id="confirmation.id" :message="confirmation.message"
     @accept="resolveConfirmation(true, $event)" @cancel="resolveConfirmation(false, $event)" />

@@ -106,7 +106,7 @@ test("Rank editor exposes the shared media picker and previews for all lifecycle
     assert.match(source+global, pattern);
   }
   assert.match(source,/<GameGlobalConfigDialog[^>]*rank/);
-  assert.match(source,/chooseMedia\('startGif','image'/);
+  assert.match(source,/chooseMedia\('playIntroVideo','visual'/);
   assert.match(source,/key:'gameplayIntro',label:'rank.voiceDescription'/);
   assert.match(source,/key:'backgroundVoice',label:'rank.levelBackgroundMusic'/);
   assert.doesNotMatch(source,/@click="(?:importJson|exportJson)"/);

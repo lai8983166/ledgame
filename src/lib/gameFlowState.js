@@ -57,6 +57,8 @@ export function normalizeRuntimeState(value) {
     gameTime: normalizeGameTime(state.gameTime),
     childMode: Boolean(state.childMode),
     gameplay: state.gameplay && typeof state.gameplay === "object" ? { ...state.gameplay } : null,
+    secondaryOpeningIntro: ['STARTING', 'PAUSED'].includes(String(state.engineState).toUpperCase())
+      ? normalizeIntroVideo(state.secondaryOpeningIntro) : null,
     introVideo: ['STARTING', 'RUNNING', 'SETTLING', 'PAUSED'].includes(String(state.engineState).toUpperCase())
       ? normalizeIntroVideo(state.introVideo) : null,
   };
@@ -183,8 +185,8 @@ export function normalizeGameSummary(value) {
     firstCatalog: nullableText(value.firstCatalog),
     displayOrder: nullableNumber(value.displayOrder),
     participants: nullableNumber(value.participants ?? value.maxPlayers),
-    minPlayers: nullableNumber(value.minPlayers) ?? 1,
-    maxPlayers: nullableNumber(value.maxPlayers ?? value.participants) ?? 1,
+    minPlayers: nullableNumber(value.minPlayers),
+    maxPlayers: nullableNumber(value.maxPlayers),
     width: nullableNumber(value.width),
     height: nullableNumber(value.height),
     levels: Array.isArray(value.levels) ? value.levels.map((level, index) => ({

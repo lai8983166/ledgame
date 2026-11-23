@@ -6,10 +6,12 @@ const props = defineProps({
   assetReference: { type: String, required: true },
   playbackId: { type: String, default: '' },
   positionMillis: { type: Number, default: null },
+  allowImage: { type: Boolean, default: false },
   paused: { type: Boolean, default: false },
 });
 const emit = defineEmits(['unavailable']);
 const video = ref(null);
+const mediaType = ref('video');
 const url = ref('');
 const failed = ref(false);
 let mounted = true;
@@ -20,7 +22,9 @@ const loader = createLatestAsyncValueLoader({
   getCurrentKey: () => props.assetReference,
   async onSuccess(result) {
     const source = result?.url || (typeof result === 'string' ? result : '');
-    if (!source || (result?.mediaType && result.mediaType !== 'video')) { unavailable(); return; }
+    const type = result?.mediaType || 'video';
+    if (!source || (type !== 'video' && !(props.allowImage && type === 'image'))) { unavailable(); return; }
+    mediaType.value = type;
     url.value = source;
     await nextTick();
     syncPlayback();
@@ -66,11 +70,13 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <video v-if="url && !failed" ref="video" :src="url" autoplay muted loop playsinline
+  <img v-if="url && !failed && mediaType === 'image'" :src="url" alt=""
+    :data-playback-id="playbackId" :data-asset="assetReference" @error="unavailable" />
+  <video v-else-if="url && !failed" ref="video" :src="url" autoplay muted loop playsinline
     data-testid="gameplay-intro-video" :data-playback-id="playbackId" :data-asset="assetReference"
     @loadedmetadata="syncPlayback" @canplay="syncPlayback" @error="unavailable" />
 </template>
 
 <style scoped>
-video { display: block; width: 100%; height: 100%; object-fit: contain; background: #000; }
+img, video { display: block; width: 100%; height: 100%; object-fit: contain; background: #000; }
 </style>

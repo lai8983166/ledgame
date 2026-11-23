@@ -48,7 +48,7 @@ try {
     await page.screenshot({path:path.join(app.runtime.directory,'timeout-'+id+'.png')});
     await button('重新开始').click();await expect.poll(async()=>(await state()).engineState,{timeout:30_000}).toBe('RUNNING');
     assert.equal((await state()).gameplay.life,5);await expect(circle).toHaveAttribute('data-phase','BLUE');
-    await button('退出调试，返回游戏列表').click();await card.waitFor();
+    await button('返回游戏列表').click();await card.waitFor();
     assert.ok(['IDLE','STOPPED'].includes((await state()).engineState));
     passed.push({name:game.name,id,saveReopen:true,clickNoScore:true,pauseFrozen:true,timeoutLife:true,restartCleanup:true});
   }

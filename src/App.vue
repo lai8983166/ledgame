@@ -997,7 +997,7 @@ function formatRuntimeValue(value, fallback = "-") {
     />
     </KeepAlive>
     <EditorDebugWorkspace v-if="activeView === 'game-debug' && debugGame" ref="debugWorkspaceRef" :game="debugGame"
-      :exit-label="t('catalogMaintenance.back')" @exit="exitGameDebug" />
+      :exit-label="t('rank.back')" @exit="exitGameDebug" />
 
     <DemoView
       v-if="activeView === 'demo'"

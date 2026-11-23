@@ -83,7 +83,7 @@ try{
       await button('取消').click();
       const preparingCanvas=await page.locator('.editor-debug-workspace canvas').evaluate(canvas=>canvas.toDataURL());
       await expect.poll(()=>page.locator('.editor-debug-workspace canvas').evaluate(canvas=>canvas.toDataURL())).not.toBe(preparingCanvas);
-      await button('退出调试，返回游戏列表').click();await expect.poll(async()=>(await state()).engineState).toBe('IDLE');
+      await button('返回游戏列表').click();await expect.poll(async()=>(await state()).engineState).toBe('IDLE');
       await card.hover();await card.getByRole('button',{name:'调试游戏',exact:true}).click();
       await expect(page.locator('.editor-debug-workspace')).toBeVisible();
       passed.push('真实PREPARING扫码配置持续显示媒体GIF，退出取消后恢复IDLE');
@@ -123,7 +123,7 @@ try{
     await expect.poll(async()=>(await state()).engineState).toBe('STOPPED');
     await page.getByTestId('game-menu-button').click();await page.getByRole('menuitem',{name:'游戏列表',exact:true}).click();
     await card.hover();await card.getByRole('button',{name:'调试游戏',exact:true}).click();
-    await button('退出调试，返回游戏列表').click();await expect(page.locator('.editor-debug-workspace')).toHaveCount(0);
+    await button('返回游戏列表').click();await expect(page.locator('.editor-debug-workspace')).toHaveCount(0);
     await card.waitFor();
     passed.push(`${game.name} ${dimensions.join('×')}：真实 EXE 完整矩阵、直接启动、RGB、暂停恢复、重开、导航语言不中断、媒体切换结束调试、返回游戏列表`);
   }

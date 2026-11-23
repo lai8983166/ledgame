@@ -54,6 +54,7 @@ const presentation = computed(() => createSecondaryDisplayPresentation(runtimeSt
   observedAt: stateObservedAt.value,
   now: clockNow.value,
 }));
+const intro = computed(() => runtimeState.value.secondaryOpeningIntro || runtimeState.value.introVideo);
 const gameplay = computed(() => presentation.value.state.gameplay || {});
 const lifecycle = computed(() => presentation.value.state.engineState);
 const isIdleVisible = computed(() => !errorMessage.value
@@ -264,10 +265,10 @@ function displayValue(value) {
       aria-hidden="true"
     ></div>
     <div class="secondary-runtime-grid" aria-hidden="true"></div>
-    <GameplayIntroVideo v-if="runtimeState.introVideo" class="secondary-intro-video"
-      :key="runtimeState.introVideo.id" :asset-reference="runtimeState.introVideo.assetReference"
-      :playback-id="runtimeState.introVideo.id" :position-millis="runtimeState.introVideo.positionMillis"
-      :paused="runtimeState.introVideo.paused" :aria-label="t('gameIntro.gameplayIntro')" />
+    <GameplayIntroVideo v-if="intro" class="secondary-intro-video" allow-image
+      :key="intro.id" :asset-reference="intro.assetReference"
+      :playback-id="intro.id" :position-millis="intro.positionMillis"
+      :paused="intro.paused" :aria-label="t('gameIntro.gameplayIntro')" />
 
     <section v-if="errorMessage" class="secondary-runtime-center secondary-runtime-error">
       <span>CONNECTION</span>

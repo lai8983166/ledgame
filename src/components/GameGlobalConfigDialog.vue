@@ -43,6 +43,8 @@ const sections = computed(() => {
       { label: t("simple.remark"), path: "remark", kind: "text" },
       { label: t("simple.width"), path: "siteSizeWidth", kind: "number", min: 1, max: GAME_FIELD_DIMENSION_MAX, step: 1, marked: true },
       { label: t("simple.height"), path: "siteSizeHeight", kind: "number", min: 1, max: GAME_FIELD_DIMENSION_MAX, step: 1, marked: true },
+      { label: t('rank.minPlayers'), path: props.rank ? 'minPlayers' : 'commonConfig.minPlayers', kind: 'number', min: 1, max: 6, step: 1, optional: true },
+      { label: t('rank.maxPlayers'), path: props.rank ? 'maxPlayers' : 'commonConfig.maxPlayers', kind: 'number', min: 1, max: 6, step: 1, optional: true },
       { label: t("globalConfig.firstCatalog"), path: "firstCatalog", kind: "category", marked: true },
       { label: t("management.childModeVisible"), path: "childModeVisible", kind: "checkbox" },
     ],
@@ -68,7 +70,7 @@ const sections = computed(() => {
       { label: t("globalConfig.idleBgm"), path: "audio.globalBackgroundSound", kind: "media", accept: "audio" },
       { label: t("globalConfig.scoreSound"), path: "audio.scoreSound", kind: "media", accept: "audio", marked: true },
       { label: t("globalConfig.injurySound"), path: "audio.injurySound", kind: "media", accept: "audio", marked: true },
-      { label: t("globalConfig.doubleSound"), path: "audio.purpleSound", kind: "media", accept: "audio", marked: true },
+      ...(!props.rank ? [{ label: t("globalConfig.doubleSound"), path: "audio.purpleSound", kind: "media", accept: "audio", marked: true }] : []),
     ],
   },
   {
@@ -99,10 +101,6 @@ const sections = computed(() => {
   for (const section of shared) {
     section.fields = section.fields.filter(field => field.path !== 'remark').map(field => ({ ...field, marked: ['name','siteSizeWidth','siteSizeHeight'].includes(field.path) }));
   }
-  shared[0].fields.push(
-    { label:t('rank.minPlayers'), path:'minPlayers', kind:'number', min:1 },
-    { label:t('rank.maxPlayers'), path:'maxPlayers', kind:'number', min:1 },
-  );
   shared.push({ title:t('rank.playerColors'), columns:3, fields: (draft.value.palette || []).map((_,index) => ({ label:`${index+1}P`, path:`palette.${index}`, kind:'color' })) });
   return shared;
 });
@@ -147,7 +145,7 @@ function resetDraft() {
     audio: { ...(source.audio || {}) },
     gif: { ...(source.gif || {}) },
     commonConfig: { ...(source.commonConfig || {}) },
-    ...(props.rank ? { minPlayers: source.minPlayers ?? 1, maxPlayers:source.maxPlayers ?? 6, palette:[...(source.palette || [])] } : {}),
+    ...(props.rank ? { minPlayers: source.minPlayers ?? null, maxPlayers:source.maxPlayers ?? null, palette:[...(source.palette || [])] } : {}),
   };
   draft.value = getDraft();
   markSaved();
@@ -318,7 +316,7 @@ onBeforeUnmount(() => {
                 :step="field.step ?? 1"
                 :value="getPath(field.path)"
                 :disabled="saving"
-                @input="setPath(field.path, $event.target.value === '' ? '' : Number($event.target.value))"
+                @input="setPath(field.path, $event.target.value === '' ? (field.optional ? null : '') : Number($event.target.value))"
               />
 
               <select v-else-if="field.kind === 'life-mode'" :value="String(Boolean(draft.globalLifeLimit))" :disabled="saving" @change="draft.globalLifeLimit = $event.target.value === 'true'">

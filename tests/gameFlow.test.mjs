@@ -1,3 +1,4 @@
+import { supportsPlayerCount } from "../src/lib/gameCatalog.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
@@ -236,8 +237,20 @@ test("normalizeGameList unwraps backend Result data", () => {
   assert.equal(game.id, gameListFixture[0].id);
   assert.equal(game.name, gameListFixture[0].name);
   assert.equal(game.displayName, gameListFixture[0].name);
-  assert.equal(game.maxPlayers, gameListFixture[0].participants);
+  assert.equal(game.participants, gameListFixture[0].participants);
+  assert.equal(game.maxPlayers, null);
   assert.deepEqual(game.levels, []);
+});
+
+test("player limits are inclusive, independent and optional for each game family", () => {
+  for (const type of ["rank", "default"]) {
+    for (const [minPlayers, maxPlayers, expected] of [
+      [null, null, [1, 2, 3, 4, 5, 6]], [null, 2, [1, 2]], [5, null, [5, 6]], [3, 3, [3]],
+    ]) {
+      const [game] = normalizeGameList([{ id: 1, type, participants: 1, minPlayers, maxPlayers }]);
+      assert.deepEqual([1, 2, 3, 4, 5, 6].filter(count => supportsPlayerCount(game, count)), expected);
+    }
+  }
 });
 
 test("termination and error helpers preserve backend meaning", () => {
