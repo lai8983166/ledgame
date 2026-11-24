@@ -47,6 +47,7 @@ const previewLoader = createLatestAsyncValueLoader({
 });
 
 const acceptLabel = computed(() => {
+  if (props.accept === "gif") return "GIF";
   if (props.accept === "audio") return t("mediaPicker.audio");
   if (props.accept === "image") return t("mediaPicker.images");
   if (props.accept === 'video') return t('gameIntro.video');

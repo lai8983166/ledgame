@@ -37,13 +37,13 @@ test('duplicating a Rank level preserves all configuration and detaches nested v
 test('Rank coordinate ranges enforce displayed bounds and preserve drafts by level through reorder and deletion',()=>{
   const one=createRankLevel(16,36),two=createRankLevel(16,36,1);
   const doc={siteSizeWidth:16,siteSizeHeight:36,levels:[one,two]},drafts=new Map();
-  for(const text of ['0,2','1,17','4,2','1.5,2','1,','1e0,2'])assert.equal(parseRankEditorRange('x',text,doc),null);
+  for(const text of ['0,2','1,17','4,2','1.5,2','1e0,2'])assert.equal(parseRankEditorRange('x',text,doc),null);
   assert.deepEqual(parseRankEditorRange('x','1，16',doc),[1,16]);
   assert.deepEqual(parseRankEditorRange('y','2,36',doc),[2,36]);
   assert.equal(parseRankEditorRange('y','2,37',doc),null);
   setRankRangeDraft(one,'x','3,8',doc,drafts);setRankRangeDraft(one,'y','2,',doc,drafts);
   setRankRangeDraft(two,'x','7,12',doc,drafts);
-  assert.deepEqual(one.bounds,{minX:3,maxX:8,minY:1,maxY:36});
+  assert.deepEqual(one.bounds,{minX:3,maxX:8,minY:2,maxY:null});
   const moved=moveLevelAt(doc.levels,1,0,0);doc.levels=moved.levels;
   assert.equal(doc.levels[moved.activeIndex],one);
   assert.equal(rankRangeText(doc.levels[0],'x',drafts),'7,12');
@@ -157,4 +157,18 @@ test('Rank bomb media belongs to the subtype and independent level payload, neve
   assert.equal(createRankLevel().bombWarningAudio,'');assert.equal(createRankLevel().bombExplosionAudio,'');
   const global=await readFile(new URL('../src/components/GameGlobalConfigDialog.vue',import.meta.url),'utf8');
   assert.doesNotMatch(global,/rankBombWarningAudio|rankBombExplosionAudio/);
+});
+
+test('partially configured walls retain their media and optional bounds after saving and reopening', () => {
+  const doc = { siteSizeWidth: 8, siteSizeHeight: 12, levels: [createRankLevel(8, 12)] };
+  const level = doc.levels[0];
+  const drafts = new Map();
+  setRankRangeDraft(level, 'x', '', doc, drafts);
+  setRankRangeDraft(level, 'y', ',8', doc, drafts);
+  level.bottomWallGIF = 'media/wall.GIF';
+  const saved = createRankEditorPayload(doc, 7);
+  assert.deepEqual(saved.levels[0].bounds, {minX: null, maxX: null, minY: null, maxY: 7});
+  const reopened = normalizeRankEditorDocument(saved).levels[0];
+  assert.deepEqual(reopened.bounds, level.bounds);
+  assert.equal(reopened.bottomWallGIF, level.bottomWallGIF);
 });

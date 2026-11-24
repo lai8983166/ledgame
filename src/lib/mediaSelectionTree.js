@@ -5,6 +5,7 @@ export function filterMediaTree(nodes, accept = 'any') {
       return children.length ? [{...node, children}] : [];
     }
     const matches = node.mediaType === accept
+      || (accept === 'gif' && node.mediaType === 'image' && /\.gif$/i.test(node.relativePath))
       || (accept === 'visual' && ['image', 'video'].includes(node.mediaType))
       || (accept === 'any' && ['image', 'audio', 'video'].includes(node.mediaType));
     return node.kind === 'file' && matches ? [node] : [];

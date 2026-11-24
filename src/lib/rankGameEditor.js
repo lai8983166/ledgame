@@ -13,7 +13,7 @@ export function createRankEditorPayload(value, gameId) {
   if (Array.isArray(payload.levels)) {
     for (const level of payload.levels) {
       if (level?.type === 1) {
-        initializeScoreBlockRange(level, payload.maxPlayers);
+        initializeScoreBlockRange(level, payload);
       } else if (level) {
         delete level.scoreBlockCountMin;
         delete level.scoreBlockCountMax;
@@ -33,9 +33,9 @@ export function createRankEditorPayload(value, gameId) {
   return payload;
 }
 
-function initializeScoreBlockRange(level, maxPlayers) {
+function initializeScoreBlockRange(level, {maxPlayers, siteSizeWidth, siteSizeHeight}) {
   const {minX, maxX, minY, maxY} = level.bounds || {};
-  const capacity = (maxX - minX + 1) * (maxY - minY + 1);
+  const capacity = ((maxX ?? siteSizeWidth) - (minX ?? 1) + 1) * ((maxY ?? siteSizeHeight) - (minY ?? 1) + 1);
   if (!Number.isSafeInteger(capacity) || capacity < 1) return;
   const players = maxPlayers ?? 6;
   if (level.targetsPerPlayerMin != null) level.scoreBlockCountMin ??= Math.min(capacity, level.targetsPerPlayerMin * players);
@@ -49,7 +49,7 @@ export function createRankLevel(width = 16, height = 36, index = 0, maxPlayers =
     bounds: { minX: 1, minY: 1, maxX: width, maxY: height },
     targetsPerPlayerMin: 3, targetsPerPlayerMax: 4, bombMin: 0, bombMax: 1,
     bombWarningDelaySeconds: 3, bombWarningDurationSeconds: 1, refreshSeconds: 6, earlyRefresh: true };
-  initializeScoreBlockRange(level, maxPlayers);
+  initializeScoreBlockRange(level, {maxPlayers, siteSizeWidth: width, siteSizeHeight: height});
   return level;
 }
 
@@ -75,8 +75,15 @@ export const RANK_RANGE_FIELDS = Object.freeze({
 });
 
 export function parseRankEditorRange(kind, text, document) {
-  return parseRankRange(text, kind === 'bombs' ? 0 : 1,
-    kind === 'x' ? Number(document.siteSizeWidth) : kind === 'y' ? Number(document.siteSizeHeight) : Infinity);
+  if (kind === 'x' || kind === 'y') {
+    const limit = Number(kind === 'x' ? document.siteSizeWidth : document.siteSizeHeight);
+    const parts = String(text).trim() === '' ? ['', ''] : String(text).split(/[,，]/);
+    if (parts.length !== 2) return null;
+    const coordinates = parts.map(part => part.trim() === '' ? null : /^\d+$/.test(part.trim()) ? Number(part) : NaN);
+    if (coordinates.some(n => n !== null && (!Number.isSafeInteger(n) || n < 1 || n > limit))) return null;
+    return (coordinates[0] ?? 1) <= (coordinates[1] ?? limit) ? coordinates : null;
+  }
+  return parseRankRange(text, kind === 'bombs' ? 0 : 1);
 }
 
 export function rankRangeText(level, kind, drafts) {
@@ -90,7 +97,7 @@ export function exceededScoreBlockCapacity(level, document, drafts) {
   const read = kind => parseRankEditorRange(kind, rankRangeText(level, kind, drafts), document);
   const x = read('x'), y = read('y'), blocks = read('scoreBlocks');
   if (!x || !y || !blocks) return null;
-  const capacity = (x[1] - x[0] + 1) * (y[1] - y[0] + 1);
+  const capacity = ((x[1] ?? document.siteSizeWidth) - (x[0] ?? 1) + 1) * ((y[1] ?? document.siteSizeHeight) - (y[0] ?? 1) + 1);
   return blocks[1] > capacity ? capacity : null;
 }
 
@@ -112,12 +119,12 @@ export function normalizeRankEditorDocument(value) {
   for (const [index, level] of doc.levels.entries()) {
     if (!level || typeof level !== 'object') continue;
     if (!level.label || (index === 0 && doc.levels.length === 1 && ['Type 1', 'Level 1', '\u6392\u4f4d\u8d5b'].includes(level.label))) level.label = index === 0 ? 'Ranking' : `Level ${index + 1}`;
-    level.bounds ||= { minX: 0, minY: 0, maxX: (doc.siteSizeWidth || 16) - 1, maxY: (doc.siteSizeHeight || 36) - 1 };
+    level.bounds ||= {};
     for (const field of ['minX','minY','maxX','maxY']) {
       const raw = level.bounds[field];
       if (raw !== '' && raw != null && Number.isFinite(Number(raw))) level.bounds[field] = Math.trunc(Number(raw)) + 1;
     }
-    initializeScoreBlockRange(level, doc.maxPlayers);
+    initializeScoreBlockRange(level, doc);
     level.rewardPoints ??= 0;
     level.bombExplosionVolumePercent ??= DEFAULT_BOMB_EXPLOSION_VOLUME_PERCENT;
   }

@@ -20,6 +20,11 @@ import MediaPickerDialog from '../components/MediaPickerDialog.vue';
 import GameGlobalConfigDialog from '../components/GameGlobalConfigDialog.vue';
 import GameWiringDialog from '../components/GameWiringDialog.vue';
 
+const wallFields = [
+  {boundary:'minY', field:'wallGIF'}, {boundary:'maxY', field:'bottomWallGIF'},
+  {boundary:'minX', field:'leftWallGIF'}, {boundary:'maxX', field:'rightWallGIF'},
+];
+
 const props=defineProps({ gameId:{type:[Number,String],default:null}, initialDocument:{type:Object,default:null}, gameName:{type:String,default:''}, openGlobalConfigOnEntry:{type:Boolean,default:false} });
 const emit=defineEmits(['back']);
 const {t}=useI18n({useScope:'global'}), api=window.ledGame;
@@ -229,9 +234,19 @@ function goBack(){emit('back');}
         <audio v-if="mediaValue(field.key)" :key="mediaValue(field.key)" :src="buildMediaPreviewUrl(mediaValue(field.key))" controls preload="none" />
       </div></label>
       <label v-for="kind in ['x','y']" :key="kind"><span>{{t(`rank.${kind}Range`)}}</span><div>
-        <input :value="rangeText(kind)" :data-rank-field="`level.bounds.${kind}`" :placeholder="t('rank.rangePlaceholder')" :aria-invalid="Boolean(rangeError(type1Config,kind))" @input="setRange(kind,$event.target.value)" />
+        <input :value="rangeText(kind)" :data-rank-field="`level.bounds.${kind}`" :placeholder="t('rank.optionalBounds')" :aria-invalid="Boolean(rangeError(type1Config,kind))" @input="setRange(kind,$event.target.value)" />
         <small v-if="rangeError(type1Config,kind)" class="field-error">{{t('rank.rangeInvalid')}}</small>
       </div></label>
+      <template v-for="wall in wallFields" :key="wall.field">
+        <label v-if="type1Config.bounds[wall.boundary] > 0" class="rank-level-media">
+          <span>{{t('rank.' + wall.field)}}</span>
+          <div class="rank-media-control">
+            <input :value="mediaValue(wall.field)" :placeholder="t('globalConfig.notSelected')" readonly />
+            <button class="soft-button compact-button" type="button" @click="chooseMedia(wall.field,'gif',t('rank.' + wall.field))">{{t('globalConfig.choose')}}</button>
+            <button class="soft-button compact-button" type="button" :disabled="!mediaValue(wall.field)" @click="type1Config[wall.field]=''">{{t('globalConfig.clear')}}</button>
+          </div>
+        </label>
+      </template>
       <label><span class="editor-required-label">{{t('globalConfig.type')}}</span><select v-model="type1Config.type" data-rank-field="level.type"><option :value="null" disabled>{{t('rank.selectType')}}</option><option v-for="type in RANK_BOMB_TYPES" :key="type" :value="type">{{t(`rank.type${type}`)}}</option></select></label>
       <template v-if="RANK_BOMB_TYPES.includes(type1Config.type)">
         <label v-for="field in [type1Config.type===1?{key:'scoreBlocks',label:'rank.scoreBlockCount'}:{key:'targets',label:'rank.targetRange'},{key:'bombs',label:'rank.bombRange'}]" :key="field.key"><span>{{t(field.label)}}</span><div>

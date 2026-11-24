@@ -1,6 +1,7 @@
 export const rankMessages = {
   "zh-CN": {
     rank: {
+      optionalBounds: "最小值,最大值（两端均可留空）", wallGIF: "上墙 GIF", bottomWallGIF: "下墙 GIF", leftWallGIF: "左墙 GIF", rightWallGIF: "右墙 GIF",
       levelName: "关卡名", gameDescription: "游戏说明", voiceDescription: "语音说明", timeLimit: "时间限制（秒）",
       type1: "炸弹3x3", type2: "炸弹5x5", type3: "炸弹7x7", selectType: "请选择类型", targetRange: "每玩家目标", bombRange: "炸弹数量",
       rangePlaceholder: "输入min,max", rangeInvalid: "请输入合法的min,max，最小值不能大于最大值",
@@ -82,6 +83,7 @@ export const rankMessages = {
   },
   "en-US": {
     rank: {
+      optionalBounds: "Min,max (either end may be blank)", wallGIF: "Top wall GIF", bottomWallGIF: "Bottom wall GIF", leftWallGIF: "Left wall GIF", rightWallGIF: "Right wall GIF",
       levelName: "Level name", gameDescription: "Game instructions", voiceDescription: "Voice instructions", timeLimit: "Time limit (seconds)",
       type1: "Bomb 3x3", type2: "Bomb 5x5", type3: "Bomb 7x7", selectType: "Select a type", targetRange: "Targets per player", bombRange: "Bomb count",
       rangePlaceholder: "Enter min,max", rangeInvalid: "Enter a valid min,max range with min no greater than max",
