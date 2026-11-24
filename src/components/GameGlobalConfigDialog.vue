@@ -1,5 +1,6 @@
 <script setup>
 import { GAME_FIELD_DIMENSION_MAX, gameFieldDimensionsValid } from '../lib/gameFieldDimensions.js';
+import { MAX_PLAYER_COUNT } from '../lib/touchGamePreparation.js';
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { isComposingEvent } from "../lib/dialogInput.js";
@@ -43,8 +44,8 @@ const sections = computed(() => {
       { label: t("simple.remark"), path: "remark", kind: "text" },
       { label: t("simple.width"), path: "siteSizeWidth", kind: "number", min: 1, max: GAME_FIELD_DIMENSION_MAX, step: 1, marked: true },
       { label: t("simple.height"), path: "siteSizeHeight", kind: "number", min: 1, max: GAME_FIELD_DIMENSION_MAX, step: 1, marked: true },
-      { label: t('rank.minPlayers'), path: props.rank ? 'minPlayers' : 'commonConfig.minPlayers', kind: 'number', min: 1, max: 6, step: 1, optional: true },
-      { label: t('rank.maxPlayers'), path: props.rank ? 'maxPlayers' : 'commonConfig.maxPlayers', kind: 'number', min: 1, max: 6, step: 1, optional: true },
+      { label: t('rank.minPlayers'), path: props.rank ? 'minPlayers' : 'commonConfig.minPlayers', kind: 'number', min: 1, max: props.rank ? 6 : MAX_PLAYER_COUNT, step: 1, optional: true },
+      { label: t('rank.maxPlayers'), path: props.rank ? 'maxPlayers' : 'commonConfig.maxPlayers', kind: 'number', min: 1, max: props.rank ? 6 : MAX_PLAYER_COUNT, step: 1, optional: true },
       { label: t("globalConfig.firstCatalog"), path: "firstCatalog", kind: "category", marked: true },
       { label: t("management.childModeVisible"), path: "childModeVisible", kind: "checkbox" },
     ],

@@ -143,7 +143,7 @@ try{
   if(level)await page.locator(`[data-debug-level="${level}"]`).click();await resetTrace();
  }
  for(const game of games){
-  await open(game);await button('启动游戏').click();await waitForOpening(game.name+'-首关',{pause:game.name==='simple',intro:true});
+  await open(game);await button('开始游戏').click();await waitForOpening(game.name+'-首关',{pause:game.name==='simple',intro:true});
   if(game.name==='simple'){
    const lights=(await state()).peripheralLights;assert.equal(lights.enabled,true);assert.equal(lights.lights.length,4);
    assert.ok(lights.lights.every(light=>light.alignX===35&&light.alignY===15));
@@ -162,13 +162,13 @@ try{
  }
  const owners=async()=>{const log=await readFile(path.join(data,'logs/backend.log'),'utf8');return new Set([...log.matchAll(/cue=READY_GO_VOICE asset=ReadyGo\.mp3 owner=(\S+)/g)].map(m=>m[1]));};
  await expect.poll(async()=>(await owners()).size).toBe(3);
- const simple=games.find(g=>g.name==='simple');await open(simple,1);await button('启动游戏').click();
+ const simple=games.find(g=>g.name==='simple');await open(simple,1);await button('开始游戏').click();
  await expect.poll(async()=>(await trace()).some(f=>f.hash===three)).toBe(true);await command('endgame');
  await page.waitForTimeout(3400);assert.equal((await state()).engineState,'STOPPED');assert.equal((await owners()).size,3);
  assert.equal((await trace()).some(f=>[two,one,marker].includes(f.hash)),false);
  passed.push('非首关直接启动不触发ReadyGo，321中停止后无迟到换帧或开始玩法');
  passed.push('三游戏首关各触发一个ReadyGo媒体owner，第二关无新增语音');
- await button('返回游戏列表').click();await open(simple);await button('启动游戏').click();
+ await button('返回游戏列表').click();await open(simple);await button('开始游戏').click();
  await expect.poll(async()=>(await state()).startingStandby).toBe(true);
  await command('endgame');const stoppedAt=Date.now();await page.waitForTimeout(4000);
  assert.equal((await state()).engineState,'STOPPED');assert.equal((await owners()).size,3);
@@ -184,7 +184,7 @@ try{
  await request(`/rank-game-editor/${rank.gameId}`,'PUT',rankDoc);
  await page.reload();await page.getByTestId('game-menu-button').waitFor();
  await page.evaluate(()=>{window.__openingFrames=[];window.ledGame.onLedFrame(f=>{if(f?.rgb?.length===16*36*3)window.__openingFrames.push({time:f.receivedAt,rgb:Array.from(f.rgb)});});});
- await open(rank);await button('启动游戏').click();await waitForIntro('Rank8x8');
+ await open(rank);await button('开始游戏').click();await waitForIntro('Rank8x8');
  await expect.poll(async()=>(await state()).engineState,{timeout:10000}).toBe('RUNNING');
  assert.equal((await state()).startingStandby,false);
  await expect.poll(async()=>{const frame=await page.evaluate(()=>window.ledGame.latestFrame());return frame?.width===8&&frame?.height===8;}).toBe(true);

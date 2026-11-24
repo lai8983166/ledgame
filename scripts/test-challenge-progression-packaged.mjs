@@ -100,7 +100,9 @@ try{
     return Boolean(secondary);
   }).toBe(true);
   await page.bringToFront();
-  await button('启动游戏').click();
+  await expect(button('结束游戏')).toBeDisabled();
+  await button('开始游戏').click();
+  await expect(button('开始游戏')).toBeDisabled();
   const intro = secondary.locator('video[data-asset="dashboard/idle.mp4"]');
   await expect(intro).toBeVisible();
   await expect.poll(() => intro.evaluate(video => video.muted && !video.paused && video.currentTime > 0)).toBe(true);
@@ -136,13 +138,14 @@ try{
   assert.match(backendLog,/media cue started cue=SCORE_SFX/);
   assert.match(backendLog,/media cue started cue=DOUBLE_SFX/);
   passed.push('蓝紫对象逐格踩踏，紫格触发得分和 double 音效；两关生命值从 2 切换至 4，末关结束后恢复真实待机 GIF');
-  await button('启动游戏').click();
+  await button('开始游戏').click();
   await expect(button('结束游戏')).toBeEnabled();
   await expect.poll(async () => (await state()).engineState).toBe('RUNNING');
   const logBeforeStop = await readFile(path.join(data,'logs/backend.log'),'utf8');
   await button('结束游戏').click();
   await expect.poll(async () => (await state()).engineState).toBe('IDLE');
-  await expect(button('启动游戏')).toBeEnabled();
+  await expect(button('开始游戏')).toBeEnabled();
+  await expect(button('结束游戏')).toBeDisabled();
   await expect.poll(async () => {
     const frame = await page.evaluate(() => window.ledGame.latestFrame());
     return frame?.width === 16 && frame?.height === 36 && gifHashes.has(frameHash(frame));
@@ -151,11 +154,11 @@ try{
     const log = await readFile(path.join(data,'logs/backend.log'),'utf8');
     return log.slice(logBeforeStop.length).includes('media cue started cue=SYSTEM_IDLE_BGM');
   }).toBe(true);
-  await button('启动游戏').click();
+  await button('开始游戏').click();
   await expect(button('结束游戏')).toBeEnabled();
   await button('结束游戏').click();
   await expect.poll(async () => (await state()).engineState).toBe('IDLE');
-  passed.push('手动结束回到系统待机并恢复 GIF，主按钮可再次启动和结束游戏');
+  passed.push('手动结束回到系统待机并恢复 GIF，开始和结束按钮互斥并支持再次开局');
   await button('返回游戏列表').click();
   const rank = catalog.find(game => game.type === 'rank');
   assert.ok(rank);
@@ -188,6 +191,32 @@ try{
   await expect(rankConfig.getByRole('spinbutton',{name:/最多玩家/})).toHaveValue('');
   await expect(rankConfig.getByText(/double\s*音效/i)).toHaveCount(0);
   passed.push('Rank 视频介绍和可空人数范围已随游戏保存，编辑器显示视频预览及人数设置并隐藏 double 音效');
+  doc.commonConfig.maxPlayers = 8;
+  await request('/game-editor/' + simple.gameId, 'PUT', doc);
+  const eightPlayerCategory = await request('/game-categories', 'POST', {name: '多人验收'});
+  await request('/games/' + simple.gameId + '/metadata', 'PATCH', {firstCatalog: String(eightPlayerCategory.id)});
+  await page.evaluate(() => window.ledGame.enterGameFlow({mode: 'game'}));
+  let touch;
+  await expect.poll(() => {
+    touch = browser.contexts()[0].pages().find(p => p.url().includes('window=touch'));
+    return Boolean(touch);
+  }).toBe(true);
+  await touch.getByTestId('game-touch-idle').press('Enter');
+  await touch.getByTestId('game-player-count-more').click();
+  const countDialog = touch.getByTestId('game-player-count-dialog');
+  await expect(countDialog.locator('output')).toHaveText('7');
+  await countDialog.locator('.touch-count-stepper button').last().click();
+  await expect(countDialog.locator('output')).toHaveText('8');
+  await countDialog.locator('button[type="submit"]').click();
+  await touch.getByTestId('game-category-' + eightPlayerCategory.id).click();
+  await expect(touch.getByTestId('game-carousel')).toBeVisible();
+  await touch.getByTestId('game-game-next').click();
+  await touch.getByTestId('game-start').click();
+  await expect.poll(async () => {
+    const current = await state();
+    return current.preparation?.options?.userCount ?? current.userCount;
+  }).toBe(8);
+  passed.push('正式入口通过“更多”选择 8 人，选择关卡后以 8 人提交开局');
   await page.evaluate(()=>{void window.ledGame.closeWindow();});
   await expect.poll(async()=>{try{await state();return false;}catch{return true;}},{timeout:15000}).toBe(true);
   passed.push('退出真实 EXE 后内嵌后端释放');

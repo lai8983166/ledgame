@@ -85,7 +85,7 @@ try {
     }
   });
   await page.evaluate(() => window.mountComponent('EditorDebugWorkspace', { game: window.fixture.game }));
-  await expect(button('启动游戏')).toBeEnabled();
+  await expect(button('开始游戏')).toBeEnabled();
   await check('精简调试界面保留列表选关，不显示所选配置及重复控件和状态提示', async () => {
     assert.equal(await page.locator('[data-debug-level]').count(),3);
     assert.deepEqual(await page.locator('[data-debug-level]').allTextContents(),['关卡1','关卡2','关卡3']);
@@ -99,7 +99,7 @@ try {
     assert.equal(await count('prepare'),0);
     await page.locator('[data-debug-level="0"]').click();
   });
-  await button('启动游戏').click();
+  await button('开始游戏').click();
   assert.equal(await page.evaluate(()=>window.fixture.requests.find(item=>item[0]==='prepare')[1].skipGameStartAudio===true),false);
   await check('运行中一次命令立即切到所选关，不重新准备且重置本局显示', async () => {
     await page.evaluate(() => window.fixture.publish({ gameplay: { score: 99, life: 1 }, gameTime: { mode: 'LIMITED', remainingMillis: 7000 } }));
@@ -147,15 +147,15 @@ try {
   });
   await check('新准备失败后恢复启动入口，重试使用所选关', async () => {
     await page.evaluate(() => { window.fixture.failPrepare = true; }); await button('重新开始').click();
-    await expect(page.getByRole('alert')).toContainText('准备失败'); await expect(button('启动游戏')).toBeEnabled();
-    await page.evaluate(() => { window.fixture.failPrepare = false; }); await level(2).click(); await button('启动游戏').click(); assert.equal((await snapshot()).currentStageIndex, 2);
+    await expect(page.getByRole('alert')).toContainText('准备失败'); await expect(button('开始游戏')).toBeEnabled();
+    await page.evaluate(() => { window.fixture.failPrepare = false; }); await level(2).click(); await button('开始游戏').click(); assert.equal((await snapshot()).currentStageIndex, 2);
   });
   await check('手环切关复用当前参与者直接运行，不再重新扫码准备', async () => {
     await page.evaluate(async () => { await window.getComponentSetup().cleanup(); window.mountComponent('EditorDebugWorkspace', { game: { ...window.fixture.game, type: 'rank' } }); });
-    await page.evaluate(()=>window.getComponentSetup().options.launchMethod='wristband'); await button('启动游戏').click();
+    await page.evaluate(()=>window.getComponentSetup().options.launchMethod='wristband'); await button('开始游戏').click();
     assert.equal(await page.evaluate(()=>window.fixture.requests.filter(item=>item[0]==='prepare').at(-1)[1].skipGameStartAudio===true),false);
     await expect(page.locator('.debug-scan-backdrop')).toBeVisible(); await expect(level(0)).toBeDisabled();
-    await page.keyboard.type('123456'); await page.keyboard.press('Enter'); await button('启动游戏').click();
+    await page.keyboard.type('123456'); await page.keyboard.press('Enter'); await button('开始游戏').click();
     await button('暂停').click(); await level(1).click();
     await expect(page.locator('.debug-scan-backdrop')).toHaveCount(0); assert.equal((await snapshot()).engineState, 'RUNNING');
     assert.equal((await snapshot()).currentStageIndex, 1); assert.equal((await snapshot()).playerAccesses[0].access.uid, '123456');
@@ -167,7 +167,7 @@ try {
       const game={...window.fixture.game,type:'rank',levels:Array.from({length:32},(_,index)=>({label:'完整列表关卡'+(index+1),type:1+index%3,durationSeconds:40+index,rewardPoints:index+1}))};
       window.mountComponent('EditorDebugWorkspace',{game});
     });
-    await expect(button('启动游戏')).toBeEnabled();
+    await expect(button('开始游戏')).toBeEnabled();
     assert.equal(await page.locator('[data-debug-level]').count(),32);
     await page.setViewportSize({width:1280,height:600});
     await page.locator('[data-debug-level="31"]').click();
@@ -177,7 +177,7 @@ try {
     await page.screenshot({path:path.join(output,'完整关卡无配置摘要.png')});
     await page.setViewportSize({width:1366,height:768});
     await page.locator('[data-debug-level="0"]').click();
-    await button('启动游戏').click();
+    await button('开始游戏').click();
   });
   await check('关卡点击重新检查会话所有权，不结束或接管他人已替换会话', async () => {
     await page.evaluate(()=>window.fixture.publish({sessionId:'foreign-session',engineState:'RUNNING'}));

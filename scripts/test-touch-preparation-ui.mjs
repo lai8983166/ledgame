@@ -95,6 +95,49 @@ try{
       window.fixture.reset();
     });
   });
+  await check('更多人数弹窗支持加减和取消，八人按上下限过滤并进入普通游戏',async()=>{
+    await page.evaluate(() => {
+      window.fixture.entryMethod='touch';
+      Object.assign(window.fixture.games[0], {minPlayers:8,maxPlayers:8});
+      window.fixture.games[3].maxPlayers=null;
+      window.fixture.reset();
+    });
+    await mount();
+    const more = page.getByTestId('game-player-count-more');
+    const dialog = page.getByTestId('game-player-count-dialog');
+    await more.click();
+    await dialog.getByRole('button',{name:'增加人数'}).click();
+    await page.keyboard.press('Escape');
+    assert.equal(await dialog.isVisible(),false);
+    assert.equal(await more.evaluate(el=>el===document.activeElement),true);
+    await more.click();
+    assert.equal(await dialog.locator('output').innerText(),'7');
+    await dialog.getByRole('button',{name:'减少人数'}).click();
+    await dialog.getByRole('button',{name:'增加人数'}).click();
+    await dialog.getByRole('button',{name:'增加人数'}).click();
+    assert.equal(await dialog.locator('output').innerText(),'8');
+    await dialog.getByRole('button',{name:'确认'}).click();await step('game');
+    assert.equal(await page.getByTestId('game-category-11').getAttribute('data-game-ids'),'1');
+    assert.equal(await page.getByTestId('game-category-12').getAttribute('data-game-ids'),'');
+    await page.getByTestId('game-game-next').click();await step('level');
+    await page.getByTestId('game-start').click();await page.locator('.touch-shell[data-state="RUNNING"]').waitFor({timeout:10000});
+    assert.equal(await page.evaluate(()=>window.fixture.confirmed.at(-1).options.userCount),8);
+    await page.evaluate(()=>{
+      for(const game of [window.fixture.games[0],window.fixture.games[3]]) Object.assign(game,{minPlayers:1,maxPlayers:6});
+      window.fixture.entryMethod='wristband';window.fixture.reset();
+    });
+    await mount();
+    await more.click();
+    await dialog.getByRole('button',{name:'确认'}).press('Enter');
+    await step('wristband');
+    for(let count=1; count<=7; count++){
+      await page.evaluate(uid=>window.fixture.scan(uid),String(700+count));
+      if(count<7) await page.locator(`[data-player-progress="${count}/7"]`).waitFor();
+    }
+    await step('game');
+    assert.equal(await page.evaluate(()=>window.fixture.state().preparation.options.userCount),7);
+    await page.evaluate(()=>window.fixture.reset());
+  });
   await check('人数点击自动进入刷卡；失败留原页；多人不足及重复不会前进',async()=>{
     await mount();assert.equal(await page.getByTestId('game-player-next').count(),0);
     await page.evaluate(()=>window.fixture.scan('101'));assert.equal(await page.getByTestId('game-player-access').count(),0);

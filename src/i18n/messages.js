@@ -1449,7 +1449,7 @@ mergedMessages['zh-CN'].editorDebug = {
   deviceNotConnected:'未连接设备',sdkDisabled:'SDK 未启用，当前仅能进行模拟调试。',hardwareConfigError:'硬件配置错误：',
   networkUnavailable:'无法找到可用的控制器通信网卡，请检查网卡连接和网络配置。',networkBindFailed:'无法打开控制器通信端口，请检查端口占用和网卡配置。',
   title:'游戏调试',exit:'退出调试，返回编辑',method:'启动方式',direct:'直接启动',wristband:'手环启动',players:'游戏人数',level:'起始关卡',
-  failurePolicy:'关卡失败后',start:'启动游戏',pause:'暂停',resume:'继续',restart:'重新开始',scan:'请刷手环',scanHint:'将手环放到读卡器上，收到编号和回车后完成读取。',
+  failurePolicy:'关卡失败后',start:'开始游戏',pause:'暂停',resume:'继续',restart:'重新开始',scan:'请刷手环',scanHint:'将手环放到读卡器上，收到编号和回车后完成读取。',
   state:'运行状态',score:'游戏得分',life:'生命值',points:'累计奖励积分',time:'游戏剩余秒数',currentLevel:'当前关卡',unlimited:'无限',finished:'本局已结束',
   balance:'手环剩余',balanceHint:'使用真实会员和手环。暂停只冻结游戏进度，不改变平台手环余额规则。',
   invalidOptions:'请检查人数和起始关卡范围。',busy:'已有游戏、准备或排队会话，请先结束后再进入调试。',prepareFailed:'创建调试准备失败。',sessionLost:'当前会话已改变，不能操作其他游戏。',cleanupFailed:'会话尚未清理完成，请重试退出。',

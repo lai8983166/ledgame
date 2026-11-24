@@ -108,7 +108,7 @@ try{
       const select=page.getByTestId('debug-player-count');
       assert.deepEqual(await select.locator('option').allTextContents(),['1','2','3','4','5','6']);
       assert.equal(await page.locator('.debug-workspace-controls input[type=number]').count(),0);
-      await select.selectOption(String(count));await button('启动游戏').click();
+      await select.selectOption(String(count));await button('开始游戏').click();
       assert.equal((await page.evaluate(()=>window.fixture.requests.filter(r=>r[0]==='prepare').at(-1)))[1].userCount,count);
       assert.equal(await select.isDisabled(),true);
       assert.equal(await page.locator('.debug-workspace-controls .error-line').count(),0);
@@ -118,20 +118,22 @@ try{
     const rank=await page.evaluate(()=>window.fixture.rank);await mount('EditorDebugWorkspace',{game:{...rank,minPlayers:2,maxPlayers:3}});
     assert.deepEqual(await page.getByTestId('debug-player-count').locator('option').allTextContents(),['2','3']);
     assert.equal(await page.getByTestId('debug-player-count').inputValue(),'2');
-    await button('启动游戏').click();await button('退出调试，返回编辑').click();
+    await button('开始游戏').click();await button('退出调试，返回编辑').click();
   });
-  await check('主按钮从启动切换到结束，手动结束可重试、恢复待机动画并再次启动',async()=>{
+  await check('开始和结束按钮分别显示并互斥，手动结束可重试、恢复待机动画并再次启动',async()=>{
     await page.evaluate(()=>window.fixture.update({engineState:'IDLE',queueSummary:{waiting:[]}}));
     const game=await page.evaluate(()=>window.fixture.simple);await mount('EditorDebugWorkspace',{game});
     assert.equal(await page.getByText('启动方式',{exact:true}).count(),0);
     assert.equal(await page.locator('.debug-workspace-controls select').count(),2);
-    await button('启动游戏').click();
+    assert.equal(await button('结束游戏').isDisabled(),true);
+    await button('开始游戏').click();
     assert.equal((await page.evaluate(()=>window.fixture.requests)).filter(r=>r[0]==='prepare').at(-1)[1].launchMethod,'debug');
-    assert.equal(await button('启动游戏').count(),0);
+    assert.equal(await button('开始游戏').isDisabled(),true);
     assert.equal(await button('结束游戏').isEnabled(),true);
     const running=await page.evaluate(async()=>(await window.ledGame.gameState()).data);
     for(const engineState of ['STARTING','SETTLING','PAUSED']){
       await page.evaluate(s=>window.fixture.update(s),{...running,engineState});
+      assert.equal(await button('开始游戏').isDisabled(),true);
       assert.equal(await button('结束游戏').isEnabled(),true);
     }
     await page.evaluate(()=>window.fixture.failStop=true);
@@ -140,11 +142,12 @@ try{
     await page.evaluate(()=>window.fixture.failStop=false);
     await button('结束游戏').click();
     assert.equal((await page.evaluate(()=>window.fixture.requests.filter(r=>r[0]==='command').at(-1)))[1].sessionId,running.sessionId);
-    await button('启动游戏').waitFor();
+    assert.equal(await button('开始游戏').isEnabled(),true);
+    assert.equal(await button('结束游戏').isDisabled(),true);
     assert.equal((await page.evaluate(async()=>(await window.ledGame.gameState()).data)).engineState,'IDLE');
     await page.evaluate(()=>window.fixture.frame({width:16,height:36,rgb:Array(16*36*3).fill(38)}));
     await page.waitForFunction(()=>window.getComponentSetup().pixels[0][0].r===38);
-    await button('启动游戏').click();
+    await button('开始游戏').click();
     for(const terminationReason of ['MANUAL_STOP','NATURAL_SUCCESS']){
       await page.evaluate(async reason=>window.fixture.update({...((await window.ledGame.gameState()).data),engineState:'STOPPED',terminationReason:reason}),terminationReason);
       await page.getByText('本局已结束',{exact:true}).waitFor();
@@ -160,7 +163,7 @@ try{
     game.levels=[{label:'第一关',option:{lifeLimit:true,lifeLimitValue:3}},
       {label:'第二关',option:{lifeLimitMode:'LIMITED',lifeLimitValue:5}}];
     await mount('EditorDebugWorkspace',{game});
-    await button('启动游戏').click();
+    await button('开始游戏').click();
     const life=page.locator('.debug-workspace-controls > dl dt').filter({hasText:'生命值'}).locator('xpath=following-sibling::dd[1]');
     for(const [levelIndex,stageLife] of [[0,2],[1,5],[1,0]]){
       await page.evaluate(async({levelIndex,stageLife})=>{
@@ -183,10 +186,10 @@ try{
     await page.waitForFunction(()=>window.getComponentSetup().pixels.length===36&&window.getComponentSetup().pixels[0][0].r===40);
     await page.evaluate(()=>window.fixture.frame({width:16,height:36,rgb:Array(16*36*3).fill(80)}));
     assert.equal(await page.evaluate(()=>window.getComponentSetup().pixels[0][0].r),80);
-    await page.locator('.editor-debug-workspace').evaluate(node=>{node.__vueParentComponent.setupState.options.launchMethod='wristband';});await button('启动游戏').click();
+    await page.locator('.editor-debug-workspace').evaluate(node=>{node.__vueParentComponent.setupState.options.launchMethod='wristband';});await button('开始游戏').click();
     await page.evaluate(()=>window.fixture.frame({width:24,height:24,rgb:Array(16*36*3).fill(100)}));
     assert.equal(await page.evaluate(()=>window.getComponentSetup().pixels[0][0].r),100);
-    await page.keyboard.type('12345');await page.keyboard.press('Enter');await page.locator('.debug-scan-backdrop').waitFor({state:'hidden'});await button('启动游戏').click();
+    await page.keyboard.type('12345');await page.keyboard.press('Enter');await page.locator('.debug-scan-backdrop').waitFor({state:'hidden'});await button('开始游戏').click();
     await page.evaluate(()=>window.fixture.frame({width:8,height:8,rgb:Array(8*8*3).fill(120)}));
     assert.deepEqual(await page.evaluate(()=>[window.getComponentSetup().pixels[0].length,window.getComponentSetup().pixels.length,window.getComponentSetup().pixels[0][0].r]),[8,8,120]);
     await page.evaluate(()=>window.fixture.frame({width:16,height:36,rgb:Array(16*36*3).fill(200)}));
@@ -210,7 +213,7 @@ try{
     await mount('GameListView');assert.deepEqual(await page.evaluate(()=>window.fixture.listeners()),[0,0]);
   });
   await check('单页启动、方形 RGB、暂停恢复、重启、退出失败可重试、监听释放',async()=>{
-    const game=await page.evaluate(()=>window.fixture.simple);await mount('EditorDebugWorkspace',{game});await button('启动游戏').click();
+    const game=await page.evaluate(()=>window.fixture.simple);await mount('EditorDebugWorkspace',{game});await button('开始游戏').click();
     await button('暂停').click();assert.equal(await button('继续').count(),1);await button('继续').click();
     await page.evaluate(()=>window.fixture.frame({width:16,height:36,rgb:Array(16*36*3).fill(120)}));
     for(const [width,height] of [[1366,768],[1920,1080],[2560,1440]]){
@@ -244,7 +247,7 @@ try{
     const game=await page.evaluate(()=>window.fixture.simple);await mount('EditorDebugWorkspace',{game});await page.locator('.editor-debug-workspace').evaluate(node=>{node.__vueParentComponent.setupState.options.launchMethod='wristband';});await page.getByTestId('debug-player-count').selectOption('2');
     await button('请刷手环').click();await page.keyboard.type('2283055618');await page.keyboard.press('Enter');await page.locator('[role=dialog]').waitFor({state:'hidden'});
     await button('请刷手环').click();await page.keyboard.type('2283055618');await page.keyboard.press('Enter');assert.equal(await page.locator('[role=dialog]').count(),1);await button('取消').click();
-    await button('请刷手环').click();await page.keyboard.type('2283055619');await page.keyboard.press('Enter');await page.locator('[role=dialog]').waitFor({state:'hidden'});await button('启动游戏').click();await button('退出调试，返回编辑').click();
+    await button('请刷手环').click();await page.keyboard.type('2283055619');await page.keyboard.press('Enter');await page.locator('[role=dialog]').waitFor({state:'hidden'});await button('开始游戏').click();await button('退出调试，返回编辑').click();
     await mount('EditorDebugWorkspace',{game});await page.getByTestId('debug-player-count').selectOption('3');assert.equal(await page.getByTestId('debug-player-count').inputValue(),'3');await button('退出调试，返回编辑').click();
   });
   await check('外围灯按保存布局显示黑灯、运行冻结多墙序号、点击不串地砖、暂停禁用及三种尺寸',async()=>{
@@ -253,7 +256,7 @@ try{
     await mount('EditorDebugWorkspace',{game});
     assert.equal(await page.locator('.debug-circle-light').count(),4);
     assert.equal(await page.locator('.debug-circle-light[data-phase=OFF]').count(),4);
-    await button('启动游戏').click();
+    await button('开始游戏').click();
     await page.evaluate(async()=>window.fixture.update({...(await window.ledGame.gameState()).data,peripheralLights:{enabled:true,order:0,selectedRow:'2|0',lights:[
       {wall:0,index:0,sequenceIndex:2,phase:'BLUE',remaining:5},
       {wall:1,index:0,sequenceIndex:1,phase:'GREEN',remaining:6},
@@ -302,7 +305,7 @@ try{
         }
         await page.screenshot({path:path.join(output,`dense-lights-${columns}x${rows}-${width}.png`)});
       }
-      await button('启动游戏').click();
+      await button('开始游戏').click();
       await page.evaluate(async({countX,countY})=>window.fixture.update({...(await window.ledGame.gameState()).data,peripheralLights:{enabled:true,order:1,selectedRow:'0|0',lights:[countX,countY,countX,countY].flatMap((count,wall)=>Array.from({length:count},(_,index)=>({wall,index,sequenceIndex:[0,countX,countX+countY,2*countX+countY][wall]+index,phase:'BLUE',remaining:99})))}}),{countX,countY});
       await page.locator('.debug-circle-light[data-wall="0"][data-index="1"]').click();
       assert.equal((await page.evaluate(()=>window.fixture.requests)).at(-1)[1].circleIndex,1);
@@ -312,10 +315,10 @@ try{
   });
   for(const [name,id] of [['SimpleGameEditorView',1],['RankGameEditorView',4]])await check(name+' 编辑器无启动入口，仍可配置布线',async()=>{
     await mount(name,{gameId:id});await button('地砖布线').waitFor();
-    assert.equal(await button('启动游戏').count(),0);
+    assert.equal(await button('开始游戏').count(),0);
   });
   await check('8×8 Rank：玩家颜色与得分、无生命值、三种视口完整显示',async()=>{
-    const game=await page.evaluate(()=>window.fixture.rank);await mount('EditorDebugWorkspace',{game});await button('启动游戏').click();
+    const game=await page.evaluate(()=>window.fixture.rank);await mount('EditorDebugWorkspace',{game});await button('开始游戏').click();
     await page.evaluate(()=>window.fixture.update({engineState:'RUNNING',sessionId:window.fixture.requests.filter(r=>r[0]==='confirm').at(-1)[1],
       gameTime:{mode:'UNLIMITED'},gameplay:{remainingMillis:12500,players:[{playerNumber:1,color:'#ff0000',totalScore:6,memberPoints:4},{playerNumber:2,color:'#00ff00',totalScore:2,memberPoints:0}]}}));
     assert.equal(await page.locator('.debug-player').count(),2);assert.match(await page.locator('.debug-player').first().innerText(),/6.*4/);
@@ -347,7 +350,7 @@ try{
   await check('编辑草稿尺寸和布线校验保留，启动入口已移到卡片',async()=>{
     await mount('SimpleGameEditorView',{gameId:1});
     await page.evaluate(()=>window.getComponentSetup().document.siteSizeWidth=7);
-    assert.equal(await button('启动游戏').count(),0);
+    assert.equal(await button('开始游戏').count(),0);
     await button('地砖布线').click();await page.locator('.elc408-wiring-panel').waitFor();
     await page.locator('.elc408-wiring-panel').evaluate(node=>node.__vueParentComponent.setupState.document.lines=[[[15,0]]]);
     await button('保存').click();await page.locator('.editor-save-dialog').waitFor();
@@ -364,7 +367,7 @@ try{
     for(const [columns,rows] of [[16,36],[8,8]]){
       const game=await page.evaluate(([columns,rows])=>({...window.fixture.rank,siteSizeWidth:columns,siteSizeHeight:rows}),[columns,rows]);
       await page.evaluate(game=>window.mountComponent('EditorDebugWorkspace',{game},{applicationShell:true}),game);
-      await button('启动游戏').click();
+      await button('开始游戏').click();
       await page.evaluate(([width,height])=>window.fixture.frame({width,height,rgb:Array(width*height*3).fill(120)}),[columns,rows]);
       for(const [width,height] of [[1366,768],[1920,1080],[2560,1440],[1280,600],[960,640]]){
         await page.setViewportSize({width,height});await page.waitForTimeout(150);
@@ -394,7 +397,7 @@ try{
     }
     for(const id of [1,4]){
       await page.evaluate(()=>window.fixture.update({engineState:'IDLE',queueSummary:{waiting:[]}}));await mount('App');
-      await enter(id);await button('启动游戏').click();
+      await enter(id);await button('开始游戏').click();
       assert.equal(await page.locator('.app-nav').evaluate(el=>el.inert),false);
       await page.getByTestId('language-menu-button').click();await page.locator('.language-dialog').waitFor();await button('取消').click();
       await page.locator('.nav-help-button').filter({hasText:/^帮助/}).click();await page.getByRole('menuitem',{name:'版本变更记录',exact:true}).click();
@@ -405,7 +408,7 @@ try{
       await nav('媒体库').click();await page.locator('.editor-debug-workspace').waitFor({state:'hidden'});
       assert.equal((await page.evaluate(()=>window.ledGame.gameState())).data.engineState,'STOPPED');
       assert.deepEqual(await page.evaluate(()=>window.fixture.listeners()),[1,0]);
-      await enter(id);await button('启动游戏').click();await button('暂停').click();
+      await enter(id);await button('开始游戏').click();await button('暂停').click();
       await page.evaluate(()=>window.fixture.failStop=true);await nav('精灵库').click();
       await page.locator('.editor-debug-workspace [role=alert]').waitFor();
       assert.equal(await page.locator('.editor-debug-workspace [role=alert]').innerText(),'停止失败');
@@ -416,7 +419,7 @@ try{
       await enter(id);await page.locator('.editor-debug-workspace').evaluate(node=>{node.__vueParentComponent.setupState.options.launchMethod='wristband';});await button('请刷手环').click();await button('取消').click();
       await page.getByTestId('game-menu-button').click();await page.getByRole('menuitem',{name:'首页',exact:true}).click();await page.locator('.game-category-heading').waitFor();
       assert.equal((await page.evaluate(()=>window.ledGame.gameState())).data.engineState,'IDLE');
-      await enter(id);await button('启动游戏').click();await page.getByTestId('game-enter-flow').click();
+      await enter(id);await button('开始游戏').click();await page.getByTestId('game-enter-flow').click();
       assert.equal((await page.evaluate(()=>window.ledGame.gameState())).data.engineState,'STOPPED');
       assert.equal((await page.evaluate(()=>window.fixture.requests)).at(-1)[0],'game-flow');
       await enter(id);
@@ -434,7 +437,7 @@ try{
     assert.equal(await page.evaluate(()=>window.fixture.requests.length),before+1);
     await page.waitForTimeout(850);assert.equal(await page.locator('.debug-hardware-dialog').count(),1);
     await page.locator('.debug-hardware-dialog').waitFor({state:'hidden',timeout:1800});
-    await page.getByTestId('debug-player-count').selectOption('2');await button('启动游戏').click();await button('退出调试，返回编辑').click();
+    await page.getByTestId('debug-player-count').selectOption('2');await button('开始游戏').click();await button('退出调试，返回编辑').click();
     await mount('EditorDebugWorkspace',{game});await page.locator('.debug-hardware-dialog').waitFor();
     await page.locator('.debug-hardware-dialog button').click();assert.equal(await page.locator('.debug-hardware-dialog').count(),0);
     await page.getByTestId('debug-player-count').selectOption('2');
@@ -453,7 +456,7 @@ try{
     await page.locator('.debug-workspace-controls .error-line').waitFor();
     assert.equal(await page.locator('.debug-workspace-controls .error-line').innerText(),'游戏 RGB 尺寸为 16×32，当前布线尺寸为 16×36，两者不一致，请检查游戏场地和布线配置。');
     await page.evaluate(()=>window.fixture.hardwareError='');
-    await mount('EditorDebugWorkspace',{game});await button('启动游戏').click();await button('退出调试，返回编辑').click();
+    await mount('EditorDebugWorkspace',{game});await button('开始游戏').click();await button('退出调试，返回编辑').click();
   });
   assert.deepEqual(errors,[]);
 }finally{await writeFile(path.join(output,'验证记录.json'),JSON.stringify({passed,errors},null,2));await browser.close();await server.close();}

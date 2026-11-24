@@ -96,7 +96,7 @@ try {
     await expect(page.locator('.editor-debug-workspace')).toBeVisible();
     assert.equal(await page.locator('.simple-editor-fit-viewport').count(), 0);
     assert.equal(app.windows().filter(w => /window=(debug|touch)/.test(w.url())).length, 0);
-    await button('启动游戏').click(); await expect.poll(async () => (await request('/engine/game/state')).data.engineState).toBe('RUNNING');
+    await button('开始游戏').click(); await expect.poll(async () => (await request('/engine/game/state')).data.engineState).toBe('RUNNING');
     assert.equal((await request('/engine/game/state')).data.gameId, simple);
     assert.equal((await request('/engine/game/state')).data.engineState, 'RUNNING');
     await request(`/game/${simple}`, 'DELETE', undefined, false);
@@ -208,13 +208,13 @@ try {
     await expect(page.locator('.pixel-layout-floor-grid line')).toHaveCount(54);
     await expect(page.locator('.pixel-layout-dialog')).toHaveCSS('background-color', 'rgb(255, 255, 255)');
     await page.locator('.pixel-layout-dialog').getByRole('button', { name: '取消', exact: true }).click(); await button('返回列表').click();
-    await expect(card).toBeVisible(); assert.equal(await button('启动游戏').count(), 0);
+    await expect(card).toBeVisible(); assert.equal(await button('开始游戏').count(), 0);
   });
   await check('Rank 卡片进入同一调试页，编辑器保留触屏显示配置', async () => {
     const rankCard = page.locator(`.game-card[data-id="${rank}"]`); await rankCard.hover(); await rankCard.getByRole('button', { name: '调试游戏', exact: true }).click();
-    await button('启动游戏').click(); await expect.poll(async () => (await request('/engine/game/state')).data.engineState).toBe('RUNNING'); await button('返回游戏列表').click();
+    await button('开始游戏').click(); await expect.poll(async () => (await request('/engine/game/state')).data.engineState).toBe('RUNNING'); await button('返回游戏列表').click();
     await rankCard.hover(); await rankCard.getByRole('button', { name: '编辑', exact: true }).click();
-    await button('全局配置').click();await expect(page.locator('.global-config-dialog').getByText('触屏显示', { exact: true })).toBeVisible();assert.equal(await button('启动游戏').count(), 0);
+    await button('全局配置').click();await expect(page.locator('.global-config-dialog').getByText('触屏显示', { exact: true })).toBeVisible();assert.equal(await button('开始游戏').count(), 0);
     const rankName=page.locator('.global-config-field').filter({has:page.locator('.global-config-label').filter({hasText:/^名称$/})}).locator('input');
     const originalName=await rankName.inputValue();await rankName.fill('');await page.locator('.global-config-actions .primary').click();
     await expect(page.locator('.editor-save-dialog')).toContainText('请填写以下必填项');
@@ -234,7 +234,7 @@ try {
     assert.equal(persisted.levels[0].bombWarningAudio,'危险来袭.mp3');assert.equal(persisted.levels[0].bombExplosionAudio,'Ranking/bomb.mp3');assert.equal(persisted.levels[1].bombExplosionAudio,'危险来袭.mp3');
     await button('返回列表').click();
     await rankCard.getByRole('button',{name:'调试游戏',exact:true}).focus();await rankCard.getByRole('button',{name:'调试游戏',exact:true}).click();
-    await page.locator('.editor-debug-workspace input[type=number]').nth(1).fill('2');await button('启动游戏').click();
+    await page.locator('.editor-debug-workspace input[type=number]').nth(1).fill('2');await button('开始游戏').click();
     await expect.poll(async()=>{const state=(await request('/engine/game/state')).data;return state.engineState==='RUNNING'?state.currentStageIndex:null;}).toBe(1);
     await expect.poll(async()=>(await request('/engine/game/state')).data.engineState,{timeout:15000}).toBe('STOPPED');
     assert.equal((await request('/engine/game/state')).data.success,true);

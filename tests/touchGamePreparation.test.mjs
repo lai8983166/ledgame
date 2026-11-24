@@ -32,7 +32,8 @@ test("Preparation timeout accepts 1–3600 seconds and invalid values retain the
 
 test("Touch game preparation constrains players and wraps the game carousel", () => {
   assert.equal(normalizeTouchPlayerCount(6), 6);
-  assert.equal(normalizeTouchPlayerCount(7, 3), 3);
+  assert.equal(normalizeTouchPlayerCount(7, 3), 7);
+  assert.equal(normalizeTouchPlayerCount(2147483648, 3), 3);
   assert.equal(moveTouchCarousel(0, -1, 4), 3);
   assert.equal(moveTouchCarousel(3, 1, 4), 0);
   assert.deepEqual(

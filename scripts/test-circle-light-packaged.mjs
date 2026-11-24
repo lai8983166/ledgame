@@ -34,7 +34,7 @@ try {
     await button('返回列表').click(); await card.hover(); await card.getByRole('button',{name:'调试游戏',exact:true}).click();
     await page.locator('.editor-debug-workspace').waitFor();
     assert.equal(await page.locator('.debug-circle-light[data-phase=OFF]').count(),1);
-    await button('启动游戏').click();
+    await button('开始游戏').click();
     await expect.poll(async()=>(await state()).engineState,{timeout:30_000}).toBe('RUNNING');
     const circle=page.locator('.debug-circle-light');
     await expect(circle).toHaveAttribute('data-phase','BLUE');await circle.click();

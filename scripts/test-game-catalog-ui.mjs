@@ -106,7 +106,7 @@ try {
     await expect(page.locator('.editor-debug-workspace')).toBeVisible(); await expect(page.locator('.simple-editor-fit-viewport')).toHaveCount(0);
     await expect(page.getByRole('dialog')).toContainText('未连接设备'); await expect(page.getByRole('dialog')).toHaveCount(0, { timeout: 4000 });
     await page.locator('input[type=number]').first().fill('2'); assert.equal(await page.locator('input[type=number]').first().inputValue(), '2');
-    await button('启动游戏').click(); await button('暂停').click(); await button('继续').click();
+    await button('开始游戏').click(); await button('暂停').click(); await button('继续').click();
     await page.locator('.editor-debug-workspace canvas').click({ position: { x: 20, y: 20 } });
     await button('重新开始').click();
     await page.evaluate(() => window.fixture.failStop = true); await button('返回游戏列表').click(); await expect(page.getByRole('alert')).toContainText('停止失败');
@@ -118,9 +118,9 @@ try {
     const rank = page.locator('.game-card[data-id="2"]'); await rank.hover(); await rank.getByRole('button', { name: '调试游戏', exact: true }).click();
     await expect(page.getByRole('dialog')).toHaveCount(0, { timeout: 4000 });
     await page.locator('select').first().selectOption('wristband'); await page.locator('input[type=number]').first().fill('2');
-    await button('启动游戏').click(); await page.keyboard.type('2283055618'); await page.keyboard.press('Enter');
-    await button('启动游戏').click(); await page.keyboard.type('2283055619'); await page.keyboard.press('Enter');
-    await button('启动游戏').click(); await button('暂停').click();
+    await button('开始游戏').click(); await page.keyboard.type('2283055618'); await page.keyboard.press('Enter');
+    await button('开始游戏').click(); await page.keyboard.type('2283055619'); await page.keyboard.press('Enter');
+    await button('开始游戏').click(); await button('暂停').click();
     await page.getByTestId('language-menu-button').click(); await page.locator('.language-dialog').waitFor(); await button('取消').click();
     await expect(button('继续')).toBeVisible();
     await page.locator('.nav-tab').filter({ hasText: /^媒体库$/ }).click(); await expect(page.locator('.editor-debug-workspace')).toHaveCount(0);
@@ -128,7 +128,7 @@ try {
   });
   await check('编辑进入编辑器不启动游戏，删除取消后仍可选择输入', async () => {
     await card.hover(); await card.getByRole('button', { name: '编辑', exact: true }).click();
-    await expect(page.locator('.simple-editor-fit-viewport')).toBeVisible(); assert.equal(await button('启动游戏').count(), 0);
+    await expect(page.locator('.simple-editor-fit-viewport')).toBeVisible(); assert.equal(await button('开始游戏').count(), 0);
     await button('全局配置').click(); await expect(page.getByText('触屏显示', { exact: true })).toBeVisible(); await button('取消').click();
     await button('返回列表').click(); await card.hover(); await card.getByRole('button', { name: '删除', exact: true }).click();
     await button('取消').click(); await expect(card).toBeVisible();

@@ -49,6 +49,7 @@ import {
   hasRequiredWristbandParticipants,
   TOUCH_GAME_COUNTDOWN_SECONDS,
   TOUCH_PLAYER_COUNTS,
+  MAX_PLAYER_COUNT,
   TOUCH_PREPARATION_STEP_TIMEOUT_SECONDS,
   touchCarouselSlots,
 } from "../lib/touchGamePreparation.js";
@@ -103,6 +104,8 @@ const queueUid = ref("");
 const queueGameId = ref(null);
 const queueSubmitting = ref(false);
 const gamePreparationStep = ref("players");
+const playerCountDialog = ref(null);
+const customPlayerCount = ref(7);
 const manualIntroVideo = ref('');
 let introReturnFocus = null;
 function openIntroVideo(asset) {
@@ -219,6 +222,11 @@ const hasRequiredPlayers = computed(() =>
     requiredPlayerCount.value,
   ),
 );
+const visibleWristbandSlots = computed(() => {
+  const size = Math.min(6, requiredPlayerCount.value);
+  const first = Math.min(Math.max(1, playerAccesses.value.length - size + 2), requiredPlayerCount.value - size + 1);
+  return Array.from({ length: size }, (_, index) => first + index);
+});
 const needsMoreWristbands = computed(() =>
   isWristbandEntry.value && !hasRequiredPlayers.value,
 );
@@ -996,6 +1004,16 @@ async function selectPlayerCount(count) {
   }
 }
 
+function openPlayerCountDialog() {
+  customPlayerCount.value = Math.max(7, draft.userCount);
+  playerCountDialog.value.showModal();
+}
+
+function confirmPlayerCount() {
+  playerCountDialog.value.close();
+  void selectPlayerCount(customPlayerCount.value);
+}
+
 async function syncPlayerCount(event) {
   if (
     !isWristbandEntry.value ||
@@ -1023,7 +1041,7 @@ function blurNumericInput(event) {
 
 function showGameSelection() {
   if (
-    !TOUCH_PLAYER_COUNTS.includes(draft.userCount) ||
+    normalizeTouchPlayerCount(draft.userCount) !== draft.userCount ||
     !hasRequiredPlayers.value
   ) return;
   gamePreparationStep.value = "game";
@@ -1540,7 +1558,30 @@ async function confirmReturnToIdle() {
             <img :src="TOUCH_PLAYER_ASSETS[index]" :alt="`${count}P`" />
             <strong>{{ count }}P</strong>
           </button>
+          <button class="touch-player-option" type="button" data-testid="game-player-count-more"
+            :class="{ selected: draft.userCount > 6 }" :aria-pressed="draft.userCount > 6"
+            :disabled="Boolean(busyAction) || !canChangePlayerCount" @click="openPlayerCountDialog">
+            <img :src="TOUCH_PLAYER_ASSETS[5]" alt="" />
+            <strong>{{ t('touch.morePlayers') }}</strong>
+          </button>
         </div>
+        <dialog ref="playerCountDialog" class="touch-return-idle-dialog touch-player-count-dialog"
+          :aria-label="t('touch.selectPlayerCount')" data-testid="game-player-count-dialog">
+          <form @submit.prevent="confirmPlayerCount">
+            <h2>{{ t('touch.selectPlayerCount') }}</h2>
+            <div class="touch-count-stepper">
+              <button type="button" :aria-label="t('touch.fewerPlayers')" :disabled="customPlayerCount <= 1"
+                @click="customPlayerCount--">−</button>
+              <output aria-live="polite">{{ customPlayerCount }}</output>
+              <button type="button" :aria-label="t('touch.addPlayer')" :disabled="customPlayerCount >= MAX_PLAYER_COUNT"
+                @click="customPlayerCount++">+</button>
+            </div>
+            <div class="touch-return-idle-actions">
+              <button type="button" @click="playerCountDialog.close()">{{ t('common.cancel') }}</button>
+              <button type="submit" class="confirm" autofocus>{{ t('common.confirm') }}</button>
+            </div>
+          </form>
+        </dialog>
 
       </div>
 
@@ -1556,7 +1597,7 @@ async function confirmReturnToIdle() {
           <p v-if="requiredPlayerCount > 1">{{ playerAccesses.length }}/{{ requiredPlayerCount }}</p>
         </div>
         <div class="touch-scan-players" data-testid="game-player-access" :data-player-progress="`${playerAccesses.length}/${requiredPlayerCount}`" aria-live="polite">
-          <div v-for="slot in requiredPlayerCount" :key="slot" class="touch-scan-player"
+          <div v-for="slot in visibleWristbandSlots" :key="slot" class="touch-scan-player"
             :class="{accepted:playerAccesses[slot-1]}" :data-testid="`game-player-slot-${slot}`">
             <svg viewBox="0 0 100 100" aria-hidden="true"><circle cx="50" cy="50" r="46" /><circle cx="50" cy="32" r="18" /><path d="M21 87 V76 Q21 59 38 59 H62 Q79 59 79 76 V87" /></svg>
             <strong>{{ playerAccesses[slot-1]?.member.name || playerAccesses[slot-1]?.member.phone || '--' }}</strong>
@@ -1882,7 +1923,7 @@ async function confirmReturnToIdle() {
               type="number"
               inputmode="numeric"
               min="1"
-              max="6"
+              :max="selectedGame?.type === 'rank' ? 6 : MAX_PLAYER_COUNT"
               step="1"
               :disabled="!selectedGameId || (isWristbandEntry && !canChangePlayerCount)"
               @change="syncPlayerCount($event)"
@@ -2888,7 +2929,7 @@ async function confirmReturnToIdle() {
 .touch-player-grid {
   align-self: center;
   display: grid;
-  grid-template-columns: repeat(3, minmax(160px, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: clamp(8px, 1.4vh, 20px) clamp(22px, 4vw, 72px);
   width: min(1140px, 88%);
   margin: 8px auto;
@@ -2912,6 +2953,13 @@ async function confirmReturnToIdle() {
     filter 150ms ease,
     transform 150ms ease;
 }
+
+.touch-player-count-dialog { margin: auto; }
+.touch-player-count-dialog::backdrop { background: rgb(0 10 28 / 75%); }
+.touch-count-stepper { display: flex; justify-content: center; align-items: center; gap: 24px; margin: 24px 0; }
+.touch-count-stepper output { min-width: 2ch; text-align: center; font-size: 36px; font-variant-numeric: tabular-nums; }
+.touch-count-stepper button { width: 54px; height: 54px; color: #d9f8ff; background: #143347; border: 1px solid #5acbe0; border-radius: 6px; font-size: 30px; cursor: pointer; }
+.touch-count-stepper button:disabled { opacity: .45; }
 
 .touch-player-option img {
   display: block;

@@ -2,6 +2,7 @@ import { unwrapBackendData } from "./gameFlowState.js";
 import { normalizeLevelOption } from "./simpleLevelOptions.js";
 
 export const TOUCH_PLAYER_COUNTS = Object.freeze([1, 2, 3, 4, 5, 6]);
+export const MAX_PLAYER_COUNT = 2147483647; // Java Integer used by the preparation API.
 export const TOUCH_GAME_COUNTDOWN_SECONDS = 5;
 export const TOUCH_PREPARATION_STEP_TIMEOUT_SECONDS = 20;
 export function normalizeTouchPreparationTimeoutSeconds(value) {
@@ -43,11 +44,11 @@ export function isTouchPreparationStepTimeoutCurrent(expected, current) {
 
 export function normalizeTouchPlayerCount(value, fallback = 1) {
   const number = Number(value);
-  if (Number.isInteger(number) && TOUCH_PLAYER_COUNTS.includes(number)) {
+  if (Number.isInteger(number) && number >= 1 && number <= MAX_PLAYER_COUNT) {
     return number;
   }
   const fallbackNumber = Number(fallback);
-  return Number.isInteger(fallbackNumber) && TOUCH_PLAYER_COUNTS.includes(fallbackNumber)
+  return Number.isInteger(fallbackNumber) && fallbackNumber >= 1 && fallbackNumber <= MAX_PLAYER_COUNT
     ? fallbackNumber
     : 1;
 }

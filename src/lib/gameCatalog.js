@@ -1,7 +1,8 @@
 import { normalizeGameList } from "./gameFlowState.js";
 
 export function supportsPlayerCount(game, count) {
-  return (game.minPlayers == null || count >= game.minPlayers)
+  return (game.type !== "rank" || count <= 6)
+    && (game.minPlayers == null || count >= game.minPlayers)
     && (game.maxPlayers == null || count <= game.maxPlayers);
 }
 
