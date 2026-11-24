@@ -11,7 +11,7 @@ const cache = path.join(process.env.LOCALAPPDATA, 'ms-playwright');
 const chrome = (await readdir(cache)).filter(n => /^chromium-\d+$/.test(n)).sort().at(-1);
 const output = path.join(root, '.build/simple-editor-toolbar-ui');
 await mkdir(output, { recursive: true });
-const server = await createServer({ root, optimizeDeps:{include:['gifenc']}, server: { host:'127.0.0.1',port:0 } });
+const server = await createServer({ root, optimizeDeps:{include:['gifenc']}, server: { host:'127.0.0.1',port:0,strictPort:false,hmr:false } });
 await server.listen();
 const browser = await chromium.launch({ executablePath:path.join(cache,chrome,'chrome-win64/chrome.exe') });
 const page = await browser.newPage({ viewport:{width:1366,height:768} });
@@ -53,7 +53,7 @@ const mount=async()=>{
 };
 async function check(name,fn){if(process.env.TEST_CASE && !name.includes(process.env.TEST_CASE))return;await fn();passed.push(name);console.log('通过：'+name);}
 try {
-  await page.goto(`http://127.0.0.1:${server.httpServer.address().port}/tests/ui/catalog-library-harness.html`);
+  await page.goto(`http://127.0.0.1:${server.httpServer.address().port}/tests/ui/catalog-library-harness.html`, {waitUntil:'domcontentloaded',timeout:90000});
   await page.waitForFunction(()=>window.mountComponent);
   await mount();
   await check('小屏编辑高度：压缩导航与帧序列、无常驻反馈、保存删除旋转顺序及错误不挤占面板',async()=>{
@@ -390,6 +390,21 @@ try {
     assert.notEqual(await page.evaluate(()=>window.fixture.game.levels[0].option?.rewardPoints),10,'import must not auto-save');
     await button('保存').click();await page.locator('.editor-save-toast').waitFor();await mount();
     assert.deepEqual(await page.evaluate(()=>JSON.parse(JSON.stringify(window.getComponentSetup().createEditorPayload().levels.at(-1)))),exported);
+    await page.evaluate(()=>{
+      const s=window.getComponentSetup();
+      window.fixture.importContent=JSON.stringify({frameList:[{repeatTimes:1,matrix:[]}]});
+      const tabs=document.querySelector('.level-sequence-row .sequence-list');
+      tabs.style.maxWidth='120px';
+      s.selectLevel(0);
+    });
+    await button('导入关卡').click();
+    const activeTab=page.locator('.level-tab .sequence-pill.active');
+    assert.equal(await activeTab.innerText(), 'Level '+(last+2));
+    const tabIsVisible=await activeTab.evaluate(tab=>{
+      const tabs=tab.closest('.sequence-list').getBoundingClientRect(), box=tab.getBoundingClientRect();
+      return box.left >= tabs.left-1 && box.right <= tabs.right+1;
+    });
+    assert.ok(tabIsVisible,'imported level tab must be visible');
     await page.evaluate(value=>{Object.assign(window.fixture.game,value);window.fixture.confirmResult=false;},backup);await mount();
   });
   await check('保存重开中心与旧叠层无损，错误仍可见，导出和预览正常',async()=>{

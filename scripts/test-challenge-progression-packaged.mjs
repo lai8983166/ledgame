@@ -93,6 +93,9 @@ try{
   await expect(header.getByRole('button', {name: '返回游戏列表', exact: true})).toBeVisible();
   await expect(header.locator('h1')).toHaveText(doc.displayName || doc.name);
   await expect(header.getByText('游戏调试', {exact: true})).toHaveCount(0);
+  const lifeReadout = page.locator('.debug-workspace-controls dt').filter({hasText: '生命'}).locator('xpath=following-sibling::dd[1]');
+  await expect(lifeReadout).toHaveText('2');
+  await expect(page.getByText('娱乐模式', {exact:true})).toBeVisible();
   await page.evaluate(() => window.secondaryDisplay.open());
   let secondary;
   await expect.poll(() => {
@@ -107,8 +110,8 @@ try{
   await expect(intro).toBeVisible();
   await expect.poll(() => intro.evaluate(video => video.muted && !video.paused && video.currentTime > 0)).toBe(true);
   assert.equal((await state()).engineState,'STARTING');
+  await expect(lifeReadout).toHaveText('2');
   passed.push('游戏开场说明语音期间，副屏窗口播放起始关卡配置的 MP4');
-  const lifeReadout = page.locator('.debug-workspace-controls dt').filter({hasText: '生命'}).locator('xpath=following-sibling::dd[1]');
   for (const [index, life] of [2, 4].entries()) {
     await expect.poll(async () => {
       const current = await state();

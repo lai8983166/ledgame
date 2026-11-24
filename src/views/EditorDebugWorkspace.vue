@@ -55,10 +55,14 @@ const gameplay=computed(()=>state.value.gameplay || (state.value.engineState==='
 const selectedLevelIndex=computed(()=>active.value && Number.isInteger(state.value.currentStageIndex)
   ? state.value.currentStageIndex : options.startLevel-1);
 const stageLife=computed(()=>{
-  if(props.game.type==='rank' || gameplay.value.stageLife==null)return '—';
-  const index=gameplay.value.levelIndex ?? selectedLevelIndex.value;
-  return normalizeLevelOption(levelList.value[index]?.option).lifeLimitMode==='UNLIMITED'
-    ? t('editorDebug.unlimited') : gameplay.value.stageLife;
+  const index=selectedLevelIndex.value;
+  const level=levelList.value[index];
+  if(props.game.type==='rank' || !level)return '—';
+  const option=normalizeLevelOption(level.option);
+  if(option.lifeLimitMode==='UNLIMITED')return t('editorDebug.unlimited');
+  const live=state.value.gameplay;
+  if(active.value && !startingStandby.value && state.value.engineState!=='STARTING' && live?.levelIndex===index && live.stageLife!=null)return live.stageLife;
+  return option.lifeLimitValue;
 });
 const lastGameTime=ref(null);
 const countdown=computed(()=>{
@@ -206,7 +210,9 @@ onBeforeUnmount(()=>{alive=false;clearTimeout(hardwareNoticeTimer);clearInterval
           <button class="soft-button" :disabled="busy || !sessionId" @click="restart">{{t('editorDebug.restart')}}</button>
         </div>
         <p v-if="error" class="error-line" role="alert">{{error}}</p><p v-if="hardwareWarning" class="error-line">{{hardwareWarning}}</p>
-        <dl><dt>{{t('editorDebug.score')}}</dt><dd>{{gameplay.score ?? '—'}}</dd><dt>{{t('editorDebug.life')}}</dt><dd>{{stageLife}}</dd><dt>{{t('editorDebug.points')}}</dt><dd>{{gameplay.memberPoints ?? '—'}}</dd><dt>{{t('editorDebug.time')}}</dt><dd>{{countdown}}</dd></dl>
+        <dl><dt>{{t('editorDebug.score')}}</dt><dd>{{gameplay.score ?? '—'}}</dd><dt>{{t('editorDebug.life')}}</dt><dd>{{stageLife}}</dd><dt>{{t('editorDebug.points')}}</dt><dd>{{gameplay.memberPoints ?? '—'}}</dd><dt>{{t('editorDebug.time')}}</dt><dd>{{countdown}}</dd>
+          <template v-if="game.type==='default'"><dt>{{t('globalConfig.lifeMode')}}</dt><dd>{{t(game.globalLifeLimit ? 'globalConfig.challenge' : 'globalConfig.entertainment')}}</dd></template>
+        </dl>
         <article v-for="player in gameplay.players || []" :key="player.playerNumber" class="debug-player"><i :style="{background:player.color || '#888'}"></i><span>{{player.playerNumber}} · {{player.totalScore ?? player.score}} / {{t('editorDebug.points')}} {{player.memberPoints ?? 0}}</span></article>
         <p v-if="state.terminationReason || completedSession">{{t('editorDebug.finished')}}</p>
       </aside>

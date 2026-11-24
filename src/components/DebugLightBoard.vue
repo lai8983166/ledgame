@@ -10,12 +10,30 @@ const {t}=useI18n({useScope:'global'});
 const host=ref(null),size=ref({width:0,height:0});
 const board=computed(()=>debugPeripheralBoard(props.layout,props.runtime,props.pixels[0]?.length || 16,props.pixels.length || 16));
 const geometry=computed(()=>board.value || buildPixelLightPreview({},props.pixels[0]?.length || 16,props.pixels.length || 16));
-const scale=computed(()=>Math.max(0,Math.min((size.value.width-12)/geometry.value.canvasWidth,(size.value.height-12)/geometry.value.canvasHeight)));
-const sceneStyle=computed(()=>({width:`${geometry.value.canvasWidth*scale.value}px`,height:`${geometry.value.canvasHeight*scale.value}px`}));
-const floorStyle=computed(()=>({left:`${geometry.value.floor.x*scale.value}px`,top:`${geometry.value.floor.y*scale.value}px`,width:`${geometry.value.floor.width*scale.value}px`,height:`${geometry.value.floor.height*scale.value}px`}));
+const scale=computed(()=>{
+  const width=Math.max(0,size.value.width-12),height=Math.max(0,size.value.height-12);
+  const {floor,canvasWidth,canvasHeight}=geometry.value;
+  const originalScale=Math.min(width/canvasWidth,height/canvasHeight);
+  const margins=2*Math.min(20,size.value.width*.1,size.value.height*.1);
+  return Math.max(0,Math.min(originalScale*1.5,(width-margins)/floor.width,(height-margins)/floor.height));
+});
+const lightMargin=computed(()=>{
+  const {floor}=geometry.value;
+  return Math.max(0,Math.min(44,(size.value.width-12-floor.width*scale.value)/2,(size.value.height-12-floor.height*scale.value)/2));
+});
+const sceneStyle=computed(()=>({width:`${geometry.value.floor.width*scale.value+2*lightMargin.value}px`,height:`${geometry.value.floor.height*scale.value+2*lightMargin.value}px`}));
+const floorStyle=computed(()=>({left:`${lightMargin.value}px`,top:`${lightMargin.value}px`,width:`${geometry.value.floor.width*scale.value}px`,height:`${geometry.value.floor.height*scale.value}px`}));
 const pointStyle=(point,light)=>{
-  const diameter=Math.min(18,light.markerSize*scale.value);
-  return {left:`${point.x*scale.value}px`,top:`${point.y*scale.value}px`,width:`${diameter}px`,height:`${diameter}px`,fontSize:`${diameter*.62}px`,boxShadow:`inset 0 0 0 ${Math.min(1,diameter*.08)}px #718096`};
+  const margin=lightMargin.value, floor=geometry.value.floor;
+  const diameter=Math.min(18,light.markerSize*scale.value,margin*.42);
+  // The symbol sits in the outer lane; both lanes stay aligned to the enlarged floor.
+  const offset=margin*(point===light.symbol ? .75 : .25);
+  let x=(point.x-floor.x)*scale.value, y=(point.y-floor.y)*scale.value;
+  if(light.wall===0)y=-offset;
+  if(light.wall===1)x=floor.width*scale.value+offset;
+  if(light.wall===2)y=floor.height*scale.value+offset;
+  if(light.wall===3)x=-offset;
+  return {left:`${margin+x}px`,top:`${margin+y}px`,width:`${diameter}px`,height:`${diameter}px`,fontSize:`${diameter*.62}px`,boxShadow:`inset 0 0 0 ${Math.min(1,diameter*.08)}px #718096`};
 };
 const color=phase=>({BLUE:'#2583ff',GREEN:'#30e183',YELLOW:'#ffd84a',OFF:'#10151f'}[phase] || '#10151f');
 const wallNames=computed(()=>[t('circleLights.top'),t('circleLights.right'),t('circleLights.bottom'),t('circleLights.left')]);

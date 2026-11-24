@@ -87,6 +87,7 @@ const globalPageMounted = ref(false);
 const wiringPageMounted = ref(false);
 const globalPageRef = ref(null);
 const wiringPageRef = ref(null);
+const levelTabsRef = ref(null);
 let syncedGlobalDraft = null;
 function syncGlobalPage() {
   const draft = globalPageRef.value?.getDraft();
@@ -1303,6 +1304,8 @@ async function importCurrentLevel() {
     syncSelectedObject();
     scheduleMatrixCacheWarmup(0);
     statusMessage.value = t("simple.levelAppended", { count: imported.frameList.length });
+    await nextTick();
+    levelTabsRef.value?.lastElementChild?.scrollIntoView({ block: "nearest", inline: "nearest" });
   } catch (error) {
     errorMessage.value = t("simple.levelImportFailed", { message: error.message || String(error) });
   } finally {
@@ -2859,7 +2862,7 @@ function normalizeImportedLevel(level) {
       (level.option != null && !isRecord(level.option))) invalid();
   const optionErrors = validateLevelOption(level.option, document.value?.globalLifeLimit);
   if (optionErrors.length) throw new Error(t(optionErrors[0].messageKey, optionErrors[0].params || {}));
-  level.label ||= activeLevel.value.label;
+  level.label ||= `Level ${levels.value.length + 1}`;
   level.option = normalizeLevelOption(level.option);
   level.frameList.forEach((frame, frameIndex) => {
     if (!isRecord(frame) || !Array.isArray(frame.matrix) ||
@@ -3301,7 +3304,7 @@ function formatRuntimeSummary(value) {
         <div class="level-structure-actions">
           <button class="icon-add-button" type="button" :aria-label="t('simple.addLevel')" :title="t('simple.addLevel')" @click="addLevel">+</button>
         </div>
-        <div class="sequence-list">
+        <div ref="levelTabsRef" class="sequence-list">
           <div v-for="(level,index) in levels" :key="`level-${index}`" class="level-tab" :class="{'level-drop-target':levelDropIndex===index}"
             @dragover.prevent="draggingLevelIndex!==null&&(levelDropIndex=index)" @drop.prevent="dropLevel(index)">
             <button class="sequence-pill" :class="{active:editorPage==='levels' && activeLevelIndex===index}" type="button" :draggable="!busyAction && !anchorEditMode"

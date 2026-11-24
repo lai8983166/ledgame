@@ -105,6 +105,7 @@ try{
     for(const count of [2,6]){
       await page.evaluate(()=>window.fixture.update({engineState:'IDLE',queueSummary:{waiting:[]}}));
       await mount('EditorDebugWorkspace',{game:{...base,participants:1}});
+      await page.getByText('娱乐模式',{exact:true}).waitFor();
       const select=page.getByTestId('debug-player-count');
       assert.deepEqual(await select.locator('option').allTextContents(),['1','2','3','4','5','6']);
       assert.equal(await page.locator('.debug-workspace-controls input[type=number]').count(),0);
@@ -116,6 +117,7 @@ try{
     }
     await page.evaluate(()=>window.fixture.update({engineState:'IDLE',queueSummary:{waiting:[]}}));
     const rank=await page.evaluate(()=>window.fixture.rank);await mount('EditorDebugWorkspace',{game:{...rank,minPlayers:2,maxPlayers:3}});
+    assert.equal(await page.getByText('游戏模式',{exact:true}).count(),0);
     assert.deepEqual(await page.getByTestId('debug-player-count').locator('option').allTextContents(),['2','3']);
     assert.equal(await page.getByTestId('debug-player-count').inputValue(),'2');
     await button('开始游戏').click();await button('退出调试，返回编辑').click();
@@ -162,12 +164,23 @@ try{
     game.siteSizeWidth=8;game.siteSizeHeight=8;
     game.levels=[{label:'第一关',option:{lifeLimit:true,lifeLimitValue:3}},
       {label:'第二关',option:{lifeLimitMode:'LIMITED',lifeLimitValue:5}}];
+    game.globalLifeLimit=true;
     await mount('EditorDebugWorkspace',{game});
-    await button('开始游戏').click();
     const life=page.locator('.debug-workspace-controls > dl dt').filter({hasText:'生命值'}).locator('xpath=following-sibling::dd[1]');
+    assert.equal(await life.innerText(),'3');
+    await page.getByText('闯关模式',{exact:true}).waitFor();
+    await page.locator('[data-debug-level="1"]').click();
+    assert.equal(await life.innerText(),'5');
+    await button('开始游戏').click();
+    await page.evaluate(async()=>window.fixture.update({...(await window.ledGame.gameState()).data,
+      engineState:'STARTING',currentStageIndex:1,gameplay:{levelIndex:0,stageLife:0}}));
+    assert.equal(await life.innerText(),'5');
+    await page.evaluate(async()=>window.fixture.update({...(await window.ledGame.gameState()).data,
+      engineState:'PAUSED',startingStandby:true,gameplay:{levelIndex:1,stageLife:0}}));
+    assert.equal(await life.innerText(),'5');
     for(const [levelIndex,stageLife] of [[0,2],[1,5],[1,0]]){
       await page.evaluate(async({levelIndex,stageLife})=>{
-        window.fixture.update({...(await window.ledGame.gameState()).data,currentStageIndex:levelIndex,
+        window.fixture.update({...(await window.ledGame.gameState()).data,engineState:'RUNNING',startingStandby:false,currentStageIndex:levelIndex,
           gameplay:{levelIndex,stageLife,globalLife:18,life:18}});
       },{levelIndex,stageLife});
       assert.equal(await page.locator('[data-debug-level="'+levelIndex+'"]').getAttribute('aria-pressed'),'true');
@@ -219,7 +232,17 @@ try{
     for(const [width,height] of [[1366,768],[1920,1080],[2560,1440]]){
       await page.setViewportSize({width,height});await page.waitForTimeout(100);
       const canvas=await page.locator('canvas').boundingBox();assert.ok(canvas.y+canvas.height<=height,JSON.stringify(canvas));
-      const cell=(canvas.height-24-3*35)/36;assert.ok(cell>0);
+      const expectedHeight=await page.evaluate(async()=>{
+        const {buildPixelLightPreview}=await import('/src/lib/pixelLightLayout.js');
+        const pixels=window.getComponentSetup().pixels;
+        const {floor,canvasWidth,canvasHeight}=buildPixelLightPreview({},pixels[0].length,pixels.length);
+        const host=document.querySelector('.debug-light-board').getBoundingClientRect();
+        const width=host.width-12,height=host.height-12;
+        const originalScale=Math.min(width/canvasWidth,height/canvasHeight);
+        const margin=Math.min(20,host.width*.1,host.height*.1);
+        return floor.height*Math.min(1.5*originalScale,(width-2*margin)/floor.width,(height-2*margin)/floor.height);
+      });
+      assert.ok(Math.abs(canvas.height-expectedHeight)<1,JSON.stringify({canvas,expectedHeight}));
       const controls=await page.locator('.debug-workspace-controls').boundingBox();
       assert.ok(controls.width>=420,JSON.stringify({width,controls}));
       for(const input of await page.locator('.debug-workspace-controls label input, .debug-workspace-controls label select').all()){
