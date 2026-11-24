@@ -21,8 +21,8 @@ import GameGlobalConfigDialog from '../components/GameGlobalConfigDialog.vue';
 import GameWiringDialog from '../components/GameWiringDialog.vue';
 
 const wallFields = [
-  {boundary:'minY', field:'wallGIF'}, {boundary:'maxY', field:'bottomWallGIF'},
-  {boundary:'minX', field:'leftWallGIF'}, {boundary:'maxX', field:'rightWallGIF'},
+  {boundary:'minY', field:'wallGIF', label:'rank.wallGIF'}, {boundary:'maxY', field:'bottomWallGIF', label:'rank.bottomWallGIF'},
+  {boundary:'minX', field:'leftWallGIF', label:'rank.leftWallGIF'}, {boundary:'maxX', field:'rightWallGIF', label:'rank.rightWallGIF'},
 ];
 
 const props=defineProps({ gameId:{type:[Number,String],default:null}, initialDocument:{type:Object,default:null}, gameName:{type:String,default:''}, openGlobalConfigOnEntry:{type:Boolean,default:false} });
@@ -239,10 +239,10 @@ function goBack(){emit('back');}
       </div></label>
       <template v-for="wall in wallFields" :key="wall.field">
         <label v-if="type1Config.bounds[wall.boundary] > 0" class="rank-level-media">
-          <span>{{t('rank.' + wall.field)}}</span>
+          <span>{{t(wall.label)}}</span>
           <div class="rank-media-control">
             <input :value="mediaValue(wall.field)" :placeholder="t('globalConfig.notSelected')" readonly />
-            <button class="soft-button compact-button" type="button" @click="chooseMedia(wall.field,'gif',t('rank.' + wall.field))">{{t('globalConfig.choose')}}</button>
+            <button class="soft-button compact-button" type="button" @click="chooseMedia(wall.field,'gif',t(wall.label))">{{t('globalConfig.choose')}}</button>
             <button class="soft-button compact-button" type="button" :disabled="!mediaValue(wall.field)" @click="type1Config[wall.field]=''">{{t('globalConfig.clear')}}</button>
           </div>
         </label>
