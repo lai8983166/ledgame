@@ -244,6 +244,14 @@ function goBack(){emit('back');}
           <div class="rank-media-control"><input :value="mediaValue(field.key)" :placeholder="t('globalConfig.notSelected')" readonly /><button class="soft-button compact-button" type="button" @click="chooseMedia(field.key,'audio',t(field.label))">{{t('globalConfig.choose')}}</button><button class="soft-button compact-button" type="button" :disabled="!mediaValue(field.key)" @click="type1Config[field.key]=''">{{t('globalConfig.clear')}}</button></div>
           <audio v-if="mediaValue(field.key)" :key="mediaValue(field.key)" :src="buildMediaPreviewUrl(mediaValue(field.key))" controls preload="none" />
         </div></label>
+        <label class="rank-explosion-volume">
+          <span>{{t('rank.explosionVolume')}}</span>
+          <div>
+            <input v-model.number="type1Config.bombExplosionVolumePercent" data-rank-field="level.bombExplosionVolumePercent"
+              type="range" min="0" max="200" step="1" :aria-label="t('rank.explosionVolume')" :aria-valuetext="type1Config.bombExplosionVolumePercent+'%'" />
+            <output>{{type1Config.bombExplosionVolumePercent}}%</output>
+          </div>
+        </label>
         <label><span>{{t('rank.earlyRefresh')}}</span><input v-model="type1Config.earlyRefresh" type="checkbox" /></label>
         <label><span>{{t(type1Config.type===1?'rank.frameUpdatePeriod':'rank.refreshSeconds')}}</span><input v-model.number="type1Config.refreshSeconds" type="number" min="1" /></label>
       </template>
@@ -274,6 +282,9 @@ function goBack(){emit('back');}
 .rank-config-editor>label>span{padding-top:9px}
 input,textarea,select{width:100%;min-width:0;padding:8px 10px;border:1px solid var(--ui-border);border-radius:4px;background:var(--ui-input);color:var(--ui-text);font:inherit}
 input[type=checkbox]{width:20px;height:20px;margin:8px 0}
+.rank-explosion-volume>div{display:flex;align-items:center;gap:12px;min-height:34px}
+.rank-explosion-volume input{padding:0;accent-color:var(--ui-accent)}
+.rank-explosion-volume output{min-width:4ch;text-align:right;font-variant-numeric:tabular-nums}
 .rank-media-control{display:flex;gap:6px;min-width:0}.rank-media-control input{flex:1}.rank-media-control button{flex-shrink:0}
 .rank-intro-preview{display:block;max-width:220px;max-height:220px;margin-top:8px;object-fit:contain;image-rendering:pixelated}
 audio{display:block;width:100%;height:32px;margin-top:6px}.field-error{display:block;margin-top:4px;color:var(--ui-error)}

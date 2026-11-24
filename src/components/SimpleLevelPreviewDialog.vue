@@ -160,7 +160,7 @@ function close() {
   display: flex;
   flex-direction: column;
   gap: 16px;
-  width: min(760px, calc(100vw - 48px));
+  width: min(1140px, calc(100vw - 48px));
   max-height: calc(100vh - 48px);
   padding: 18px;
   border: 1px solid var(--ui-border);
@@ -206,8 +206,8 @@ function close() {
 
 .simple-level-preview-stage {
   flex: 0 1 auto;
-  height: min(62vh, 620px);
-  max-height: calc(100vh - 210px);
+  height: min(93vh, 930px);
+  max-height: calc(100vh - 150px);
   min-height: 0;
   display: grid;
   place-items: center;
@@ -240,7 +240,7 @@ function close() {
 
 .simple-level-preview-empty {
   display: grid;
-  min-height: 240px;
+  min-height: min(360px, 55vh);
   place-items: center;
   color: var(--ui-muted);
 }

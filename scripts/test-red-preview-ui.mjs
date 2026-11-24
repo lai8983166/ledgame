@@ -120,6 +120,8 @@ try {
         assert.deepEqual(result.first, [18, 52, 86]); assert.deepEqual(result.last, [18, 52, 86]);
         assert.ok(result.outer.every(color => color.every(channel => channel === 255)));
         const bounds = await canvas.boundingBox(), dialog = await page.locator('.simple-level-preview-dialog').boundingBox();
+        assert.equal(dialog.width, Math.min(1140, screenWidth - 48));
+        assert.ok(dialog.y >= 0 && dialog.y + dialog.height <= screenHeight);
         assert.ok(bounds.x >= dialog.x && bounds.x + bounds.width <= dialog.x + dialog.width + 1);
         assert.ok(bounds.y >= 0 && bounds.y + bounds.height <= screenHeight);
         assert.ok(Math.abs(bounds.width / bounds.height - width / height) < 0.01);

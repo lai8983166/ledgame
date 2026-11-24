@@ -156,6 +156,23 @@ try{
     await expect(page.getByText('每玩家目标',{exact:true})).toBeVisible();
     await expect(page.getByText('整轮刷新（秒）',{exact:true})).toBeVisible();
   });
+  await check('炸弹关卡独立保存爆炸音量，支持静音和放大',async()=>{
+    const slider=page.getByRole('slider',{name:'炸弹爆炸音效音量'});
+    const type=page.locator('[data-rank-field="level.type"]');
+    for(const value of ['1','2','3']){
+      await type.selectOption(value);
+      await expect(slider).toHaveValue('150');
+    }
+    await slider.fill('200');
+    await expect(slider).toHaveAttribute('aria-valuetext','200%');
+    await button('保存').click();
+    await expect.poll(()=>page.evaluate(()=>window.fixture.doc.levels[0].bombExplosionVolumePercent)).toBe(200);
+    await mount({gameId:9});await expect(slider).toHaveValue('200');
+    await slider.fill('0');await button('保存').click();
+    await expect.poll(()=>page.evaluate(()=>window.fixture.doc.levels[0].bombExplosionVolumePercent)).toBe(0);
+    await mount({gameId:9});await expect(slider).toHaveValue('0');
+    assert.equal(await page.evaluate(()=>window.fixture.doc.levels[1].bombExplosionVolumePercent),150);
+  });
   assert.deepEqual(errors,[]);
 }catch(error){await page.screenshot({path:path.join(output,'失败.png')});throw error;}
 finally{await writeFile(path.join(output,'验证记录.json'),JSON.stringify({passed,errors},null,2));await browser.close();await server.close();}

@@ -164,6 +164,7 @@ try{
   rankDoc.minPlayers = 2;
   rankDoc.maxPlayers = null;
   rankDoc.levels[0].playIntroVideo = introAsset;
+  rankDoc.levels[0].bombExplosionVolumePercent = 125;
   await request(rankRoute, 'PUT', rankDoc);
   const reopened = await request(rankRoute);
   assert.equal(reopened.levels[0].playIntroVideo,introAsset);
@@ -174,6 +175,13 @@ try{
   await rankCard.getByRole('button',{name:'编辑',exact:true}).click();
   await page.locator('.rank-level-tab .sequence-pill').first().click();
   await expect(page.locator('video.rank-intro-preview')).toBeVisible();
+  const explosionVolume = page.locator('[data-rank-field="level.bombExplosionVolumePercent"]');
+  await expect(explosionVolume).toHaveValue('125');
+  await explosionVolume.press('End');
+  await expect(explosionVolume).toHaveValue('200');
+  await button('保存').click();
+  await expect.poll(async () => (await request(rankRoute)).levels[0].bombExplosionVolumePercent).toBe(200);
+  passed.push('Rank 炸弹关卡滑动条读回 125%，调至 200% 后成功保存到发行版数据库');
   await page.locator('[data-editor-page="global"]').click();
   const rankConfig = page.locator('.rank-global-config-page');
   await expect(rankConfig.getByRole('spinbutton',{name:/最少玩家/})).toHaveValue('2');

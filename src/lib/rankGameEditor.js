@@ -1,5 +1,7 @@
 export const RANK_BOMB_TYPES = Object.freeze([1, 2, 3]);
 
+const DEFAULT_BOMB_EXPLOSION_VOLUME_PERCENT = 150;
+
 export function createRankEditorPayload(value, gameId) {
   const payload = JSON.parse(JSON.stringify(value && typeof value === "object" ? value : {}));
   const normalizedId = Number(gameId);
@@ -43,7 +45,7 @@ function initializeScoreBlockRange(level, maxPlayers) {
 export function createRankLevel(width = 16, height = 36, index = 0, maxPlayers = null) {
   const level = { label: index === 0 ? 'Ranking' : `Level ${index + 1}`, type: null,
     rewardPoints: 0, durationSeconds: 60, description: '', startGif: '', playIntroVideo: '', gameplayIntro: '', backgroundVoice: '',
-    bombWarningAudio: '', bombExplosionAudio: '',
+    bombWarningAudio: '', bombExplosionAudio: '', bombExplosionVolumePercent: DEFAULT_BOMB_EXPLOSION_VOLUME_PERCENT,
     bounds: { minX: 1, minY: 1, maxX: width, maxY: height },
     targetsPerPlayerMin: 3, targetsPerPlayerMax: 4, bombMin: 0, bombMax: 1,
     bombWarningDelaySeconds: 3, bombWarningDurationSeconds: 1, refreshSeconds: 6, earlyRefresh: true };
@@ -117,6 +119,7 @@ export function normalizeRankEditorDocument(value) {
     }
     initializeScoreBlockRange(level, doc.maxPlayers);
     level.rewardPoints ??= 0;
+    level.bombExplosionVolumePercent ??= DEFAULT_BOMB_EXPLOSION_VOLUME_PERCENT;
   }
   return doc;
 }
