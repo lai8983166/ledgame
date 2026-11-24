@@ -101,20 +101,17 @@ try {
   await check('旧上下标题继承原字号，独立设置后只改变对应标题并响应广播', async () => {
     assert.equal(await font(1).inputValue(), '96'); assert.equal(await font(2).inputValue(), '96');
     const style = page.getByRole('combobox', { name: '下标题样式' });
-    for (const value of ['sans', 'serif', 'mono']) {
-      await style.selectOption(value);
-      await page.locator(`.subtitle-preview .secondary-subtitle--${value}`).waitFor();
-    }
+    assert.equal(await style.count(), 0);
+    await page.locator('.subtitle-preview .secondary-subtitle--sans').waitFor();
     await font(1).fill('120'); await font(2).fill('48'); await save().click();
-    assert.equal(await page.evaluate(() => window.fixture.persisted().secondaryIdleSubtitleStyle), 'mono');
     await mount('SecondaryDisplayView');
     const subtitle = page.locator('.secondary-idle-action .secondary-subtitle');
     await subtitle.waitFor();
     assert.equal(await subtitle.evaluate(node => node.style.getPropertyValue('--subtitle-size')), '48px');
-    assert.ok(await subtitle.evaluate(node => node.classList.contains('secondary-subtitle--mono')));
+    assert.ok(await subtitle.evaluate(node => node.classList.contains('secondary-subtitle--sans')));
     assert.ok(await page.locator('.secondary-idle-action').evaluate(node => Math.abs(parseFloat(getComputedStyle(node).rowGap) - innerHeight * 0.045) < 0.1));
     await page.evaluate(() => window.fixture.set({ secondaryIdleSubtitleFontSize: 64, secondaryIdleSubtitleStyle: 'serif' }));
-    await page.waitForFunction(() => document.querySelector('.secondary-subtitle--serif')?.style.getPropertyValue('--subtitle-size') === '64px');
+    await page.waitForFunction(() => document.querySelector('.secondary-subtitle--sans')?.style.getPropertyValue('--subtitle-size') === '64px');
     assert.equal(await page.locator('.touch-idle-prompt').evaluate(node => node.style.getPropertyValue('--idle-prompt-font-size')), '120px');
     await page.screenshot({ path: path.join(output, 'secondary-independent-fonts.png') });
   });

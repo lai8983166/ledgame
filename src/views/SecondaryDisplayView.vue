@@ -33,7 +33,6 @@ const secondaryIdlePromptText = ref("LED FLOOR GAME");
 const secondaryIdleSubtitleText = ref('');
 const secondaryIdlePromptFontSize = ref(72);
 const secondaryIdleSubtitleFontSize = ref(72);
-const secondaryIdleSubtitleStyle = ref("sans");
 const stateObservedAt = ref(Date.now());
 const clockNow = ref(Date.now());
 let removeStateListener = null;
@@ -125,7 +124,6 @@ function applyApplicationSettings(settings) {
     : "";
   secondaryIdlePromptText.value = text || "LED FLOOR GAME";
   secondaryIdleSubtitleText.value = typeof settings?.secondaryIdleSubtitleText === 'string' ? settings.secondaryIdleSubtitleText.trim() : '';
-  secondaryIdleSubtitleStyle.value = settings?.secondaryIdleSubtitleStyle || "sans";
   const fontSize = Number(settings?.secondaryIdlePromptFontSize);
   secondaryIdlePromptFontSize.value = Number.isInteger(fontSize) && fontSize >= 32 && fontSize <= 200
     ? fontSize
@@ -307,14 +305,13 @@ function displayValue(value) {
           @animation-end="idlePromptFading = false"
         />
         <SecondaryIdleSubtitle v-if="secondaryIdleSubtitleText" :text="secondaryIdleSubtitleText"
-          :font-style="secondaryIdleSubtitleStyle" :font-size="secondaryIdleSubtitleFontSize" :fading="idlePromptFading" />
+          :font-size="secondaryIdleSubtitleFontSize" :fading="idlePromptFading" />
       </div>
     </section>
 
     <section v-else class="secondary-runtime-content">
       <header class="secondary-runtime-header">
         <div class="game-heading">
-          <span>{{ t("secondaryDisplay.live") }}</span>
           <h1>{{ presentation.state.gameName || t("touch.gameFallback") }}</h1>
         </div>
         <div class="header-status">
@@ -326,7 +323,7 @@ function displayValue(value) {
             <span>{{ t("secondaryDisplay.currentStage") }}</span>
             <strong>{{ displayValue(presentation.stageNumber) }}</strong>
           </div>
-          <strong class="lifecycle-label">{{ t(`secondaryDisplay.states.${lifecycle}`) }}</strong>
+          <strong v-if="lifecycle !== 'RUNNING'" class="lifecycle-label">{{ t(`secondaryDisplay.states.${lifecycle}`) }}</strong>
         </div>
       </header>
 
