@@ -131,6 +131,31 @@ try{
     await button('保存').click();await page.locator('.editor-save-toast').waitFor();assert.equal(await calls(),before+1);
     const saved=await page.evaluate(()=>window.fixture.doc);assert.equal(saved.id,9);assert.equal(saved.name,'新建Rank');assert.equal(saved.levels[0].rewardPoints,29);assert.deepEqual(saved.wiringData.lines,[[[0,0],[1,0]]]);assert.equal(await dirty(),false);
   });
+  await check('3x3 得分块按所选矩形容量校验并保存总量范围',async()=>{
+    await tab('levels').click();
+    const input=page.locator('[data-rank-field="level.targets"]');
+    const x=page.locator('[data-rank-field="level.bounds.x"]');
+    const y=page.locator('[data-rank-field="level.bounds.y"]');
+    await expect(input).toHaveValue('18,24');
+    await expect(page.getByText('得分块数量',{exact:true})).toBeVisible();
+    await expect(page.getByText('画面更新周期',{exact:true})).toBeVisible();
+    await x.fill('4,6');await y.fill('5,6');await input.fill('2,6');
+    await expect(input).toHaveAttribute('aria-invalid','false');
+    await x.fill('5,6');
+    await expect(input).toHaveAttribute('aria-invalid','true');
+    const message='得分块数量上限不能超过可用格子数（4）';
+    await expect(page.getByText(message,{exact:true})).toBeVisible();
+    const before=await calls();await button('保存').click();
+    await expect(page.locator('.editor-save-dialog')).toContainText(message);
+    assert.equal(await calls(),before);await close();await input.fill('2,4');
+    await button('保存').click();await page.locator('.editor-save-toast').waitFor();
+    const saved=await page.evaluate(()=>window.fixture.doc.levels[0]);
+    assert.equal(saved.scoreBlockCountMin,2);assert.equal(saved.scoreBlockCountMax,4);
+    await mount({gameId:9});await expect(input).toHaveValue('2,4');
+    await page.locator('[data-rank-field="level.type"]').selectOption('2');
+    await expect(page.getByText('每玩家目标',{exact:true})).toBeVisible();
+    await expect(page.getByText('整轮刷新（秒）',{exact:true})).toBeVisible();
+  });
   assert.deepEqual(errors,[]);
 }catch(error){await page.screenshot({path:path.join(output,'失败.png')});throw error;}
 finally{await writeFile(path.join(output,'验证记录.json'),JSON.stringify({passed,errors},null,2));await browser.close();await server.close();}

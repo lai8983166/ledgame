@@ -10,6 +10,12 @@ export function createRankEditorPayload(value, gameId) {
   // fields when constructing the API payload.
   if (Array.isArray(payload.levels)) {
     for (const level of payload.levels) {
+      if (level?.type === 1) {
+        initializeScoreBlockRange(level, payload.maxPlayers);
+      } else if (level) {
+        delete level.scoreBlockCountMin;
+        delete level.scoreBlockCountMax;
+      }
       const bounds = level?.bounds;
       if (!bounds || typeof bounds !== "object") continue;
       for (const field of ["minX", "maxX", "minY", "maxY"]) {
@@ -25,13 +31,24 @@ export function createRankEditorPayload(value, gameId) {
   return payload;
 }
 
-export function createRankLevel(width = 16, height = 36, index = 0) {
-  return { label: index === 0 ? 'Ranking' : `Level ${index + 1}`, type: null,
+function initializeScoreBlockRange(level, maxPlayers) {
+  const {minX, maxX, minY, maxY} = level.bounds || {};
+  const capacity = (maxX - minX + 1) * (maxY - minY + 1);
+  if (!Number.isSafeInteger(capacity) || capacity < 1) return;
+  const players = maxPlayers ?? 6;
+  if (level.targetsPerPlayerMin != null) level.scoreBlockCountMin ??= Math.min(capacity, level.targetsPerPlayerMin * players);
+  if (level.targetsPerPlayerMax != null) level.scoreBlockCountMax ??= Math.min(capacity, level.targetsPerPlayerMax * players);
+}
+
+export function createRankLevel(width = 16, height = 36, index = 0, maxPlayers = null) {
+  const level = { label: index === 0 ? 'Ranking' : `Level ${index + 1}`, type: null,
     rewardPoints: 0, durationSeconds: 60, description: '', startGif: '', playIntroVideo: '', gameplayIntro: '', backgroundVoice: '',
     bombWarningAudio: '', bombExplosionAudio: '',
     bounds: { minX: 1, minY: 1, maxX: width, maxY: height },
     targetsPerPlayerMin: 3, targetsPerPlayerMax: 4, bombMin: 0, bombMax: 1,
     bombWarningDelaySeconds: 3, bombWarningDurationSeconds: 1, refreshSeconds: 6, earlyRefresh: true };
+  initializeScoreBlockRange(level, maxPlayers);
+  return level;
 }
 
 export function duplicateRankLevel(source, index) {
@@ -49,6 +66,7 @@ export function parseRankRange(value, minimum = 0, maximum = Infinity) {
 
 export const RANK_RANGE_FIELDS = Object.freeze({
   targets: ['targetsPerPlayerMin', 'targetsPerPlayerMax'],
+  scoreBlocks: ['scoreBlockCountMin', 'scoreBlockCountMax'],
   bombs: ['bombMin', 'bombMax'],
   x: ['minX', 'maxX'],
   y: ['minY', 'maxY'],
@@ -61,7 +79,17 @@ export function parseRankEditorRange(kind, text, document) {
 
 export function rankRangeText(level, kind, drafts) {
   const values = kind === 'x' || kind === 'y' ? level?.bounds : level;
-  return drafts.get(level)?.[kind] ?? RANK_RANGE_FIELDS[kind].map(key => values?.[key] ?? '').join(',');
+  const range = RANK_RANGE_FIELDS[kind].map(key => values?.[key] ?? '');
+  return drafts.get(level)?.[kind] ?? range.join(',');
+}
+
+export function exceededScoreBlockCapacity(level, document, drafts) {
+  if (level?.type !== 1) return null;
+  const read = kind => parseRankEditorRange(kind, rankRangeText(level, kind, drafts), document);
+  const x = read('x'), y = read('y'), blocks = read('scoreBlocks');
+  if (!x || !y || !blocks) return null;
+  const capacity = (x[1] - x[0] + 1) * (y[1] - y[0] + 1);
+  return blocks[1] > capacity ? capacity : null;
 }
 
 export function setRankRangeDraft(level, kind, text, document, drafts) {
@@ -87,6 +115,7 @@ export function normalizeRankEditorDocument(value) {
       const raw = level.bounds[field];
       if (raw !== '' && raw != null && Number.isFinite(Number(raw))) level.bounds[field] = Math.trunc(Number(raw)) + 1;
     }
+    initializeScoreBlockRange(level, doc.maxPlayers);
     level.rewardPoints ??= 0;
   }
   return doc;

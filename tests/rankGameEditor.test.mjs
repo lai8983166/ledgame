@@ -9,6 +9,20 @@ import { RANK_BOMB_TYPES } from "../src/lib/rankGameEditor.js";
 import { parseRankEditorRange, rankRangeText, setRankRangeDraft } from '../src/lib/rankGameEditor.js';
 import { moveLevelAt } from '../src/lib/simpleLevelSequence.js';
 
+test('legacy 3x3 ranges migrate for a full party, bounded by the selected rectangle',()=>{
+  const old={type:1,targetsPerPlayerMin:3,targetsPerPlayerMax:4,bounds:{minX:2,minY:5,maxX:5,maxY:8}};
+  for(const [maxPlayers,expected] of [[null,[16,16]],[2,[6,8]]]){
+    const doc=normalizeRankEditorDocument({maxPlayers,levels:[old]});
+    const saved=createRankEditorPayload(doc,7).levels[0];
+    assert.deepEqual([saved.scoreBlockCountMin,saved.scoreBlockCountMax],expected);
+    assert.deepEqual(saved.bounds,old.bounds);
+    const reopened=normalizeRankEditorDocument({maxPlayers:6,levels:[saved]}).levels[0];
+    assert.deepEqual([reopened.scoreBlockCountMin,reopened.scoreBlockCountMax],expected);
+  }
+  const fresh=createRankLevel();
+  assert.deepEqual([fresh.scoreBlockCountMin,fresh.scoreBlockCountMax],[18,24]);
+});
+
 test('duplicating a Rank level preserves all configuration and detaches nested values',()=>{
   const source={...createRankLevel(21,35),label:'Original',type:3,rewardPoints:57,
     startGif:'intro.gif',gameplayIntro:'voice.mp3',description:'instructions',backgroundVoice:'bg.mp3',

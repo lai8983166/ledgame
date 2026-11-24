@@ -2,7 +2,7 @@
 import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { extractErrorMessage } from '../lib/gameFlowState.js';
-import { RANK_BOMB_TYPES, RANK_RANGE_FIELDS, createRankEditorPayload, createRankLevel, duplicateRankLevel, normalizeRankEditorDocument, applyRankGlobalConfig, parseRankEditorRange, rankRangeText, setRankRangeDraft } from '../lib/rankGameEditor.js';
+import { RANK_BOMB_TYPES, exceededScoreBlockCapacity, createRankEditorPayload, createRankLevel, duplicateRankLevel, normalizeRankEditorDocument, applyRankGlobalConfig, parseRankEditorRange, rankRangeText, setRankRangeDraft } from '../lib/rankGameEditor.js';
 import ConfirmationDialog from '../components/ConfirmationDialog.vue';
 import { useConfirmationDialog } from '../lib/useConfirmationDialog.js';
 import { normalizeGameCategoryList } from '../lib/gameCategories.js';
@@ -79,7 +79,7 @@ onMounted(async()=>{
 function addLevel(){
   if(!canSave.value)return;
   syncGlobalPage();
-  document.value.levels.push(createRankLevel(document.value.siteSizeWidth,document.value.siteSizeHeight,levels.value.length));
+  document.value.levels.push(createRankLevel(document.value.siteSizeWidth,document.value.siteSizeHeight,levels.value.length,document.value.maxPlayers));
   activeLevelIndex.value=levels.value.length-1;
   selectEditorPage('levels');
 }
@@ -115,7 +115,14 @@ function setRange(kind,text){
   setRankRangeDraft(type1Config.value,kind,text,document.value,rangeDrafts);
   dirty.value=true;
 }
-function rangeInvalid(kind){return !parseRankEditorRange(kind,rangeText(kind),document.value);}
+function rangeError(level, kind){
+  if(!parseRankEditorRange(kind,rankRangeText(level,kind,rangeDrafts),document.value))return t('rank.rangeInvalid');
+  if(kind==='scoreBlocks'){
+    const capacity=exceededScoreBlockCapacity(level,document.value,rangeDrafts);
+    if(capacity!==null)return t('rank.scoreBlockCapacity',{capacity});
+  }
+  return '';
+}
 function mediaValue(field){return type1Config.value?.[field]||'';}
 function chooseMedia(field,accept,label){mediaPicker.value={level:type1Config.value,field,accept,label};}
 function pickerValue(picker) {
@@ -141,8 +148,9 @@ async function validatePayload(payload){
   const missing=requiredEditorFields(document.value,true);
   if(missing.length)throw Error(t('editorSave.required')+'\n'+missing.map(field=>t(field.label)).join('\n'));
   for(const [index,level] of levels.value.entries()){
-    const invalid=!RANK_BOMB_TYPES.includes(level?.type)||Object.keys(RANK_RANGE_FIELDS).some(kind=>!parseRankEditorRange(kind,rankRangeText(level,kind,rangeDrafts),document.value));
-    if(invalid){activeLevelIndex.value=index;editorPage.value='levels';throw Error(`${level?.label||index+1}: ${t(!RANK_BOMB_TYPES.includes(level?.type)?'rank.selectType':'rank.rangeInvalid')}`);}
+    const kinds=['x','y',level?.type===1?'scoreBlocks':'targets','bombs'];
+    const error=!RANK_BOMB_TYPES.includes(level?.type)?t('rank.selectType'):kinds.map(kind=>rangeError(level,kind)).find(Boolean);
+    if(error){activeLevelIndex.value=index;editorPage.value='levels';throw Error(`${level?.label||index+1}: ${error}`);}
   }
   const result=await api.validateRankGameEditor(payload), validation=result?.data??result;
   if(!validation?.valid){
@@ -221,14 +229,14 @@ function goBack(){emit('back');}
         <audio v-if="mediaValue(field.key)" :key="mediaValue(field.key)" :src="buildMediaPreviewUrl(mediaValue(field.key))" controls preload="none" />
       </div></label>
       <label v-for="kind in ['x','y']" :key="kind"><span>{{t(`rank.${kind}Range`)}}</span><div>
-        <input :value="rangeText(kind)" :data-rank-field="`level.bounds.${kind}`" :placeholder="t('rank.rangePlaceholder')" :aria-invalid="rangeInvalid(kind)" @input="setRange(kind,$event.target.value)" />
-        <small v-if="rangeInvalid(kind)" class="field-error">{{t('rank.rangeInvalid')}}</small>
+        <input :value="rangeText(kind)" :data-rank-field="`level.bounds.${kind}`" :placeholder="t('rank.rangePlaceholder')" :aria-invalid="Boolean(rangeError(type1Config,kind))" @input="setRange(kind,$event.target.value)" />
+        <small v-if="rangeError(type1Config,kind)" class="field-error">{{t('rank.rangeInvalid')}}</small>
       </div></label>
       <label><span class="editor-required-label">{{t('globalConfig.type')}}</span><select v-model="type1Config.type" data-rank-field="level.type"><option :value="null" disabled>{{t('rank.selectType')}}</option><option v-for="type in RANK_BOMB_TYPES" :key="type" :value="type">{{t(`rank.type${type}`)}}</option></select></label>
       <template v-if="RANK_BOMB_TYPES.includes(type1Config.type)">
-        <label v-for="field in [{key:'targets',label:'rank.targetRange'},{key:'bombs',label:'rank.bombRange'}]" :key="field.key"><span>{{t(field.label)}}</span><div>
-          <input :value="rangeText(field.key)" :data-rank-field="`level.${field.key}`" :placeholder="t('rank.rangePlaceholder')" :aria-invalid="rangeInvalid(field.key)" @input="setRange(field.key,$event.target.value)" />
-          <small v-if="rangeInvalid(field.key)" class="field-error">{{t('rank.rangeInvalid')}}</small>
+        <label v-for="field in [type1Config.type===1?{key:'scoreBlocks',label:'rank.scoreBlockCount'}:{key:'targets',label:'rank.targetRange'},{key:'bombs',label:'rank.bombRange'}]" :key="field.key"><span>{{t(field.label)}}</span><div>
+          <input :value="rangeText(field.key)" :data-rank-field="field.key==='scoreBlocks'?'level.targets':`level.${field.key}`" :placeholder="t('rank.rangePlaceholder')" :aria-invalid="Boolean(rangeError(type1Config,field.key))" @input="setRange(field.key,$event.target.value)" />
+          <small v-if="rangeError(type1Config,field.key)" class="field-error">{{rangeError(type1Config,field.key)}}</small>
         </div></label>
         <label><span>{{t('rank.bombAppearDelay')}}</span><input v-model.number="type1Config.bombWarningDelaySeconds" data-rank-field="level.bombWarningDelaySeconds" type="number" min="0" /></label>
         <label><span>{{t('rank.warningDuration')}}</span><input v-model.number="type1Config.bombWarningDurationSeconds" type="number" min="1" /></label>
@@ -237,7 +245,7 @@ function goBack(){emit('back');}
           <audio v-if="mediaValue(field.key)" :key="mediaValue(field.key)" :src="buildMediaPreviewUrl(mediaValue(field.key))" controls preload="none" />
         </div></label>
         <label><span>{{t('rank.earlyRefresh')}}</span><input v-model="type1Config.earlyRefresh" type="checkbox" /></label>
-        <label><span>{{t('rank.refreshSeconds')}}</span><input v-model.number="type1Config.refreshSeconds" type="number" min="1" /></label>
+        <label><span>{{t(type1Config.type===1?'rank.frameUpdatePeriod':'rank.refreshSeconds')}}</span><input v-model.number="type1Config.refreshSeconds" type="number" min="1" /></label>
       </template>
     </main>
     <EditorSaveToast v-if="saveFeedback && !saveFeedback.failed" :message="saveFeedback.message" @dismiss="saveFeedback = null" />
