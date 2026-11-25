@@ -10,22 +10,33 @@ const {t}=useI18n({useScope:'global'});
 const host=ref(null),size=ref({width:0,height:0});
 const board=computed(()=>debugPeripheralBoard(props.layout,props.runtime,props.pixels[0]?.length || 16,props.pixels.length || 16));
 const geometry=computed(()=>board.value || buildPixelLightPreview({},props.pixels[0]?.length || 16,props.pixels.length || 16));
-const scale=computed(()=>{
+const baseScale=computed(()=>{
   const width=Math.max(0,size.value.width-12),height=Math.max(0,size.value.height-12);
   const {floor,canvasWidth,canvasHeight}=geometry.value;
   const originalScale=Math.min(width/canvasWidth,height/canvasHeight);
   const margins=2*Math.min(20,size.value.width*.1,size.value.height*.1);
   return Math.max(0,Math.min(originalScale*1.5,(width-margins)/floor.width,(height-margins)/floor.height));
 });
-const lightMargin=computed(()=>{
+const baseMargin=computed(()=>{
   const {floor}=geometry.value;
-  return Math.max(0,Math.min(44,(size.value.width-12-floor.width*scale.value)/2,(size.value.height-12-floor.height*scale.value)/2));
+  return Math.max(0,Math.min(44,(size.value.width-12-floor.width*baseScale.value)/2,(size.value.height-12-floor.height*baseScale.value)/2));
+});
+const baseDiameter=light=>Math.min(18,light.markerSize*baseScale.value,baseMargin.value*.42);
+const lightMargin=computed(()=>{
+  const largest=Math.max(0,...(board.value?.lights || []).map(baseDiameter));
+  // A pair of doubled markers fits in two equal lanes with their original clearance.
+  return Math.max(baseMargin.value,largest*2/.42);
+});
+const scale=computed(()=>{
+  const {floor}=geometry.value;
+  return Math.max(0,Math.min(baseScale.value,(size.value.width-12-2*lightMargin.value)/floor.width,
+    (size.value.height-12-2*lightMargin.value)/floor.height));
 });
 const sceneStyle=computed(()=>({width:`${geometry.value.floor.width*scale.value+2*lightMargin.value}px`,height:`${geometry.value.floor.height*scale.value+2*lightMargin.value}px`}));
 const floorStyle=computed(()=>({left:`${lightMargin.value}px`,top:`${lightMargin.value}px`,width:`${geometry.value.floor.width*scale.value}px`,height:`${geometry.value.floor.height*scale.value}px`}));
 const pointStyle=(point,light)=>{
   const margin=lightMargin.value, floor=geometry.value.floor;
-  const diameter=Math.min(18,light.markerSize*scale.value,margin*.42);
+  const diameter=scale.value>0 ? Math.min(2*baseDiameter(light),light.wallSpacing*scale.value*.96) : 0;
   // The symbol sits in the outer lane; both lanes stay aligned to the enlarged floor.
   const offset=margin*(point===light.symbol ? .75 : .25);
   let x=(point.x-floor.x)*scale.value, y=(point.y-floor.y)*scale.value;

@@ -328,11 +328,11 @@ try {
     await page.keyboard.press('Control+z');assert.deepEqual((await read()).matrix,before);
     assert.equal(await page.evaluate(()=>window.fixture.confirms.length),1);
   });
-  await check('非法同色导入静默不改文档，语法错误仍提示',async()=>{
-    const before=await read();
+  await check('导入保留同格同色对象，语法错误仍提示',async()=>{
     await page.evaluate(()=>{window.fixture.importContent=JSON.stringify({label:'冲突关卡',option:{},frameList:[{repeatTimes:1,matrix:[]},{repeatTimes:1,matrix:[{id:'a',x:0,y:0,color:1},{id:'b',x:0,y:0,color:1}]}]});});
     await page.evaluate(()=>window.getComponentSetup().importCurrentLevel());
-    assert.deepEqual((await read()).frames,before.frames);assert.equal((await read()).undo,before.undo);assert.equal((await read()).error,'');
+    const imported=await read();assert.deepEqual(imported.frames[1].matrix.map(o=>[o.id,o.x,o.y,o.color]),[['a',0,0,1],['b',0,0,1]]);assert.equal(imported.error,'');
+    await page.locator('.editor-save-toast').getByText(/请保存游戏/).waitFor();
     await page.evaluate(()=>{window.fixture.importContent='{';return window.getComponentSetup().importCurrentLevel();});
     assert.notEqual((await read()).error,'');
   });
@@ -370,6 +370,7 @@ try {
     ]){
       await page.evaluate(value=>{window.fixture.importContent=JSON.stringify(value);window.fixture.confirmResult=true;},invalid);
       await button('导入关卡').click();assert.deepEqual(await snapshot(),before);assert.notEqual((await read()).error,'');
+      if(invalid.frameList?.length===2) assert.match((await read()).error,/第 2\/2 帧.*超出/);
     }
     await page.evaluate(()=>{window.fixture.importContent=window.fixture.exportContent;window.fixture.deferImport=true;});
     await button('导入关卡').click();await page.waitForFunction(()=>window.fixture.finishImport);

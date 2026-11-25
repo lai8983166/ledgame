@@ -1276,6 +1276,7 @@ async function exportCurrentLevel() {
 
 async function importCurrentLevel() {
   if (busyAction.value) return;
+  saveFeedback.value = null;
   statusMessage.value = "";
   errorMessage.value = "";
   const targetDocument = document.value;
@@ -1292,7 +1293,6 @@ async function importCurrentLevel() {
       throw new Error(t("simple.importDocumentChanged"));
     }
     const imported = normalizeImportedLevel(JSON.parse(result?.content || ""));
-    if (!imported.frameList.every(frame => canApplyColorOccupancy([], frame.matrix))) return;
     document.value.levels.push(imported);
     activeLevelIndex.value = document.value.levels.length - 1;
     activeFrameIndex.value = 0;
@@ -1304,6 +1304,7 @@ async function importCurrentLevel() {
     syncSelectedObject();
     scheduleMatrixCacheWarmup(0);
     statusMessage.value = t("simple.levelAppended", { count: imported.frameList.length });
+    saveFeedback.value = { id: ++toastSequence, message: statusMessage.value };
     await nextTick();
     levelTabsRef.value?.lastElementChild?.scrollIntoView({ block: "nearest", inline: "nearest" });
   } catch (error) {
@@ -2865,21 +2866,25 @@ function normalizeImportedLevel(level) {
   level.label ||= `Level ${levels.value.length + 1}`;
   level.option = normalizeLevelOption(level.option);
   level.frameList.forEach((frame, frameIndex) => {
+    const invalidFrame = (reason = "simple.levelFrameInvalid") => {
+      const position = t("effect.frameProgress", { current: frameIndex + 1, total: level.frameList.length });
+      throw new Error(position + " · " + t(reason));
+    };
     if (!isRecord(frame) || !Array.isArray(frame.matrix) ||
-        !Number.isSafeInteger(frame.repeatTimes) || frame.repeatTimes < 1) invalid();
+        !Number.isSafeInteger(frame.repeatTimes) || frame.repeatTimes < 1) invalidFrame();
     const usedIds = new Set();
     frame.matrix = frame.matrix.map(entry => {
       const object = Array.isArray(entry) ? createObjectFromTuple(entry) : entry;
       if (!isRecord(object) || !Number.isSafeInteger(object.x) || !Number.isSafeInteger(object.y) ||
           !Number.isInteger(object.color) || object.color < 0 || object.color > 3 ||
-          (object.id != null && ((typeof object.id !== "string" && !Number.isSafeInteger(object.id)) || usedIds.has(object.id)))) invalid();
+          (object.id != null && ((typeof object.id !== "string" && !Number.isSafeInteger(object.id)) || usedIds.has(object.id)))) invalidFrame();
       if (object.points != null && (!Array.isArray(object.points) || !object.points.length ||
           object.points.some(point => {
             const values = Array.isArray(point) ? point : [point?.x, point?.y];
             return values.length !== 2 || !values.every(Number.isSafeInteger);
-          }))) invalid();
+          }))) invalidFrame();
       const normalized = normalizeMatrixObject(object, frame, frameIndex);
-      if (!isObjectInsideRealMatrix(normalized)) throw new Error(t("simple.levelJsonOutside"));
+      if (!isObjectInsideRealMatrix(normalized)) invalidFrame("simple.levelJsonOutside");
       usedIds.add(normalized.id);
       return normalized;
     });
