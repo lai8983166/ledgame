@@ -2862,23 +2862,6 @@ html.editor-saving * {
 
 .object-actions .color-copy-button {
   min-height: 52px;
-  color: var(--color-copy-color);
-}
-
-.object-actions .color-copy-green {
-  --color-copy-color: #00ff00;
-}
-
-.object-actions .color-copy-blue {
-  --color-copy-color: #4080ff;
-}
-
-.object-actions .color-copy-red {
-  --color-copy-color: #ff4040;
-}
-
-.object-actions .color-copy-pink {
-  --color-copy-color: #ff00ff;
 }
 
 .anchor-edit-panel {

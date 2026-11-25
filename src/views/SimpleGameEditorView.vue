@@ -3580,6 +3580,7 @@ function formatRuntimeSummary(value) {
               <template v-if="!anchorEditMode">
               <button
                 class="soft-button compact-button object-icon-button color-copy-button color-copy-green"
+                :style="{ color: colorOptions[0].value }"
                 :disabled="frames.length <= 1 || frameColorObjectCounts[0] === 0"
                 type="button"
                 :title="t('simple.greenCopyTitle')"
@@ -3590,6 +3591,7 @@ function formatRuntimeSummary(value) {
               </button>
               <button
                 class="soft-button compact-button object-icon-button color-copy-button color-copy-blue"
+                :style="{ color: colorOptions[1].value }"
                 :disabled="frames.length <= 1 || frameColorObjectCounts[1] === 0"
                 type="button"
                 :title="t('simple.blueCopyTitle')"
@@ -3600,6 +3602,7 @@ function formatRuntimeSummary(value) {
               </button>
               <button
                 class="soft-button compact-button object-icon-button color-copy-button color-copy-red"
+                :style="{ color: colorOptions[2].value }"
                 :disabled="frames.length <= 1 || frameColorObjectCounts[2] === 0"
                 type="button"
                 :title="t('simple.redCopyTitle')"
@@ -3610,6 +3613,7 @@ function formatRuntimeSummary(value) {
               </button>
                 <button
                   class="soft-button compact-button object-icon-button color-copy-button color-copy-pink"
+                :style="{ color: colorOptions[3].value }"
                 :disabled="frames.length <= 1 || frameColorObjectCounts[3] === 0"
                 type="button"
                 :title="t('simple.pinkCopyTitle')"
