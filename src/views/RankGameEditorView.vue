@@ -16,6 +16,7 @@ import { deleteLevelAt, moveLevelAt } from '../lib/simpleLevelSequence.js';
 import EditorActionIcon from '../components/EditorActionIcon.vue';
 import EditorSaveToast from '../components/EditorSaveToast.vue';
 import EditorSaveDialog from '../components/EditorSaveDialog.vue';
+import MediaResourceButton from '../components/MediaResourceButton.vue';
 import MediaPickerDialog from '../components/MediaPickerDialog.vue';
 import GameGlobalConfigDialog from '../components/GameGlobalConfigDialog.vue';
 import GameWiringDialog from '../components/GameWiringDialog.vue';
@@ -32,6 +33,7 @@ const { confirmation, confirmAction, resolveConfirmation, isConfirmationCurrent 
 const document=ref(null), loading=ref(true), busy=ref(null), dirty=ref(false), errorMessage=ref(''), saveFeedback=ref(null);
 const activeLevelIndex=ref(0), draggingLevelIndex=ref(null), levelDropIndex=ref(null), gameCategories=ref([]);
 const levels=computed(()=>document.value?.levels || []), type1Config=computed(()=>levels.value[activeLevelIndex.value]);
+const visibleWalls = computed(() => wallFields.filter(wall => type1Config.value?.bounds?.[wall.boundary] > 0));
 const currentGameId=computed(()=>{const id=Number(document.value?.id ?? props.gameId);return Number.isInteger(id)&&id>0?id:null;});
 const editorPage=ref(props.openGlobalConfigOnEntry||!(props.gameId||props.initialDocument?.id)?'global':'levels'), globalConfigDraft=ref({}), mediaPicker=ref(null);
 const globalPageMounted=ref(false), wiringPageMounted=ref(false);
@@ -237,16 +239,14 @@ function goBack(){emit('back');}
         <input :value="rangeText(kind)" :data-rank-field="`level.bounds.${kind}`" :placeholder="t('rank.optionalBounds')" :aria-invalid="Boolean(rangeError(type1Config,kind))" @input="setRange(kind,$event.target.value)" />
         <small v-if="rangeError(type1Config,kind)" class="field-error">{{t('rank.rangeInvalid')}}</small>
       </div></label>
-      <template v-for="wall in wallFields" :key="wall.field">
-        <label v-if="type1Config.bounds[wall.boundary] > 0" class="rank-level-media">
-          <span>{{t(wall.label)}}</span>
-          <div class="rank-media-control">
-            <input :value="mediaValue(wall.field)" :placeholder="t('globalConfig.notSelected')" readonly />
-            <button class="soft-button compact-button" type="button" @click="chooseMedia(wall.field,'gif',t(wall.label))">{{t('globalConfig.choose')}}</button>
-            <button class="soft-button compact-button" type="button" :disabled="!mediaValue(wall.field)" @click="type1Config[wall.field]=''">{{t('globalConfig.clear')}}</button>
-          </div>
-        </label>
-      </template>
+      <div v-if="visibleWalls.length" class="rank-wall-media">
+        <div v-for="wall in visibleWalls" :key="wall.field" class="rank-wall-field">
+          <label :for="wall.field">{{ t(wall.label) }}</label>
+          <MediaResourceButton :id="wall.field" :value="mediaValue(wall.field)" :label="t(wall.label)" accept="gif"
+            :context-key="type1Config" :disabled="!canSave"
+            @select="chooseMedia(wall.field,'gif',t(wall.label))" @clear="type1Config[wall.field]=''" />
+        </div>
+      </div>
       <label><span class="editor-required-label">{{t('globalConfig.type')}}</span><select v-model="type1Config.type" data-rank-field="level.type"><option :value="null" disabled>{{t('rank.selectType')}}</option><option v-for="type in RANK_BOMB_TYPES" :key="type" :value="type">{{t(`rank.type${type}`)}}</option></select></label>
       <template v-if="RANK_BOMB_TYPES.includes(type1Config.type)">
         <label v-for="field in [type1Config.type===1?{key:'scoreBlocks',label:'rank.scoreBlockCount'}:{key:'targets',label:'rank.targetRange'},{key:'bombs',label:'rank.bombRange'}]" :key="field.key"><span>{{t(field.label)}}</span><div>
@@ -302,6 +302,8 @@ input[type=checkbox]{width:20px;height:20px;margin:8px 0}
 .rank-explosion-volume output{min-width:4ch;text-align:right;font-variant-numeric:tabular-nums}
 .rank-media-control{display:flex;gap:6px;min-width:0}.rank-media-control input{flex:1}.rank-media-control button{flex-shrink:0}
 .rank-intro-preview{display:block;max-width:220px;max-height:220px;margin-top:8px;object-fit:contain;image-rendering:pixelated}
+.rank-wall-media{display:grid;grid-template-columns:repeat(4,minmax(0,112px));gap:16px;align-items:end}
+.rank-wall-field{display:grid;min-width:0;gap:9px;font-size:13px;color:var(--ui-text)}
 audio{display:block;width:100%;height:32px;margin-top:6px}.field-error{display:block;margin-top:4px;color:var(--ui-error)}
 .level-drop-target{outline:2px solid var(--ui-accent)}
 .rank-level-tab{position:relative;display:flex;flex-shrink:0}

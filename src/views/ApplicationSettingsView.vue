@@ -1,6 +1,5 @@
 <script setup>
 import { DEFAULT_NAVIGATION_TITLE } from "../lib/applicationBranding.js";
-import SecondaryIdleSubtitle from "../components/SecondaryIdleSubtitle.vue";
 import { computed, onMounted, onUnmounted, reactive, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { SUPPORTED_LOCALES } from "../i18n/index.js";
@@ -302,6 +301,12 @@ async function testMemberPlatform() {
             <button class="application-settings-secondary" type="button" @click="chooseSecondaryBackground">{{ t('management.chooseSecondaryBackground') }}</button>
             <span>{{ secondaryBackgroundLabel }}</span>
           </div>
+          <div class="application-settings-actions application-settings-idle-media-actions">
+            <button class="application-settings-secondary" type="button" @click="chooseSecondaryIdleMedia">
+              {{ t("applicationSettings.chooseSecondaryIdleMedia") }}
+            </button>
+            <span>{{ secondaryIdleMediaLabel }}</span>
+          </div>
         </section>
         <label class="application-settings-field">
           <span>{{ t("applicationSettings.entryMethod") }} <b class="required-mark">*</b></span>
@@ -386,16 +391,6 @@ async function testMemberPlatform() {
             <input v-model.number="draft.secondaryIdleSubtitleFontSize" type="number" min="32" max="200" step="1" required :aria-invalid="Boolean(fieldError('secondaryIdleSubtitleFontSize'))" />
             <small v-if="fieldError('secondaryIdleSubtitleFontSize')" class="application-settings-error">{{ fieldError('secondaryIdleSubtitleFontSize') }}</small>
           </label>
-          <div class="subtitle-preview">
-            <SecondaryIdleSubtitle :text="draft.secondaryIdleSubtitleText || t('applicationSettings.secondaryIdleBottomTitle')"
-              :font-size="28" />
-          </div>
-          <div class="application-settings-actions application-settings-idle-media-actions">
-            <button class="application-settings-secondary" type="button" @click="chooseSecondaryIdleMedia">
-              {{ t("applicationSettings.chooseSecondaryIdleMedia") }}
-            </button>
-            <span>{{ secondaryIdleMediaLabel }}</span>
-          </div>
         </section>
 
         <section class="application-settings-connection">
@@ -488,15 +483,6 @@ async function testMemberPlatform() {
   color: var(--ui-text-secondary);
   background: var(--ui-input);
   font: inherit;
-}
-
-.subtitle-preview {
-  display: grid;
-  align-items: center;
-  min-height: 74px;
-  padding: 12px;
-  border-radius: 6px;
-  background: #101e30;
 }
 
 .application-settings-input-row {

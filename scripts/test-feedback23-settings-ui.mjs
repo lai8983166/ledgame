@@ -102,7 +102,7 @@ try {
     assert.equal(await font(1).inputValue(), '96'); assert.equal(await font(2).inputValue(), '96');
     const style = page.getByRole('combobox', { name: '下标题样式' });
     assert.equal(await style.count(), 0);
-    await page.locator('.subtitle-preview .secondary-subtitle--sans').waitFor();
+    assert.equal(await page.locator('.subtitle-preview, .secondary-subtitle').count(), 0);
     await font(1).fill('120'); await font(2).fill('48'); await save().click();
     await mount('SecondaryDisplayView');
     const subtitle = page.locator('.secondary-idle-action .secondary-subtitle');
@@ -213,7 +213,8 @@ try {
     await page.getByRole('button', { name: '选择应用图标', exact: true }).click();
     assert.equal(await save().isDisabled(), false);
     await page.getByRole('button', { name: '选择副屏背景', exact: true }).click();
-    await page.getByRole('button', { name: '选择待机画面', exact: true }).click();
+    const idleMedia = page.locator('.application-settings-background-actions + .application-settings-idle-media-actions');
+    await idleMedia.getByRole('button', { name: '选择副屏待机画面', exact: true }).click();
     assert.deepEqual(await page.evaluate(() => window.fixture.persisted()), original);
     await mount('ApplicationSettingsView');
     await page.getByText('second-icon.png', { exact: true }).waitFor();

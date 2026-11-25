@@ -1,6 +1,7 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
+import { buildMediaPreviewUrl } from '../lib/mediaPreview.js';
 
 const props = defineProps({
   id: { type: String, default: '' },
@@ -35,7 +36,7 @@ function closePreview(restoreFocus = true) {
 }
 async function activate() {
   if (props.disabled) return;
-  if (!props.value) { emit('select'); return; }
+  if (!props.value || props.accept === 'gif') { emit('select'); return; }
   const currentRequest = ++requestId;
   const asset = props.value;
   preview.value = { url: '', error: '' };
@@ -78,10 +79,11 @@ onBeforeUnmount(() => { mounted = false; closePreview(false); });
 <template>
   <div class="media-resource" :data-resource="value">
     <button :id="id" ref="mainButton" class="media-resource-button" type="button" :disabled="disabled"
-      :aria-label="t(value ? 'media.previewFile' : 'globalConfig.choose') + ' ' + label" :title="value || label" @click="activate">
-      <svg v-if="value" class="media-resource-icon" viewBox="0 0 32 32" aria-hidden="true"><path d="M11 6 26 16 11 26Z" fill="currentColor" /></svg>
+      :aria-label="t(value && accept !== 'gif' ? 'media.previewFile' : 'globalConfig.choose') + ' ' + label" :title="value || label" @click="activate">
+      <img v-if="value && accept === 'gif'" class="media-resource-gif" :src="buildMediaPreviewUrl(value)" :alt="fileName" />
+      <svg v-else-if="value" class="media-resource-icon" viewBox="0 0 32 32" aria-hidden="true"><path d="M11 6 26 16 11 26Z" fill="currentColor" /></svg>
       <span v-else class="media-resource-icon media-resource-add" aria-hidden="true">+</span>
-      <span v-if="value" class="media-resource-name">{{ fileName }}</span>
+      <span v-if="value && accept !== 'gif'" class="media-resource-name">{{ fileName }}</span>
     </button>
     <button v-if="value" class="media-resource-clear" type="button" :disabled="disabled"
       :aria-label="t('globalConfig.clear') + ' ' + label" :title="t('globalConfig.clear')" @click.stop="clear">×</button>
@@ -111,6 +113,7 @@ onBeforeUnmount(() => { mounted = false; closePreview(false); });
 .media-resource-button:focus-visible, .media-resource-clear:focus-visible { outline: 2px solid var(--ui-accent); outline-offset: 3px; }
 .media-resource-icon { position: absolute; top: 50%; left: 50%; width: 36px; height: 36px; transform: translate(-50%, -50%); }
 .media-resource-add { display: grid; place-items: center; font-size: 40px; line-height: 1; font-weight: 400; }
+.media-resource-gif { display: block; width: 100%; height: 100%; border-radius: inherit; object-fit: contain; image-rendering: pixelated; }
 .media-resource-name { position: absolute; right: 6px; bottom: 7px; left: 6px; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: anywhere; color: var(--ui-text-secondary); font-size: 11px; line-height: 1.2; }
 .media-resource-clear { position: absolute; top: -7px; right: -7px; display: grid; place-items: center; width: 24px; height: 24px; padding: 0; border: 1px solid var(--ui-border); border-radius: 50%; background: var(--ui-elevated); color: var(--ui-text); font-size: 20px; line-height: 1; cursor: pointer; }
 .media-resource-clear:hover { color: var(--ui-error); border-color: var(--ui-error); }
