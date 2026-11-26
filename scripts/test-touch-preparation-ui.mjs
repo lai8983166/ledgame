@@ -56,6 +56,22 @@ async function shot(name){await page.screenshot({path:path.join(output,name+'.pn
 try{
   await page.goto(`http://127.0.0.1:${server.httpServer.address().port}/tests/ui/catalog-library-harness.html`,{waitUntil:'domcontentloaded',timeout:120000});
   await page.waitForFunction(()=>window.mountComponent);await page.addStyleTag({content:'#app{padding:0!important;overflow:hidden!important;}'});
+  await check('人数选择首行三项居中，次行四项', async () => {
+    await mount();
+    for (const [width,height] of [[1920,1080],[1280,720],[390,844]]) {
+      await page.setViewportSize({width,height});
+      const positions = await page.locator('.touch-player-option').evaluateAll(buttons => buttons.map(button => {
+        const {left,width} = button.getBoundingClientRect();
+        return {top:button.offsetTop,center:left+width/2};
+      }));
+      assert.equal(positions.length,7);
+      const first=positions.slice(0,3), second=positions.slice(3);
+      assert.ok(first.every(p=>p.top===first[0].top) && second.every(p=>p.top===second[0].top));
+      assert.ok(second[0].top>first[0].top);
+      assert.ok(Math.abs(first[1].center-(second[0].center+second[3].center)/2)<1);
+    }
+    await page.setViewportSize({width:1366,height:768});
+  });
   await check('选人数后按独立上下限过滤普通与 Rank 游戏，空分类可返回重新选人数', async () => {
     await page.evaluate(() => {
       window.fixture.entryMethod = 'touch';

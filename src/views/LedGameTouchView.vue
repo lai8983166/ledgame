@@ -2929,7 +2929,7 @@ async function confirmReturnToIdle() {
 .touch-player-grid {
   align-self: center;
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(8, minmax(0, 1fr));
   gap: clamp(8px, 1.4vh, 20px) clamp(22px, 4vw, 72px);
   width: min(1140px, 88%);
   margin: 8px auto;
@@ -2941,7 +2941,11 @@ async function confirmReturnToIdle() {
     0 0 18px rgba(16, 203, 236, 0.16);
 }
 
+.touch-player-option:first-child { grid-column: 2 / span 2; }
+.touch-player-option:nth-child(4) { grid-column: 1 / span 2; }
+
 .touch-player-option {
+  grid-column: span 2;
   position: relative;
   justify-self: center;
   width: min(100%, 260px);
@@ -4044,10 +4048,12 @@ fieldset:disabled {
   }
 
   .touch-player-grid {
-    grid-template-columns: repeat(2, minmax(120px, 1fr));
+    column-gap: clamp(4px, 1.5vw, 12px);
     width: 100%;
     overflow: auto;
   }
+
+  .touch-player-option strong { font-size: clamp(16px, 4.5vw, 34px); }
 
   .touch-carousel-shell {
     grid-template-columns: 42px minmax(0, 1fr) 42px;
