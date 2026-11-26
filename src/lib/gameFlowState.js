@@ -5,6 +5,7 @@ export const GAME_LIFECYCLE_STATES = Object.freeze([
   "PREPARING",
   "STARTING",
   "RUNNING",
+  "PAUSED",
   "SETTLING",
   "STOPPED",
 ]);
@@ -207,7 +208,7 @@ export function normalizeGameList(value) {
 
 export function touchViewForState(value) {
   const state = normalizeRuntimeState(value);
-  return LIFECYCLE_SET.has(state.engineState) ? state.engineState : "LOADING";
+  return state.engineState !== "PAUSED" && LIFECYCLE_SET.has(state.engineState) ? state.engineState : "LOADING";
 }
 
 export function hasTermination(value) {

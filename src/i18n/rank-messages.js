@@ -72,6 +72,7 @@ export const rankMessages = {
       invalidConfiguration: "当前数据不是唯一的 Type 1 玩法配置。为避免丢失字段，已禁止保存和启动。"
     },
     rankSecondary: {
+      playerLabel: "玩家{letter}",
       round: "第 {value} 轮",
       remainingTargets: "剩余目标 {value}",
       roundRemainingTime: "本回合剩余 {value}",
@@ -154,6 +155,7 @@ export const rankMessages = {
       invalidConfiguration: "The data must contain exactly one Type 1 configuration. Saving and starting are disabled to protect its fields."
     },
     rankSecondary: {
+      playerLabel: "Player {letter}",
       round: "Round {value}",
       remainingTargets: "{value} targets left",
       roundRemainingTime: "Round time left {value}",

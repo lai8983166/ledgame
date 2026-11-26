@@ -62,6 +62,8 @@ export const kioskMessages = {
     },
     secondaryDisplay: {
       listTitle: "副屏列表",
+      countdownCaption: "Countdown", paused: "已暂停",
+      rewardPoints: "奖励积分", remainingTargets: "剩余目标",
       listDescription: "选择一个外接显示器用于展示游戏运行信息。",
       noDisplays: "未识别到显示器",
       primary: "主屏",
@@ -242,6 +244,8 @@ export const kioskMessages = {
     },
     secondaryDisplay: {
       listTitle: "Secondary Display List",
+      countdownCaption: "Countdown", paused: "Paused",
+      rewardPoints: "Reward points", remainingTargets: "Remaining targets",
       listDescription: "Choose an external display for live game information.",
       noDisplays: "No displays were detected",
       primary: "Primary",

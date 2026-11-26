@@ -8,6 +8,8 @@ import {
 } from "../lib/secondaryDisplayPresentation.js";
 import IdlePromptDisplay from "../components/IdlePromptDisplay.vue";
 import SecondaryIdleSubtitle from "../components/SecondaryIdleSubtitle.vue";
+import SecondaryChallengeHud from '../components/SecondaryChallengeHud.vue';
+import SecondaryRankHud from '../components/SecondaryRankHud.vue';
 import GameplayIntroVideo from '../components/GameplayIntroVideo.vue';
 import stageSuccessImage from "../assets/secondary-display/stage-success.png";
 import stageFailureImage from "../assets/secondary-display/stage-failure.png";
@@ -62,6 +64,8 @@ const showIdleImage = computed(() => isIdleVisible.value && idleMediaType.value 
   && idleMediaUrl.value && !idleMediaFailed.value);
 const showIdleVideo = computed(() => isIdleVisible.value && idleMediaType.value === "video"
   && idleMediaUrl.value && !idleMediaFailed.value);
+const activeHud = computed(() => ['RUNNING', 'PAUSED'].includes(lifecycle.value)
+  && (presentation.value.state.gameType === 'default' || presentation.value.isRank));
 const isResultVisible = computed(() => presentation.value.mode !== SECONDARY_DISPLAY_MODES.HUD);
 const isGameResult = computed(() => [
   SECONDARY_DISPLAY_MODES.GAME_SUCCESS,
@@ -309,6 +313,12 @@ function displayValue(value) {
       </div>
     </section>
 
+    <section v-else-if="activeHud" class="secondary-live-hud">
+      <SecondaryRankHud v-if="presentation.isRank" :state="presentation.state" />
+      <SecondaryChallengeHud v-else :state="presentation.state" :presentation="presentation" />
+      <span v-if="lifecycle === 'PAUSED'" class="secondary-live-paused">{{ t('secondaryDisplay.paused') }}</span>
+    </section>
+
     <section v-else class="secondary-runtime-content">
       <header class="secondary-runtime-header">
         <div class="game-heading">
@@ -402,6 +412,14 @@ function displayValue(value) {
 </template>
 
 <style scoped>
+@font-face {
+  font-family: 'Secondary HUD';
+  src: url('../assets/touch-game/player-title.ttf') format('truetype');
+}
+.secondary-live-hud { position: relative; height: 100%; width: 100%; font-family: 'Secondary HUD', sans-serif; }
+.secondary-runtime:has(.secondary-live-hud)::before { display: none; }
+.secondary-live-paused { position: absolute; z-index: 2; top: 1vh; left: 1vw; padding: .35em .8em; background: #101a35; color: white; }
+
 .secondary-intro-video { position: absolute; inset: 0; z-index: 8; pointer-events: none; }
 .secondary-runtime { --secondary-panel-alpha: 0.94; --secondary-header-alpha: 0.9; --secondary-result-alpha: 0.91; position: relative; width: 100vw; height: 100vh; overflow: hidden; color: #f5f8fb; background: #071019; user-select: none; }
 .secondary-runtime::before { content: ""; position: absolute; inset: 0 0 auto; height: 7px; background: #26b9d6; box-shadow: 0 0 24px rgba(38, 185, 214, 0.5); }

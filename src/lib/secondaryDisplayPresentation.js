@@ -53,7 +53,7 @@ export function formatGameTime(value) {
 }
 
 function gameTimePresentation(state, now, observedAt) {
-  const visible = ["STARTING", "RUNNING", "SETTLING"].includes(state.engineState);
+  const visible = ["STARTING", "RUNNING", "PAUSED", "SETTLING"].includes(state.engineState);
   const gameTime = state.gameTime;
   if (!visible) {
     return { visible: false, mode: gameTime?.mode || "UNKNOWN", remainingMillis: null, text: null };
