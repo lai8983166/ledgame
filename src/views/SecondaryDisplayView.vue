@@ -64,6 +64,8 @@ const showIdleImage = computed(() => isIdleVisible.value && idleMediaType.value 
   && idleMediaUrl.value && !idleMediaFailed.value);
 const showIdleVideo = computed(() => isIdleVisible.value && idleMediaType.value === "video"
   && idleMediaUrl.value && !idleMediaFailed.value);
+const showOpeningBackground = computed(() => !intro.value && (lifecycle.value === 'STARTING'
+  || (lifecycle.value === 'PAUSED' && runtimeState.value.startingStandby === true)));
 const activeHud = computed(() => ['RUNNING', 'PAUSED'].includes(lifecycle.value)
   && (presentation.value.state.gameType === 'default' || presentation.value.isRank));
 const isResultVisible = computed(() => presentation.value.mode !== SECONDARY_DISPLAY_MODES.HUD);
@@ -278,6 +280,10 @@ function displayValue(value) {
       <p>{{ errorMessage }}</p>
     </section>
 
+    <section v-else-if="showOpeningBackground" class="secondary-opening-background" data-testid="secondary-opening-background">
+      <GameplayIntroVideo asset-reference="touch/background.png" allow-image />
+    </section>
+
     <section v-else-if="isIdleVisible" class="secondary-idle" data-testid="secondary-display-idle">
       <img
         v-if="showIdleImage"
@@ -416,10 +422,12 @@ function displayValue(value) {
   font-family: 'Secondary HUD';
   src: url('../assets/touch-game/player-title.ttf') format('truetype');
 }
-.secondary-live-hud { position: relative; height: 100%; width: 100%; font-family: 'Secondary HUD', sans-serif; }
+.secondary-live-hud { position: absolute; inset: 6%; font-family: 'Secondary HUD', sans-serif; }
 .secondary-runtime:has(.secondary-live-hud)::before { display: none; }
 .secondary-live-paused { position: absolute; z-index: 2; top: 1vh; left: 1vw; padding: .35em .8em; background: #101a35; color: white; }
 
+.secondary-opening-background { position: absolute; inset: 0; background: #000; }
+.secondary-opening-background :deep(img) { object-fit: cover; }
 .secondary-intro-video { position: absolute; inset: 0; z-index: 8; pointer-events: none; }
 .secondary-runtime { --secondary-panel-alpha: 0.94; --secondary-header-alpha: 0.9; --secondary-result-alpha: 0.91; position: relative; width: 100vw; height: 100vh; overflow: hidden; color: #f5f8fb; background: #071019; user-select: none; }
 .secondary-runtime::before { content: ""; position: absolute; inset: 0 0 auto; height: 7px; background: #26b9d6; box-shadow: 0 0 24px rgba(38, 185, 214, 0.5); }

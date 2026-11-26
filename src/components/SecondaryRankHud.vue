@@ -44,7 +44,7 @@ const seconds = computed(() => {
 .rank-clock {
   position: absolute;
   inset: 10% auto auto 1%;
-  width: 53%;
+  width: 50%;
   height: 86%;
   background: url('../assets/secondary-display/rank-clock.png') center / 100% 100% no-repeat;
 }
@@ -101,7 +101,7 @@ const seconds = computed(() => {
   gap: .7cqw;
   box-sizing: border-box;
   width: 90%;
-  height: min(17.5cqh, calc(86cqh / max(1, var(--count))));
+  height: min(17.5cqh, calc(78cqh / max(1, var(--count))));
   margin-right: calc(10% * var(--offset));
   padding: 0 2.2cqw 0 3.2cqw;
   background: url('../assets/secondary-display/rank-player.png') center / 100% 100% no-repeat;

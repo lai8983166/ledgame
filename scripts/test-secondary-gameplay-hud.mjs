@@ -28,6 +28,13 @@ try {
   await page.evaluate(async () => { await window.changeTestLocale('zh-CN'); window.mountComponent('SecondaryDisplayView'); });
   await page.getByTestId('secondary-display-idle').waitFor();
   const publish = state => page.evaluate(value => window.publishGameState(value), state);
+  async function checkHudMargins(hud) {
+    const bounds = await hud.boundingBox();
+    const viewport = page.viewportSize();
+    assert.ok(bounds.x >= viewport.width * .05 && bounds.y >= viewport.height * .05);
+    assert.ok(bounds.x + bounds.width <= viewport.width * .95);
+    assert.ok(bounds.y + bounds.height <= viewport.height * .95);
+  }
   const challenge = {
     gameType: 'default', engineState: 'RUNNING', currentStageIndex: 1,
     gameTime: { mode: 'LIMITED', remainingMillis: 883000, running: false },
@@ -36,6 +43,7 @@ try {
   await publish(challenge);
   const hub = page.getByTestId('challenge-hud');
   await hub.getByText('14:43').waitFor();
+  await checkHudMargins(hub);
   assert.equal(await hub.locator('.life-icon').count(), 8);
   assert.deepEqual(await hub.locator('.stat-row strong').allTextContents(), ['10', '62']);
   await hub.getByText('奖励积分').waitFor();
@@ -55,6 +63,7 @@ try {
   const board = page.getByTestId('secondary-rank-hud');
   await board.getByText('玩家A').waitFor();
   await board.getByText('41').waitFor();
+  await checkHudMargins(board);
   assert.deepEqual(await board.locator('.rank-player-score').allTextContents(), ['0','1']);
   await page.screenshot({ path: path.join(output,'rank.png') });
   await publish(rank(6));

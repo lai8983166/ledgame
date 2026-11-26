@@ -97,5 +97,18 @@ try{
   await expect(overlay).toHaveCount(0);
   await expect(page.locator('.secondary-runtime-content')).toBeVisible();
  });
+ await check('无介绍时开场和开场暂停仅显示默认背景，真正开局后展示玩法 UI',async()=>{
+  for(const gameType of ['default','rank']){
+   const opening=page.getByTestId('secondary-opening-background');
+   await broadcast({engineState:'STARTING',gameType});
+   await expect(opening.locator('img')).toHaveAttribute('data-asset','touch/background.png');
+   await expect(page.locator('.secondary-live-hud,.secondary-runtime-content,.secondary-idle')).toHaveCount(0);
+   await broadcast({engineState:'PAUSED',gameType,startingStandby:true});
+   await expect(opening).toBeVisible();
+   await broadcast({engineState:'RUNNING',gameType});
+   await expect(opening).toHaveCount(0);
+   await expect(page.locator('.secondary-live-hud')).toBeVisible();
+  }
+ });
  assert.deepEqual(errors,[]);await writeFile(path.join(output,'验证记录.json'),JSON.stringify({passed,errors},null,2));
 }finally{await browser.close();await server.close();}

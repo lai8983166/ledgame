@@ -12,13 +12,13 @@ const cache=path.join(process.env.LOCALAPPDATA,'ms-playwright');
 const chrome=(await readdir(cache)).filter(n=>/^chromium-\d+$/.test(n)).sort().at(-1);
 const output=path.join(root,'.build/debug-board-geometry-ui');await mkdir(output,{recursive:true});
 const socket=net.createServer();await new Promise(r=>socket.listen(0,'127.0.0.1',r));const port=socket.address().port;await new Promise(r=>socket.close(r));
-const server=await createServer({root,server:{host:'127.0.0.1',port,strictPort:true}});await server.listen();
+const server=await createServer({root,server:{host:'127.0.0.1',port,strictPort:true,watch:null}});await server.listen();
 const browser=await chromium.launch({executablePath:path.join(cache,chrome,'chrome-win64/chrome.exe')}),passed=[],errors=[];
 try{
  for(const dpr of [1,1.5,2]){
   const context=await browser.newContext({deviceScaleFactor:dpr,viewport:{width:1366,height:768}});const page=await context.newPage();
   page.on('pageerror',e=>errors.push(e.message));await page.addInitScript(()=>window.appLanguage={get:async()=>'zh-CN',onChanged:()=>()=>{}});
-  await page.goto(`http://127.0.0.1:${port}/tests/ui/catalog-library-harness.html`);await page.waitForFunction(()=>window.mountComponent);
+  await page.goto(`http://127.0.0.1:${port}/tests/ui/catalog-library-harness.html`,{waitUntil:'domcontentloaded',timeout:120000});await page.waitForFunction(()=>window.mountComponent);
   for(const [columns,rows] of [[16,36],[36,16],[8,8],[50,50]]){
    await page.evaluate(({columns,rows})=>{
     const align=[`0,0`,`${Math.floor(rows/2)},${Math.floor(columns/2)}`,`${rows-1},${columns-1}`];
@@ -41,6 +41,31 @@ try{
     passed.push({columns,rows,dpr,...viewport,maxError});
    }
    if(dpr===1&&columns===16)await page.screenshot({path:path.join(output,'实际格子与外围灯对齐.png')});
+  }
+  for(const walls of [[0,1,2,3],[1],[]]){
+   await page.evaluate(walls=>window.mountComponent('DebugLightBoard',{
+    pixels:Array.from({length:36},()=>Array.from({length:16},()=>({r:0,g:0,b:0}))),
+    runtime:{enabled:walls.length>0,lights:walls.map(wall=>({wall,index:0,phase:'OFF'}))}
+   }),walls);
+   await expect(page.locator('.debug-wall-frame')).toHaveCount(walls.length);
+   await expect.poll(async()=>(await page.locator('.debug-light-floor').boundingBox()).width).toBeGreaterThan(0);
+   for(const wall of walls){
+    const selector=`.debug-wall-frame[data-wall="${wall}"]`;
+    await expect(page.locator(selector)).toHaveCSS('border-top-color','rgb(255, 0, 0)');
+    const frame=await page.locator(selector).boundingBox();
+    const floor=await page.locator('.debug-light-floor').boundingBox();
+    if(wall%2){
+     assert.ok(Math.abs(frame.y-floor.y)<1 && Math.abs(frame.height-floor.height)<1, JSON.stringify({frame,floor,wall}));
+     assert.ok(wall===1 ? frame.x>floor.x+floor.width : frame.x+frame.width<floor.x);
+    }else{
+     assert.ok(Math.abs(frame.x-floor.x)<1 && Math.abs(frame.width-floor.width)<1, JSON.stringify({frame,floor,wall}));
+     assert.ok(wall===2 ? frame.y>floor.y+floor.height : frame.y+frame.height<floor.y);
+    }
+    for(const marker of ['symbol','circle']){
+     const light=await page.locator(`.debug-${marker}-light[data-wall="${wall}"]`).boundingBox();
+     assert.ok(light.x>=frame.x && light.y>=frame.y && light.x+light.width<=frame.x+frame.width && light.y+light.height<=frame.y+frame.height);
+    }
+   }
   }
   await context.close();
  }
