@@ -255,20 +255,16 @@ export function buildPixelLightPreview(layout, width, height) {
     const wall = wallById.get(row.wall) || walls[0];
     const align = parseAlign(row.align);
     const count = getPixelLightWallCount(normalized.form, row.wall);
-    const progress = count > 1 ? row.idx / (count - 1) : 0.5;
+    const horizontal = row.wall % 2 === 0;
+    const length = horizontal ? wall.width : wall.height;
+    const gap = (length - count * cellSize) / (count + 1);
+    const reverse = row.wall < 2 ? !normalized.form.order : Boolean(normalized.form.order);
+    const index = reverse ? count - 1 - row.idx : row.idx;
+    const offset = gap + cellSize / 2 + index * (cellSize + gap);
     const symbolInset = Math.max(7, Math.round(cellSize * 1.05));
     const circleInset = Math.max(7, Math.round(cellSize * 1.05));
-    let centerX = wall.x + wall.width / 2;
-    let centerY = wall.y + wall.height / 2;
-    if (row.wall === 0) {
-      centerX = wall.x + progress * wall.width;
-    } else if (row.wall === 2) {
-      centerX = wall.x + (1 - progress) * wall.width;
-    } else if (row.wall === 1) {
-      centerY = wall.y + progress * wall.height;
-    } else {
-      centerY = wall.y + (1 - progress) * wall.height;
-    }
+    const centerX = wall.x + (horizontal ? offset : wall.width / 2);
+    const centerY = wall.y + (horizontal ? wall.height / 2 : offset);
 
     const symbol = { x: centerX, y: centerY };
     const circle = { x: centerX, y: centerY };
@@ -287,13 +283,13 @@ export function buildPixelLightPreview(layout, width, height) {
       circle.x += circleInset;
     }
 
-    // Alignment uses (row, column). Project only along the wall, keeping the
+    // Alignment uses one-based (column, row). Project only along the wall, keeping the
     // pair outside the floor and retaining its distance from that wall.
     if (align) {
       if (row.wall === 0 || row.wall === 2) {
-        symbol.x = circle.x = floor.x + (align.y + 0.5) * cellSize;
+        symbol.x = circle.x = floor.x + (align.x - 0.5) * cellSize;
       } else {
-        symbol.y = circle.y = floor.y + (align.x + 0.5) * cellSize;
+        symbol.y = circle.y = floor.y + (align.y - 0.5) * cellSize;
       }
     }
 
@@ -304,8 +300,8 @@ export function buildPixelLightPreview(layout, width, height) {
       align,
       // Keep the original floor-local coordinates for callers that use them as
       // alignment data, while the visual renderer uses wall positions below.
-      x: align ? Math.min(safeHeight - 1, align.x) : progress * Math.max(0, safeHeight - 1),
-      y: align ? Math.min(safeWidth - 1, align.y) : progress * Math.max(0, safeWidth - 1),
+      x: align ? align.x - 1 : (centerX - floor.x) / cellSize - 0.5,
+      y: align ? align.y - 1 : (centerY - floor.y) / cellSize - 0.5,
       symbol,
       circle,
       selected: normalized.selectedRow === pixelLightRowKey(row),
@@ -355,7 +351,7 @@ export function validatePixelLightAlign(value, width, height) {
   }
   const safeWidth = integerOr(width, 16, { min: 1, max: 256 });
   const safeHeight = integerOr(height, 16, { min: 1, max: 256 });
-  if (align.x >= safeHeight || align.y >= safeWidth) {
+  if (align.x < 1 || align.y < 1 || align.x > safeWidth || align.y > safeHeight) {
     return { code: "ALIGN_OUT_OF_RANGE", width: safeWidth, height: safeHeight };
   }
   return null;

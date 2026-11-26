@@ -21,7 +21,7 @@ try{
   await page.goto(`http://127.0.0.1:${port}/tests/ui/catalog-library-harness.html`,{waitUntil:'domcontentloaded',timeout:120000});await page.waitForFunction(()=>window.mountComponent);
   for(const [columns,rows] of [[16,36],[36,16],[8,8],[50,50]]){
    await page.evaluate(({columns,rows})=>{
-    const align=[`0,0`,`${Math.floor(rows/2)},${Math.floor(columns/2)}`,`${rows-1},${columns-1}`];
+    const align=[`1,1`,`${Math.floor(columns/2)+1},${Math.floor(rows/2)+1}`,`${columns},${rows}`];
     window.mountComponent('DebugLightBoard',{pixels:Array.from({length:rows},(_,y)=>Array.from({length:columns},(_,x)=>({r:20+x*4,g:30+y*4,b:160}))),
      runtime:{enabled:true,order:1,selectedRow:'0|0',lights:[0,1,2,3].flatMap(wall=>align.map((value,index)=>({wall,index,sequenceIndex:wall*3+index,alignX:Number(value.split(',')[0]),alignY:Number(value.split(',')[1]),phase:'BLUE',remaining:5})))}});
    },{columns,rows});

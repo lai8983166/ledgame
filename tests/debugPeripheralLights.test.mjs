@@ -11,19 +11,19 @@ test('saved multiwall layout renders black lights and follows reverse chain/star
   assert.equal(debugPeripheralBoard({...saved,form:{...saved.form,open:0}},null,16,36),null);
 });
 test('runtime frozen positions override drafts and preserve authoritative sequence and alignment',()=>{
-  const runtime={enabled:true,order:1,selectedRow:'1|0',lights:[{wall:1,index:0,sequenceIndex:5,alignX:0,alignY:0,phase:'BLUE',remaining:8}]};
+  const runtime={enabled:true,order:1,selectedRow:'1|0',lights:[{wall:1,index:0,sequenceIndex:5,alignX:1,alignY:1,phase:'BLUE',remaining:8}]};
   const board=debugPeripheralBoard(saved,runtime,16,36);
   assert.equal(board.lights.length,1);
   assert.equal(board.lights[0].sequenceIndex,5);
-  assert.deepEqual(board.lights[0].align,{x:0,y:0});
+  assert.deepEqual(board.lights[0].align,{x:1,y:1});
   assert.equal(board.lights[0].remaining,8);
   assert.equal(debugPeripheralBoard(saved,{enabled:false,lights:[]},16,36),null);
 });
 test('frozen runtime alignment stays on the wall and matches the saved-layout preview',()=>{
-  const rows=[0,1,2,3].map(wall=>({wall,idx:0,align:'35,15'}));
+  const rows=[0,1,2,3].map(wall=>({wall,idx:0,align:'16,36'}));
   const preview=debugPeripheralBoard({...saved,rows},null,16,36);
   const runtime=debugPeripheralBoard(saved,{enabled:true,order:0,selectedRow:'2|0',
-    lights:rows.map(row=>({wall:row.wall,index:0,sequenceIndex:3-row.wall,alignX:35,alignY:15,phase:'BLUE',remaining:7}))},16,36);
+    lights:rows.map(row=>({wall:row.wall,index:0,sequenceIndex:3-row.wall,alignX:16,alignY:36,phase:'BLUE',remaining:7}))},16,36);
   for(const light of runtime.lights){
     const expected=preview.lights.find(item=>item.wall===light.wall);
     assert.deepEqual(light.symbol,expected.symbol);

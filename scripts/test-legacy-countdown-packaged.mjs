@@ -100,7 +100,7 @@ try{
   if(game.name==='simple')doc.commonConfig.pixelLightWiring={selectedRow:'0|0',
     form:{open:1,controlIdx:0,pixelPort:6,circlePort:7,order:1,forceAlign:1,
       topWallPixelLightNum:1,rightWallPixelLightNum:1,bottomWallPixelLightNum:1,leftWallPixelLightNum:1},
-    rows:[0,1,2,3].map(wall=>({wall,idx:0,align:'35,15'}))};
+    rows:[0,1,2,3].map(wall=>({wall,idx:0,align:'16,36'}))};
   doc.audio={globalBackgroundSound:'',scoreSound:'',injurySound:'',purpleSound:''};
   doc.gif={standby:'',levelSettlement:'',levelFailure:'',gameFailure:'',gameOver:''};
   doc.levels=doc.levels.slice(0,2).map((l,i)=>({...l,option:{...l.option,startGIF:path.join(media,'opening-marker.gif'),bgVoice:'',pixelLightType:'0',timeLimitMode:'UNLIMITED',lifeLimitMode:'UNLIMITED',passLevelScore:1000},frameList:[{repeatTimes:1000,matrix:[{id:'safe-'+i,x:4,y:4,color:0,points:[[0,0]]},{id:'target-'+i,x:5,y:5,color:1,points:[[0,0]]}]}]}));
@@ -146,7 +146,7 @@ try{
   await open(game);await button('开始游戏').click();await waitForOpening(game.name+'-首关',{pause:game.name==='simple',intro:true});
   if(game.name==='simple'){
    const lights=(await state()).peripheralLights;assert.equal(lights.enabled,true);assert.equal(lights.lights.length,4);
-   assert.ok(lights.lights.every(light=>light.alignX===35&&light.alignY===15));
+   assert.ok(lights.lights.every(light=>light.alignX===16&&light.alignY===36));
    await expect(page.locator('.debug-symbol-light')).toHaveCount(4);
    let raster;
    await expect.poll(async()=>{try{
@@ -155,7 +155,7 @@ try{
    }catch{return false;}},{timeout:10000}).toBe(true);
    await writeFile(path.join(data,'调试实际像素与外围灯.json'),JSON.stringify(raster,null,2));
    await page.screenshot({path:path.join(data,'符号灯调试同位置.png')});
-   passed.push('真实后端冻结布局接受(35,15)且保留原字段，四对外围灯与实际像素格中心对齐，Canvas填满floor且末行无额外留白');
+   passed.push('真实后端冻结布局接受(16,36)且保留原字段，四对外围灯与实际像素格中心对齐，Canvas填满floor且末行无额外留白');
   }
   await resetTrace();await command('nextstage');await waitForOpening(game.name+'-第二关');
   await button('返回游戏列表').click();

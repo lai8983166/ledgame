@@ -22,7 +22,7 @@ test('all four peripheral walls align with the actual first and last RGB cell ce
     for (const scale of [.137, .75, 1.623]) {
       for (const [row, column] of [[0, 0], [rows - 1, columns - 1]]) {
         const board = debugPeripheralBoard({form:{open:1,topWallPixelLightNum:1,rightWallPixelLightNum:1,bottomWallPixelLightNum:1,leftWallPixelLightNum:1},
-          rows:[0,1,2,3].map(wall => ({wall,idx:0,align:`${row},${column}`}))}, null, columns, rows);
+          rows:[0,1,2,3].map(wall => ({wall,idx:0,align:`${column+1},${row+1}`}))}, null, columns, rows);
         const grid = debugLedGrid(columns, rows, board.cellSize * scale);
         near(grid.width, board.floor.width * scale);
         near(grid.height, board.floor.height * scale);
