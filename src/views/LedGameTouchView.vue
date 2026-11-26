@@ -35,6 +35,7 @@ import {
 import {
   countdownBackground,
   startingGear,
+  playerMore,
   TOUCH_PLAYER_ASSETS,
 } from "../lib/touchGameAssets.js";
 import {
@@ -1561,7 +1562,7 @@ async function confirmReturnToIdle() {
           <button class="touch-player-option" type="button" data-testid="game-player-count-more"
             :class="{ selected: draft.userCount > 6 }" :aria-pressed="draft.userCount > 6"
             :disabled="Boolean(busyAction) || !canChangePlayerCount" @click="openPlayerCountDialog">
-            <img :src="TOUCH_PLAYER_ASSETS[5]" alt="" />
+            <img :src="playerMore" alt="" />
             <strong>{{ t('touch.morePlayers') }}</strong>
           </button>
         </div>
@@ -2945,6 +2946,7 @@ async function confirmReturnToIdle() {
 .touch-player-option:nth-child(4) { grid-column: 1 / span 2; }
 
 .touch-player-option {
+  container-type: inline-size;
   grid-column: span 2;
   position: relative;
   justify-self: center;
@@ -2973,19 +2975,21 @@ async function confirmReturnToIdle() {
   filter: saturate(0.9) brightness(0.84);
 }
 
+@font-face {
+  font-family: "Touch Player Title";
+  src: url("../assets/touch-game/player-title.ttf") format("truetype");
+}
+
 .touch-player-option strong {
   position: absolute;
-  top: 24%;
-  right: 0;
-  left: 0;
-  color: #a8faff;
-  font-family: "Arial Black", Impact, sans-serif;
-  font-size: clamp(34px, 3.6vw, 66px);
-  font-style: italic;
-  line-height: 1;
-  text-shadow:
-    3px 4px 0 #245394,
-    0 0 12px rgba(96, 245, 255, 0.9);
+  inset: 0 0 auto;
+  text-align: center;
+  font: normal 40.91cqw/1 "Touch Player Title", sans-serif;
+  background: linear-gradient(180deg, white 30%, #99fefe 60%);
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  -webkit-text-stroke: .91cqw #37fcfc;
+  filter: drop-shadow(0 6.82cqw .91cqw #7c3b8d);
   pointer-events: none;
 }
 
@@ -4053,7 +4057,6 @@ fieldset:disabled {
     overflow: auto;
   }
 
-  .touch-player-option strong { font-size: clamp(16px, 4.5vw, 34px); }
 
   .touch-carousel-shell {
     grid-template-columns: 42px minmax(0, 1fr) 42px;

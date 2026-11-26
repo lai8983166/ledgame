@@ -64,6 +64,14 @@ try{
         const {left,width} = button.getBoundingClientRect();
         return {top:button.offsetTop,center:left+width/2};
       }));
+      await page.evaluate(()=>document.fonts.ready);
+      const labels=await page.locator('.touch-player-option').evaluateAll(buttons=>buttons.map(button=>{
+        const title=button.querySelector('strong');
+        const box=button.querySelector('img').getBoundingClientRect(), text=title.getBoundingClientRect();
+        return {top:(text.top-box.top)/box.height,bottom:(text.bottom-box.top)/box.height};
+      }));
+      assert.ok(labels.every(label=>Math.abs(label.top)<.01 && label.bottom<.50));
+      assert.ok(await page.locator('[data-testid="game-player-count-more"] img').evaluate(img=>img.src.includes('player-more')));
       assert.equal(positions.length,7);
       const first=positions.slice(0,3), second=positions.slice(3);
       assert.ok(first.every(p=>p.top===first[0].top) && second.every(p=>p.top===second[0].top));
